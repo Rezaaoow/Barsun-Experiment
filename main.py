@@ -50,22 +50,67 @@ class CompleteIn(BaseModel):
     status: str = 'completed'
     trial_count: int = 0
 
+
 @app.get('/api/health')
-def health(): return {'ok': True, 'service': 'lifetrade', 'time': now()}
+def health():
+    database_type = 'postgresql' if DATABASE_URL else 'sqlite'
+
+    try:
+        with conn() as c:
+            c.execute('SELECT 1').fetchone()
+
+        return {
+            'ok': True,
+            'service': 'lifetrade',
+            'database': database_type,
+            'database_connected': True,
+            'time': now()
+        }
+
+    except Exception as e:
+        # Log only the error type; never expose credentials or connection URL.
+        print(f'ERROR health check: {type(e).__name__}')
+
+        raise HTTPException(
+            status_code=503,
+            detail={
+                'ok': False,
+                'service': 'lifetrade',
+                'database': database_type,
+                'database_connected': False,
+                'time': now()
+            }
+        )
+
 
 @app.post('/api/session')
 def create_session(data: SessionIn):
     sid, participant = str(uuid.uuid4()), code()
-    metadata = {'experiment_version': data.experiment_version, 'user_agent': data.user_agent, 'screen_width': data.screen_width, 'screen_height': data.screen_height}
+    metadata = {
+        'experiment_version': data.experiment_version,
+        'user_agent': data.user_agent,
+        'screen_width': data.screen_width,
+        'screen_height': data.screen_height
+    }
+
     try:
         with conn() as c:
             if DATABASE_URL:
-                c.execute('INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(%s,%s,%s,%s)', (sid, participant, now(), Jsonb(metadata)))
+                c.execute(
+                    'INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(%s,%s,%s,%s)',
+                    (sid, participant, now(), Jsonb(metadata))
+                )
             else:
-                c.execute('INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(?,?,?,?)', (sid, participant, now(), Jsonb(metadata)))
-    except Exception:
+                c.execute(
+                    'INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(?,?,?,?)',
+                    (sid, participant, now(), json.dumps(metadata, ensure_ascii=False))
+                )
+    except Exception as e:
+        print(f'ERROR creating session: {type(e).__name__}: {e}')
         raise HTTPException(500, 'Could not create session')
+
     return {'session_id': sid, 'participant_code': participant}
+
 
 @app.post('/api/trial')
 def save_trial(data: TrialIn):
