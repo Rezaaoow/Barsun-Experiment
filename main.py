@@ -50,8 +50,37 @@ class CompleteIn(BaseModel):
     status: str = 'completed'
     trial_count: int = 0
 
+
 @app.get('/api/health')
-def health(): return {'ok': True, 'service': 'lifetrade', 'time': now()}
+def health():
+    database_type = 'postgresql' if DATABASE_URL else 'sqlite'
+
+    try:
+        with conn() as c:
+            c.execute('SELECT 1').fetchone()
+
+        return {
+            'ok': True,
+            'service': 'lifetrade',
+            'database': database_type,
+            'database_connected': True,
+            'time': now()
+        }
+
+    except Exception as e:
+        # Log only the error type; never expose credentials or connection URL.
+        print(f'ERROR health check: {type(e).__name__}')
+
+        raise HTTPException(
+            status_code=503,
+            detail={
+                'ok': False,
+                'service': 'lifetrade',
+                'database': database_type,
+                'database_connected': False,
+                'time': now()
+            }
+        )
 
 
 @app.post('/api/session')
