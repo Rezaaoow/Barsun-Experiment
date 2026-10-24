@@ -40,7 +40,7 @@ def create_session(client, participant_code="TEST-P001", experiment_version="tes
         },
     )
     assert response.status_code == 200, response.text
-    assert response.json()["participant_code"] == participant_code
+    assert response.json()["participant_code"] == participant_code.strip().upper()
     return response.json()["session_id"]
 
 
@@ -100,7 +100,7 @@ def test_single_trial_endpoint_remains_compatible(client):
 
     with main.conn() as connection:
         count = connection.execute(
-            "SELECT trial_count FROM sessions WHERE session_id = ?",
+            "SELECT trial_count FROM instrument_runs WHERE run_id = ?",
             (session_id,),
         ).fetchone()["trial_count"]
     assert count == 1
