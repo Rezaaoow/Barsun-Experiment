@@ -28,17 +28,19 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 
-def create_session(client):
+def create_session(client, participant_code="TEST-P001", experiment_version="test"):
     response = client.post(
         "/api/session",
         json={
-            "experiment_version": "test",
+            "participant_code": participant_code,
+            "experiment_version": experiment_version,
             "user_agent": "pytest",
             "screen_width": 390,
             "screen_height": 844,
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
+    assert response.json()["participant_code"] == participant_code
     return response.json()["session_id"]
 
 
@@ -71,11 +73,11 @@ def test_batch_trial_insert_is_idempotent_and_counts_only_new_events(client):
 
     with main.conn() as connection:
         row = connection.execute(
-            "SELECT trial_count FROM sessions WHERE session_id = ?",
+            "SELECT trial_count FROM instrument_runs WHERE run_id = ?",
             (session_id,),
         ).fetchone()
         total = connection.execute(
-            "SELECT COUNT(*) AS n FROM trials WHERE session_id = ?",
+            "SELECT COUNT(*) AS n FROM lifetrade_trials WHERE run_id = ?",
             (session_id,),
         ).fetchone()["n"]
 
@@ -126,7 +128,7 @@ def test_complete_marks_existing_session(client):
 
     with main.conn() as connection:
         status = connection.execute(
-            "SELECT status FROM sessions WHERE session_id = ?",
+            "SELECT status FROM instrument_runs WHERE run_id = ?",
             (session_id,),
         ).fetchone()["status"]
     assert status == "completed"
@@ -154,4 +156,46 @@ def test_admin_csv_export_streams_trial_rows(client, monkeypatch):
     assert {row["index"] for row in rows} == {"1", "2"}
     assert {row["choice"] for row in rows} == {"Now", "Later"}
     assert all(row["server_session_id"] == session_id for row in rows)
+    assert all(row["server_run_id"] == session_id for row in rows)
+    assert all(row["participant_code"] == "TEST-P001" for row in rows)
+    assert all(row["instrument_code"] == "lifetrade" for row in rows)
     assert all(row["server_received_at"] for row in rows)
+
+
+def test_supplied_participant_code_is_reused_across_runs(client):
+    first_run = create_session(client, participant_code="event-0042", experiment_version="v1")
+    second_run = create_session(client, participant_code="EVENT-0042", experiment_version="v1")
+
+    with main.conn() as connection:
+        participant_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM participants WHERE participant_code = ?",
+            ("EVENT-0042",),
+        ).fetchone()["n"]
+        participation_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM study_participations sp "
+            "JOIN participants p ON p.participant_id=sp.participant_id "
+            "WHERE p.participant_code = ?",
+            ("EVENT-0042",),
+        ).fetchone()["n"]
+        run_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM instrument_runs WHERE run_id IN (?,?)",
+            (first_run, second_run),
+        ).fetchone()["n"]
+
+    assert participant_count == 1
+    assert participation_count == 1
+    assert run_count == 2
+
+
+def test_participant_code_is_required_and_not_generated(client):
+    response = client.post(
+        "/api/session",
+        json={"experiment_version": "test"},
+    )
+    assert response.status_code == 422
+
+    with main.conn() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) AS n FROM participants"
+        ).fetchone()["n"]
+    assert count == 0
