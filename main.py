@@ -7,6 +7,7 @@ import sqlite3
 import string
 import uuid
 from contextlib import contextmanager
+from functools import lru_cache
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
@@ -383,35 +384,64 @@ def sessions(x_admin_token: str | None = Header(default=None)):
 @app.get("/api/admin/export.csv")
 def export_csv(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
+    # Discover the union of dynamic JSON keys without loading all trial rows into RAM.
     with conn() as connection:
-        rows = connection.execute(
-            "SELECT session_id,received_at,row_data FROM trials ORDER BY received_at"
-        ).fetchall()
+        if DATABASE_URL:
+            key_rows = connection.execute(
+                "SELECT DISTINCT json_key FROM trials "
+                "CROSS JOIN LATERAL jsonb_object_keys(row_data) AS x(json_key)"
+            ).fetchall()
+        else:
+            key_rows = connection.execute(
+                "SELECT DISTINCT json_each.key AS json_key "
+                "FROM trials, json_each(trials.row_data)"
+            ).fetchall()
+    fields = sorted({row["json_key"] for row in key_rows} | {"server_received_at", "server_session_id"})
 
-    flattened = []
-    for row in rows:
-        item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
-        item["server_received_at"] = row["received_at"]
-        item["server_session_id"] = row["session_id"]
-        flattened.append(item)
+    def generate_csv():
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
 
-    fields = sorted({key for row in flattened for key in row})
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(flattened)
-    output.seek(0)
+        query = "SELECT session_id,received_at,row_data FROM trials ORDER BY received_at"
+        with conn() as connection:
+            cursor = connection.execute(query)
+            while True:
+                rows = cursor.fetchmany(500)
+                if not rows:
+                    break
+                flattened = []
+                for row in rows:
+                    item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
+                    item["server_received_at"] = row["received_at"]
+                    item["server_session_id"] = row["session_id"]
+                    flattened.append(item)
+                writer.writerows(flattened)
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
+
     return StreamingResponse(
-        iter([output.getvalue()]),
+        generate_csv(),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="lifetrade_trials.csv"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="lifetrade_trials.csv"',
+            "Cache-Control": "no-store",
+        },
     )
-
 
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
 
-@app.get("/", response_class=HTMLResponse)
-def home():
+@lru_cache(maxsize=1)
+def load_homepage() -> str:
     with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
         return file.read()
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return load_homepage()
