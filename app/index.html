@@ -488,9 +488,60 @@ function optionText(taskKey,magnitude,trialData,isNow){
 }
 function optionLabel(taskKey,magnitude,trialData,isNow){const o=optionText(taskKey,magnitude,trialData,isNow);return `${o.amount} — ${o.detail}`;}
 const APP_BASE_PATH='/lifetrade';
-async function api(path, body){const url=APP_BASE_PATH+(path.startsWith('/')?path:'/'+path);const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!res.ok)throw new Error(`Server save failed (${res.status})`);return res.json()}
-async function saveTrial(row){const key='lifetrade_pending_'+sessionId;let pending=JSON.parse(localStorage.getItem(key)||'[]');pending.push(row);localStorage.setItem(key,JSON.stringify(pending));try{const result=await api('/api/trial',{session_id:sessionId,client_event_id:row.client_event_id,row});pending=pending.filter(x=>x.client_event_id!==row.client_event_id);localStorage.setItem(key,JSON.stringify(pending));return result}catch(e){setStatus('اختلال اتصال: پاسخ موقتاً روی این دستگاه ذخیره شد؛ تلاش دوباره انجام می‌شود…');return {saved_locally:true}}}
-async function flushPending(){if(!sessionId)return;const key='lifetrade_pending_'+sessionId;let pending=JSON.parse(localStorage.getItem(key)||'[]');for(const row of pending){try{await api('/api/trial',{session_id:sessionId,client_event_id:row.client_event_id,row});pending=pending.filter(x=>x.client_event_id!==row.client_event_id);localStorage.setItem(key,JSON.stringify(pending))}catch(e){break}}return pending.length}
+async function api(path, body){
+ const url=APP_BASE_PATH+(path.startsWith('/')?path:'/'+path);
+ const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(!res.ok)throw new Error('Server save failed ('+res.status+')');
+ return res.json();
+}
+const TRIAL_BATCH_SIZE=5;
+const TRIAL_BATCH_MAX=25;
+let pendingFlushPromise=null;
+function pendingStorageKey(){return 'lifetrade_pending_'+sessionId;}
+function readPending(){
+ try{
+  const value=JSON.parse(localStorage.getItem(pendingStorageKey())||'[]');
+  return Array.isArray(value)?value.filter(item=>item&&typeof item.client_event_id==='string'):[];
+ }catch(e){return [];}
+}
+function writePending(rows){localStorage.setItem(pendingStorageKey(),JSON.stringify(rows));}
+async function flushPending(){
+ if(!sessionId)return 0;
+ if(pendingFlushPromise){
+  await pendingFlushPromise;
+  return readPending().length;
+ }
+ pendingFlushPromise=(async()=>{
+  while(true){
+   const pending=readPending();
+   if(!pending.length)return 0;
+   const batch=pending.slice(0,TRIAL_BATCH_MAX);
+   try{
+    await api('/api/trials',{
+     session_id:sessionId,
+     trials:batch.map(row=>({client_event_id:row.client_event_id,row}))
+    });
+   }catch(e){
+    setStatus('اختلال اتصال: پاسخ‌ها روی این دستگاه نگه داشته شده‌اند؛ ارسال دوباره انجام می‌شود…');
+    return readPending().length;
+   }
+   const sentIds=new Set(batch.map(row=>row.client_event_id));
+   writePending(readPending().filter(row=>!sentIds.has(row.client_event_id)));
+  }
+ })();
+ try{return await pendingFlushPromise;}
+ finally{pendingFlushPromise=null;}
+}
+async function saveTrial(row){
+ const pending=readPending();
+ if(!pending.some(item=>item.client_event_id===row.client_event_id)){
+  pending.push(row);
+  writePending(pending);
+ }
+ // Queue locally first; send a single transaction for every group of five trials.
+ if(pending.length>=TRIAL_BATCH_SIZE)await flushPending();
+ return {saved_locally:readPending().some(item=>item.client_event_id===row.client_event_id)};
+}
 window.addEventListener('online',()=>{flushPending().catch(()=>{})});window.addEventListener('focus',()=>{flushPending().catch(()=>{})});
 function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
  $('screen').classList.add('trial-screen');stimulus.innerHTML='';
