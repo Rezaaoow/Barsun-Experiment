@@ -4,11 +4,10 @@ import json
 import os
 import secrets
 import sqlite3
-import string
 import uuid
 from contextlib import contextmanager
-from functools import lru_cache
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Iterator
 
 from fastapi import FastAPI, Header, HTTPException
@@ -19,30 +18,36 @@ from pydantic import BaseModel, Field
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
+STUDY_NAME = os.getenv("STUDY_NAME", "Main behavioral study").strip() or "Main behavioral study"
+INSTRUMENT_CODE = "lifetrade"
+INSTRUMENT_NAME = "Life-Trade delay discounting"
 
-# PostgreSQL connections are pooled and bounded per application process. Keep the
-# pool small on shared hosting; the total possible connections is pool size times
-# the number of Passenger processes.
+# Bounded PostgreSQL connections: total possible connections are pool size times
+# the number of Passenger processes. Keep this conservative on shared hosting.
 DB_POOL_MIN_SIZE = max(0, int(os.getenv("DB_POOL_MIN_SIZE", "1")))
 DB_POOL_MAX_SIZE = max(1, int(os.getenv("DB_POOL_MAX_SIZE", "4")))
 DB_POOL_TIMEOUT = max(0.5, float(os.getenv("DB_POOL_TIMEOUT", "5")))
 DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
-app = FastAPI(title="LifeTrade Research API", version="0.2.0")
+app = FastAPI(title="LifeTrade Research API", version="0.3.0")
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def code() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(8))
+def normalize_participant_code(value: str) -> str:
+    # Existing participant codes are supplied by the research team/participant;
+    # this function normalizes input only and never generates a participant code.
+    normalized = value.strip().upper()
+    if not normalized:
+        raise HTTPException(422, "Participant code is required")
+    return normalized
 
 
 if DATABASE_URL:
-    import psycopg
     from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
     from psycopg_pool import ConnectionPool, PoolTimeout, TooManyRequests
@@ -68,7 +73,6 @@ if DATABASE_URL:
             with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
                 yield connection
         except (PoolTimeout, TooManyRequests) as exc:
-            # Fail fast under saturation instead of allowing unbounded waiters.
             raise HTTPException(
                 status_code=503,
                 detail="Database is temporarily busy; please retry.",
@@ -78,29 +82,71 @@ if DATABASE_URL:
     def init_db() -> None:
         with conn() as connection:
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS sessions("
-                "session_id TEXT PRIMARY KEY, "
-                "participant_code TEXT UNIQUE NOT NULL, "
-                "created_at TEXT NOT NULL, completed_at TEXT, "
-                "status TEXT NOT NULL DEFAULT 'started', "
-                "metadata JSONB NOT NULL DEFAULT '{}'::jsonb, "
-                "trial_count INTEGER NOT NULL DEFAULT 0)"
+                "CREATE TABLE IF NOT EXISTS studies ("
+                "study_code TEXT PRIMARY KEY, study_name TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS trials("
-                "client_event_id TEXT PRIMARY KEY, "
-                "session_id TEXT NOT NULL REFERENCES sessions(session_id), "
-                "received_at TEXT NOT NULL, row_data JSONB NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS participants ("
+                "participant_id TEXT PRIMARY KEY, participant_code TEXT UNIQUE NOT NULL, "
+                "created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_trials_session_id ON trials(session_id)"
+                "CREATE TABLE IF NOT EXISTS study_participations ("
+                "participation_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
+                "joined_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', "
+                "UNIQUE(study_code, participant_id))"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_trials_received_at ON trials(received_at)"
+                "CREATE TABLE IF NOT EXISTS instruments ("
+                "instrument_code TEXT PRIMARY KEY, instrument_name TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)"
+                "CREATE TABLE IF NOT EXISTS instrument_versions ("
+                "instrument_version_id TEXT PRIMARY KEY, instrument_code TEXT NOT NULL "
+                "REFERENCES instruments(instrument_code), version TEXT NOT NULL, settings JSONB NOT NULL "
+                "DEFAULT '{}'::jsonb, created_at TEXT NOT NULL, UNIQUE(instrument_code, version))"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS instrument_runs ("
+                "run_id TEXT PRIMARY KEY, participation_id TEXT NOT NULL "
+                "REFERENCES study_participations(participation_id), instrument_version_id TEXT NOT NULL "
+                "REFERENCES instrument_versions(instrument_version_id), started_at TEXT NOT NULL, "
+                "completed_at TEXT, status TEXT NOT NULL DEFAULT 'started', "
+                "trial_count INTEGER NOT NULL DEFAULT 0, metadata JSONB NOT NULL DEFAULT '{}'::jsonb)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS lifetrade_trials ("
+                "client_event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "received_at TEXT NOT NULL, task_code TEXT, task_order INTEGER, block_name TEXT, "
+                "magnitude TEXT, trial_in_block INTEGER, stimulus_index INTEGER, choice_type TEXT, "
+                "response_time_ms DOUBLE PRECISION, payload JSONB NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
+                "ON study_participations(participant_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_instrument_runs_participation "
+                "ON instrument_runs(participation_id, started_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_instrument_runs_version "
+                "ON instrument_runs(instrument_version_id, started_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_run "
+                "ON lifetrade_trials(run_id, received_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_task "
+                "ON lifetrade_trials(task_code, block_name, magnitude)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_received "
+                "ON lifetrade_trials(received_at, client_event_id)"
+            )
+            _seed_registry(connection)
 
 else:
     DB_PATH = os.getenv("SQLITE_PATH", os.path.join(ROOT, "lifetrade.sqlite3"))
@@ -128,43 +174,109 @@ else:
 
     def init_db() -> None:
         with conn() as connection:
-            # WAL allows readers to continue while a writer commits. SQLite still
-            # serializes writes, so PostgreSQL is recommended for larger studies.
+            # Additive schema changes only: legacy sessions/trials remain untouched.
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS sessions("
-                "session_id TEXT PRIMARY KEY, "
-                "participant_code TEXT UNIQUE NOT NULL, "
-                "created_at TEXT NOT NULL, completed_at TEXT, "
-                "status TEXT NOT NULL DEFAULT 'started', "
-                "metadata TEXT NOT NULL DEFAULT '{}', "
-                "trial_count INTEGER NOT NULL DEFAULT 0)"
+                "CREATE TABLE IF NOT EXISTS studies ("
+                "study_code TEXT PRIMARY KEY, study_name TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS trials("
-                "client_event_id TEXT PRIMARY KEY, "
-                "session_id TEXT NOT NULL REFERENCES sessions(session_id), "
-                "received_at TEXT NOT NULL, row_data TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS participants ("
+                "participant_id TEXT PRIMARY KEY, participant_code TEXT UNIQUE NOT NULL, "
+                "created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_trials_session_id ON trials(session_id)"
+                "CREATE TABLE IF NOT EXISTS study_participations ("
+                "participation_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
+                "joined_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', "
+                "UNIQUE(study_code, participant_id))"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_trials_received_at ON trials(received_at)"
+                "CREATE TABLE IF NOT EXISTS instruments ("
+                "instrument_code TEXT PRIMARY KEY, instrument_name TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)"
+                "CREATE TABLE IF NOT EXISTS instrument_versions ("
+                "instrument_version_id TEXT PRIMARY KEY, instrument_code TEXT NOT NULL "
+                "REFERENCES instruments(instrument_code), version TEXT NOT NULL, settings TEXT NOT NULL "
+                "DEFAULT '{}', created_at TEXT NOT NULL, UNIQUE(instrument_code, version))"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS instrument_runs ("
+                "run_id TEXT PRIMARY KEY, participation_id TEXT NOT NULL "
+                "REFERENCES study_participations(participation_id), instrument_version_id TEXT NOT NULL "
+                "REFERENCES instrument_versions(instrument_version_id), started_at TEXT NOT NULL, "
+                "completed_at TEXT, status TEXT NOT NULL DEFAULT 'started', "
+                "trial_count INTEGER NOT NULL DEFAULT 0, metadata TEXT NOT NULL DEFAULT '{}')"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS lifetrade_trials ("
+                "client_event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "received_at TEXT NOT NULL, task_code TEXT, task_order INTEGER, block_name TEXT, "
+                "magnitude TEXT, trial_in_block INTEGER, stimulus_index INTEGER, choice_type TEXT, "
+                "response_time_ms REAL, payload TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
+                "ON study_participations(participant_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_instrument_runs_participation "
+                "ON instrument_runs(participation_id, started_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_instrument_runs_version "
+                "ON instrument_runs(instrument_version_id, started_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_run "
+                "ON lifetrade_trials(run_id, received_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_task "
+                "ON lifetrade_trials(task_code, block_name, magnitude)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_lifetrade_trials_received "
+                "ON lifetrade_trials(received_at, client_event_id)"
+            )
+            _seed_registry(connection)
+
+
+def _seed_registry(connection: Any) -> None:
+    """Idempotently register the study and LifeTrade instrument."""
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(study_code) DO NOTHING",
+            (STUDY_CODE, STUDY_NAME, now()),
+        )
+        connection.execute(
+            "INSERT INTO instruments(instrument_code,instrument_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(instrument_code) DO NOTHING",
+            (INSTRUMENT_CODE, INSTRUMENT_NAME, now()),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO studies(study_code,study_name,created_at) VALUES(?,?,?)",
+            (STUDY_CODE, STUDY_NAME, now()),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
+            (INSTRUMENT_CODE, INSTRUMENT_NAME, now()),
+        )
 
 
 init_db()
 
 
 class SessionIn(BaseModel):
-    experiment_version: str = "online-mvp-0.1"
-    user_agent: str | None = None
-    screen_width: int | None = None
-    screen_height: int | None = None
+    participant_code: str = Field(min_length=1, max_length=100)
+    experiment_version: str = Field(default="online-mvp-0.1", min_length=1, max_length=100)
+    user_agent: str | None = Field(default=None, max_length=1000)
+    screen_width: int | None = Field(default=None, ge=1, le=20000)
+    screen_height: int | None = Field(default=None, ge=1, le=20000)
 
 
 class TrialRecord(BaseModel):
@@ -186,7 +298,113 @@ class TrialBatchIn(BaseModel):
 class CompleteIn(BaseModel):
     session_id: str = Field(min_length=1, max_length=100)
     status: str = "completed"
-    trial_count: int = 0
+    trial_count: int = Field(default=0, ge=0)
+
+
+def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
+    participant_code = normalize_participant_code(data.participant_code)
+    participant_id = str(uuid.uuid4())
+    participation_id = str(uuid.uuid4())
+    run_id = str(uuid.uuid4())
+    version = data.experiment_version.strip() or "online-mvp-0.1"
+    metadata = {
+        "user_agent": data.user_agent,
+        "screen_width": data.screen_width,
+        "screen_height": data.screen_height,
+    }
+    settings = {"schema_version": 1, "capture": "LifeTrade online experiment"}
+
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO participants(participant_id,participant_code,created_at) "
+                "VALUES(%s,%s,%s) ON CONFLICT(participant_code) DO NOTHING",
+                (participant_id, participant_code, now()),
+            )
+            participant = connection.execute(
+                "SELECT participant_id FROM participants WHERE participant_code=%s",
+                (participant_code,),
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO study_participations(participation_id,study_code,participant_id,joined_at) "
+                "VALUES(%s,%s,%s,%s) ON CONFLICT(study_code,participant_id) DO NOTHING",
+                (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            )
+            participation = connection.execute(
+                "SELECT participation_id FROM study_participations "
+                "WHERE study_code=%s AND participant_id=%s",
+                (STUDY_CODE, participant["participant_id"]),
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
+                (str(uuid.uuid4()), INSTRUMENT_CODE, version, Jsonb(settings), now()),
+            )
+            instrument_version = connection.execute(
+                "SELECT instrument_version_id FROM instrument_versions "
+                "WHERE instrument_code=%s AND version=%s",
+                (INSTRUMENT_CODE, version),
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,metadata) "
+                "VALUES(%s,%s,%s,%s,%s)",
+                (
+                    run_id,
+                    participation["participation_id"],
+                    instrument_version["instrument_version_id"],
+                    now(),
+                    Jsonb(metadata),
+                ),
+            )
+        else:
+            connection.execute(
+                "INSERT OR IGNORE INTO participants(participant_id,participant_code,created_at) VALUES(?,?,?)",
+                (participant_id, participant_code, now()),
+            )
+            participant = connection.execute(
+                "SELECT participant_id FROM participants WHERE participant_code=?",
+                (participant_code,),
+            ).fetchone()
+            connection.execute(
+                "INSERT OR IGNORE INTO study_participations(participation_id,study_code,participant_id,joined_at) "
+                "VALUES(?,?,?,?)",
+                (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            )
+            participation = connection.execute(
+                "SELECT participation_id FROM study_participations WHERE study_code=? AND participant_id=?",
+                (STUDY_CODE, participant["participant_id"]),
+            ).fetchone()
+            connection.execute(
+                "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()),
+                    INSTRUMENT_CODE,
+                    version,
+                    json.dumps(settings, ensure_ascii=False, separators=(",", ":")),
+                    now(),
+                ),
+            )
+            instrument_version = connection.execute(
+                "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=? AND version=?",
+                (INSTRUMENT_CODE, version),
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,metadata) "
+                "VALUES(?,?,?,?,?)",
+                (
+                    run_id,
+                    participation["participation_id"],
+                    instrument_version["instrument_version_id"],
+                    now(),
+                    json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+
+    return run_id, participant_code
 
 
 @app.get("/api/health")
@@ -200,12 +418,13 @@ def health():
             "service": "lifetrade",
             "database": database_type,
             "database_connected": True,
+            "study_code": STUDY_CODE,
+            "instrument_code": INSTRUMENT_CODE,
             "time": now(),
         }
     except HTTPException:
         raise
     except Exception as exc:
-        # Do not expose DSNs, credentials, or raw database error details.
         print(f"ERROR health check: {type(exc).__name__}")
         raise HTTPException(
             status_code=503,
@@ -221,117 +440,124 @@ def health():
 
 @app.post("/api/session")
 def create_session(data: SessionIn):
-    sid = str(uuid.uuid4())
-    participant = code()
-    metadata = {
-        "experiment_version": data.experiment_version,
-        "user_agent": data.user_agent,
-        "screen_width": data.screen_width,
-        "screen_height": data.screen_height,
-    }
     try:
-        with conn() as connection:
-            if DATABASE_URL:
-                connection.execute(
-                    "INSERT INTO sessions(session_id,participant_code,created_at,metadata) "
-                    "VALUES(%s,%s,%s,%s)",
-                    (sid, participant, now(), Jsonb(metadata)),
-                )
-            else:
-                connection.execute(
-                    "INSERT INTO sessions(session_id,participant_code,created_at,metadata) "
-                    "VALUES(?,?,?,?)",
-                    (sid, participant, now(), json.dumps(metadata, ensure_ascii=False)),
-                )
+        run_id, participant_code = _ensure_participant_and_run(data)
     except HTTPException:
         raise
     except Exception as exc:
-        # Log only exception class; participant metadata and database details are private.
-        print(f"ERROR creating session: {type(exc).__name__}")
-        raise HTTPException(500, "Could not create session") from exc
-    return {"session_id": sid, "participant_code": participant}
+        print(f"ERROR creating LifeTrade run: {type(exc).__name__}")
+        raise HTTPException(500, "Could not start LifeTrade session") from exc
+    # Keep session_id for the existing browser client; it now points to instrument_runs.run_id.
+    return {
+        "session_id": run_id,
+        "run_id": run_id,
+        "participant_code": participant_code,
+        "instrument_code": INSTRUMENT_CODE,
+    }
 
 
-def _persist_trials(session_id: str, records: list[TrialRecord]) -> tuple[int, int]:
-    """Insert a bounded batch atomically and increment the stored count only for new events."""
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _persist_trials(run_id: str, records: list[TrialRecord]) -> tuple[int, int]:
+    """Insert one bounded LifeTrade batch atomically; never mix data with other instruments."""
     if not records:
         return 0, 0
 
     received_times = [now() for _ in records]
-    if DATABASE_URL:
-        values = [
-            (record.client_event_id, session_id, received, Jsonb(record.row))
-            for record, received in zip(records, received_times)
-        ]
-        marker = "%s"
-        conflict_sql = " ON CONFLICT(client_event_id) DO NOTHING"
-    else:
-        values = [
-            (
-                record.client_event_id,
-                session_id,
-                received,
-                json.dumps(record.row, ensure_ascii=False, separators=(",", ":")),
+    values = []
+    for record, received_at in zip(records, received_times):
+        row = record.row
+        payload = (
+            record.client_event_id,
+            run_id,
+            received_at,
+            str(row.get("task")) if row.get("task") is not None else None,
+            _int_or_none(row.get("task_order")),
+            str(row.get("block_name")) if row.get("block_name") is not None else None,
+            str(row.get("magnitude")) if row.get("magnitude") is not None else None,
+            _int_or_none(row.get("trial_in_block")),
+            _int_or_none(row.get("index")),
+            str(row.get("user_choice_type")) if row.get("user_choice_type") is not None else None,
+            _float_or_none(row.get("reaction_time_ms")),
+            row,
+        )
+        if DATABASE_URL:
+            values.append(payload[:-1] + (Jsonb(payload[-1]),))
+        else:
+            values.append(
+                payload[:-1]
+                + (json.dumps(payload[-1], ensure_ascii=False, separators=(",", ":")),)
             )
-            for record, received in zip(records, received_times)
-        ]
-        marker = "?"
-        conflict_sql = ""
 
-    value_sql = ",".join(["(" + ",".join([marker] * 4) + ")"] * len(values))
+    marker = "%s" if DATABASE_URL else "?"
+    value_sql = ",".join(["(" + ",".join([marker] * 12) + ")"] * len(values))
     params = tuple(value for row in values for value in row)
 
     with conn() as connection:
         if not DATABASE_URL:
-            # Acquire SQLite's single-writer lock before reading, preventing a
-            # concurrent read-to-write transaction upgrade from failing mid-batch.
             connection.execute("BEGIN IMMEDIATE")
 
         if DATABASE_URL:
             exists = connection.execute(
-                "SELECT 1 FROM sessions WHERE session_id=%s", (session_id,)
+                "SELECT 1 FROM instrument_runs ir "
+                "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+                "JOIN instruments i ON i.instrument_code=iv.instrument_code "
+                "WHERE ir.run_id=%s AND i.instrument_code=%s",
+                (run_id, INSTRUMENT_CODE),
             ).fetchone()
+            sql = (
+                "INSERT INTO lifetrade_trials(client_event_id,run_id,received_at,task_code,task_order,"
+                "block_name,magnitude,trial_in_block,stimulus_index,choice_type,response_time_ms,payload) VALUES "
+                + value_sql
+                + " ON CONFLICT(client_event_id) DO NOTHING"
+            )
         else:
             exists = connection.execute(
-                "SELECT 1 FROM sessions WHERE session_id=?", (session_id,)
+                "SELECT 1 FROM instrument_runs ir "
+                "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+                "JOIN instruments i ON i.instrument_code=iv.instrument_code "
+                "WHERE ir.run_id=? AND i.instrument_code=?",
+                (run_id, INSTRUMENT_CODE),
             ).fetchone()
+            sql = (
+                "INSERT OR IGNORE INTO lifetrade_trials(client_event_id,run_id,received_at,task_code,task_order,"
+                "block_name,magnitude,trial_in_block,stimulus_index,choice_type,response_time_ms,payload) VALUES "
+                + value_sql
+            )
         if not exists:
-            raise HTTPException(404, "Unknown session")
-
-        if DATABASE_URL:
-            sql = (
-                "INSERT INTO trials(client_event_id,session_id,received_at,row_data) VALUES "
-                + value_sql
-                + conflict_sql
-            )
-        else:
-            sql = (
-                "INSERT OR IGNORE INTO trials(client_event_id,session_id,received_at,row_data) VALUES "
-                + value_sql
-            )
+            raise HTTPException(404, "Unknown LifeTrade run")
 
         cursor = connection.execute(sql, params)
         inserted = max(0, cursor.rowcount or 0)
         duplicates = len(records) - inserted
-
         if inserted:
             if DATABASE_URL:
                 connection.execute(
-                    "UPDATE sessions SET trial_count=trial_count+%s WHERE session_id=%s",
-                    (inserted, session_id),
+                    "UPDATE instrument_runs SET trial_count=trial_count+%s WHERE run_id=%s",
+                    (inserted, run_id),
                 )
             else:
                 connection.execute(
-                    "UPDATE sessions SET trial_count=trial_count+? WHERE session_id=?",
-                    (inserted, session_id),
+                    "UPDATE instrument_runs SET trial_count=trial_count+? WHERE run_id=?",
+                    (inserted, run_id),
                 )
-
     return inserted, duplicates
 
 
 @app.post("/api/trial")
 def save_trial(data: TrialIn):
-    # Retain the original single-trial endpoint for compatibility with old clients.
     _persist_trials(
         data.session_id,
         [TrialRecord(client_event_id=data.client_event_id, row=data.row)],
@@ -356,17 +582,16 @@ def complete(data: CompleteIn):
     with conn() as connection:
         if DATABASE_URL:
             result = connection.execute(
-                "UPDATE sessions SET status=%s,completed_at=%s WHERE session_id=%s "
-                "RETURNING session_id",
+                "UPDATE instrument_runs SET status=%s,completed_at=%s WHERE run_id=%s RETURNING run_id",
                 (status, now(), data.session_id),
             ).fetchone()
         else:
             result = connection.execute(
-                "UPDATE sessions SET status=?,completed_at=? WHERE session_id=?",
+                "UPDATE instrument_runs SET status=?,completed_at=? WHERE run_id=?",
                 (status, now(), data.session_id),
             ).rowcount
     if not result:
-        raise HTTPException(404, "Unknown session")
+        raise HTTPException(404, "Unknown LifeTrade run")
     return {"saved": True, "status": status}
 
 
@@ -380,8 +605,17 @@ def sessions(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
     with conn() as connection:
         rows = connection.execute(
-            "SELECT session_id,participant_code,created_at,completed_at,status,trial_count "
-            "FROM sessions ORDER BY created_at DESC"
+            "SELECT ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
+            "ir.completed_at,ir.status,ir.trial_count,iv.version AS experiment_version "
+            "FROM instrument_runs ir "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+            "JOIN participants p ON p.participant_id=sp.participant_id "
+            "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+            "JOIN instruments i ON i.instrument_code=iv.instrument_code "
+            "WHERE i.instrument_code=? OR i.instrument_code=%s "
+            "ORDER BY ir.started_at DESC"
+            .replace("? OR i.instrument_code=%s", "?"),
+            (INSTRUMENT_CODE,),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -389,19 +623,21 @@ def sessions(x_admin_token: str | None = Header(default=None)):
 @app.get("/api/admin/export.csv")
 def export_csv(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
-    # Discover the union of dynamic JSON keys without loading all trial rows into RAM.
     with conn() as connection:
         if DATABASE_URL:
             key_rows = connection.execute(
-                "SELECT DISTINCT json_key FROM trials "
-                "CROSS JOIN LATERAL jsonb_object_keys(row_data) AS x(json_key)"
+                "SELECT DISTINCT json_key FROM lifetrade_trials "
+                "CROSS JOIN LATERAL jsonb_object_keys(payload) AS x(json_key)"
             ).fetchall()
         else:
             key_rows = connection.execute(
                 "SELECT DISTINCT json_each.key AS json_key "
-                "FROM trials, json_each(trials.row_data)"
+                "FROM lifetrade_trials, json_each(lifetrade_trials.payload)"
             ).fetchall()
-    fields = sorted({row["json_key"] for row in key_rows} | {"server_received_at", "server_session_id"})
+    fields = sorted(
+        {row["json_key"] for row in key_rows}
+        | {"server_received_at", "server_run_id", "participant_code", "instrument_code", "instrument_version"}
+    )
 
     def generate_csv():
         buffer = io.StringIO(newline="")
@@ -410,47 +646,52 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
-
         last_received_at = None
         last_event_id = None
+
         while True:
-            # Keyset pagination bounds memory and closes the DB connection before
-            # yielding a chunk to the WSGI response iterator.
+            base_query = (
+                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,iv.version "
+                "FROM lifetrade_trials t "
+                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+                "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+                "JOIN participants p ON p.participant_id=sp.participant_id "
+                "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+                "JOIN instruments i ON i.instrument_code=iv.instrument_code "
+                "WHERE i.instrument_code="
+            )
             if last_received_at is None:
-                query = (
-                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
-                    "ORDER BY received_at,client_event_id LIMIT 500"
-                )
-                params = ()
-            elif DATABASE_URL:
-                query = (
-                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
-                    "WHERE (received_at,client_event_id) > (%s,%s) "
-                    "ORDER BY received_at,client_event_id LIMIT 500"
-                )
-                params = (last_received_at, last_event_id)
+                query = base_query + ("%s" if DATABASE_URL else "?")
+                query += " ORDER BY t.received_at,t.client_event_id LIMIT 500"
+                params = (INSTRUMENT_CODE,)
             else:
-                query = (
-                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
-                    "WHERE (received_at,client_event_id) > (?,?) "
-                    "ORDER BY received_at,client_event_id LIMIT 500"
+                marker = "%s" if DATABASE_URL else "?"
+                query = base_query + marker
+                query += (
+                    " AND (t.received_at,t.client_event_id) > ("
+                    + marker
+                    + ","
+                    + marker
+                    + ") ORDER BY t.received_at,t.client_event_id LIMIT 500"
                 )
-                params = (last_received_at, last_event_id)
+                params = (INSTRUMENT_CODE, last_received_at, last_event_id)
 
             with conn() as connection:
                 rows = connection.execute(query, params).fetchall()
             if not rows:
                 break
-
             last_received_at = rows[-1]["received_at"]
             last_event_id = rows[-1]["client_event_id"]
-            flattened = []
+            output_rows = []
             for row in rows:
-                item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
+                item = json.loads(row["payload"]) if isinstance(row["payload"], str) else dict(row["payload"])
                 item["server_received_at"] = row["received_at"]
-                item["server_session_id"] = row["session_id"]
-                flattened.append(item)
-            writer.writerows(flattened)
+                item["server_run_id"] = row["run_id"]
+                item["participant_code"] = row["participant_code"]
+                item["instrument_code"] = INSTRUMENT_CODE
+                item["instrument_version"] = row["version"]
+                output_rows.append(item)
+            writer.writerows(output_rows)
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
@@ -463,6 +704,7 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
             "Cache-Control": "no-store",
         },
     )
+
 
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
