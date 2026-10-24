@@ -272,19 +272,15 @@ function showInstructionPage(taskKey, pageIndex){
   }
 
   if(pageIndex===3){
-    showInfo('', [
+    showInfo('نکته دربارهٔ مبالغ', [
       'بدانید که مبلغ جایزه‌ها فرضی است و شما جایزه‌ای که انتخاب کردید را دریافت نخواهید کرد. صرفاً تصور کنید که اگر این انتخاب را در زندگی واقعی داشتید، کدام گزینه را انتخاب می‌کردید.'
     ], '', pageIndex);
-    const heading=stimulus.querySelector('.instruction-heading');
-    if(heading)heading.textContent='نکته دربارهٔ مبالغ';
     return;
   }
 
-  showInfo('', [
+  showInfo('آمادهٔ شروع هستید؟', [
     'اگر برای شروع تکلیف آماده هستید، دکمهٔ «شروع تکلیف» را فشار دهید.'
   ], '', pageIndex);
-  const heading=stimulus.querySelector('.instruction-heading');
-  if(heading)heading.textContent='آمادهٔ شروع هستید؟';
   const btn=stimulus.querySelector('.next-page');
   btn.textContent='شروع تکلیف';
   btn.classList.add('start-task-button');
