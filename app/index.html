@@ -178,14 +178,83 @@ button{-webkit-tap-highlight-color:transparent}
   .next-page{min-height:44px;padding:9px 18px;}
 }
 
+
+/* Final welcome and choice interaction refinements */
+#welcome,#finish{text-align:center;}
+#welcome h1,#finish h1{
+  width:100%;
+  text-align:center;
+  font-size:clamp(1.65rem,4vw,2.15rem);
+  font-weight:800;
+  line-height:1.55;
+}
+#welcome p,#finish p{
+  width:100%;
+  max-width:58ch;
+  text-align:center;
+  font-size:clamp(1.08rem,2.3vw,1.22rem);
+  font-weight:650;
+  line-height:1.9;
+}
+#welcome p.hint,#finish p.hint{
+  font-size:clamp(1.08rem,2.3vw,1.22rem)!important;
+  color:#303030!important;
+  font-weight:650!important;
+}
+#welcome #start,#finish #close{margin:8px auto 0;}
+#finish .finish-actions{width:100%;justify-content:center;text-align:center;}
+#finish #participant-code{margin-left:auto;margin-right:auto;text-align:center;}
+.choice-question{
+  display:block;
+  width:100%;
+  text-align:center;
+  font-size:clamp(.91rem,1.5vw,1.02rem);
+  line-height:1.55;
+  font-weight:750;
+  color:#303030;
+  direction:rtl;
+}
+.or-divider{font-size:clamp(1.12rem,2.4vw,1.42rem);font-weight:900;}
+.choice-card{
+  transform:none!important;
+  transition:background-color .10s ease,border-color .10s ease,box-shadow .10s ease;
+  -webkit-user-select:none;
+  user-select:none;
+}
+.choice-card:active,.choice-card.is-pressed{
+  transform:none!important;
+  background:#e5e5e5;
+  border-color:#171717;
+  box-shadow:inset 0 0 0 2px #171717,0 2px 8px rgba(0,0,0,.08);
+}
+.choice-card:disabled{cursor:default;opacity:1;}
+.choice-card:disabled:not(.is-pressed){
+  background:#fafafa;
+  border-color:#e5e5e5;
+  box-shadow:none;
+  color:#555;
+}
+@media(max-width:640px){
+  #welcome,#finish{padding:24px 18px;}
+  #welcome h1,#finish h1{font-size:1.6rem;margin-bottom:14px;}
+  #welcome p,#finish p{font-size:1.04rem;font-weight:650;line-height:1.85;}
+  #welcome p.hint,#finish p.hint{font-size:1.04rem!important;font-weight:650!important;}
+  #welcome #start,#finish #close{width:100%;max-width:320px;}
+  .choice-question{font-size:clamp(.82rem,3.25vw,.96rem);font-weight:750;line-height:1.5;}
+  .or-divider{font-size:1.32rem;font-weight:900;}
+  .choice-card:active,.choice-card.is-pressed{
+    transform:none!important;
+    box-shadow:inset 0 0 0 2px #171717;
+  }
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel" id="welcome" dir="rtl">
-<h1>به آزمایش تصمیم‌گیری خوش آمدید</h1>
-<p>در این پژوهش چند بار بین دو گزینه انتخاب می‌کنید. پاسخ‌های شما به‌صورت ناشناس ثبت می‌شوند و یک کد شرکت‌کننده به‌طور خودکار به شما اختصاص داده می‌شود.</p>
-<p>برای ثبت هر پاسخ، گزینه‌ای را که ترجیح می‌دهید لمس کنید یا روی آن کلیک کنید.</p>
-<p class="hint">لطفاً آزمایش را در یک نوبت کامل کنید. پاسخ‌ها هنگام انجام آزمایش برای سرور ارسال می‌شوند.</p>
-<button class="btn" id="start">شروع آزمایش</button>
-<p class="hint">در صفحه‌های راهنما، برای ادامه از دکمهٔ «صفحهٔ بعد» استفاده کنید.</p>
+<h1>آزمون تنزیل تعویقی</h1>
+<p>در این آزمون قرار است چند بار بین دو گزینه انتخاب کنید. پاسخ‌های شما ثبت می‌شوند و یک کد شرکت‌کننده به‌طور خودکار به شما اختصاص داده می‌شود.</p>
+<p>برای انتخاب می‌توانید گزینه سمت راست یا چپ را فشار دهید یا روی آن کلیک کنید.</p>
+<p class="hint">لطفاً آزمون را در یک نوبت کامل کنید. پاسخ‌ها هنگام انجام آزمون برای سرور ارسال می‌شوند.</p>
+<button class="btn" id="start">شروع آزمون</button>
 </section>
 <div id="stimulus" class="hidden" aria-live="off"></div>
 <section class="panel hidden" id="finish" dir="rtl">
@@ -378,17 +447,31 @@ function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
  const layout=document.createElement('div');layout.className='trial-layout';layout.setAttribute('role','group');layout.setAttribute('aria-label','دو گزینه برای انتخاب');
  const left=optionText(taskKey,magnitude,trialData,nowLeft),right=optionText(taskKey,magnitude,trialData,!nowLeft);
  function card(info,side){
-  const b=document.createElement('button');b.type='button';b.className='choice-card';b.setAttribute('aria-label',`${side==='left'?'گزینهٔ چپ':'گزینهٔ راست'}: ${info.amount}، ${info.detail}`);
+  const b=document.createElement('button');b.type='button';b.className='choice-card';b.dataset.choiceSide=side;b.setAttribute('aria-label',`کدام گزینه را ترجیح می‌دهید؟ ${side==='left'?'گزینهٔ چپ':'گزینهٔ راست'}: ${info.amount}، ${info.detail}`);
+  const question=document.createElement('span');question.className='choice-question';question.textContent='کدام گزینه را ترجیح می‌دهید؟';
   const label=document.createElement('span');label.className='choice-label';label.textContent=info.label;
   const amount=document.createElement('span');amount.className='choice-amount';amount.textContent=info.amount;
   const detail=document.createElement('span');detail.className='choice-detail';detail.textContent=info.detail;
-  b.append(label,amount,detail);b.addEventListener('click',()=>{b.classList.add('is-pressed');resolveChoice(`tap-${side}`)});return b
+  b.append(question,label,amount,detail);b.addEventListener('click',()=>resolveChoice(`tap-${side}`));return b
  }
  const leftCard=card(left,'left'),rightCard=card(right,'right');
  const or=document.createElement('div');or.className='or-divider';or.textContent='یا';or.setAttribute('aria-hidden','true');
  layout.append(leftCard,or,rightCard);stimulus.appendChild(layout);
 }
-function resolveChoice(key){if(!currentTrialResolve||responseLock)return;responseLock=true;if(activeKeyHandler){window.removeEventListener('keydown',activeKeyHandler);activeKeyHandler=null}const rt=performance.now()-window.__trialStart;const resolve=currentTrialResolve;currentTrialResolve=null;resolve({key,rt})}
+function resolveChoice(key){
+ if(!currentTrialResolve||responseLock)return;
+ responseLock=true;
+ const selectedSide=key==='escape'?null:(['arrowleft','l','tap-left'].includes(key)?'left':'right');
+ document.querySelectorAll('.choice-card').forEach(button=>{
+  button.disabled=true;
+  button.classList.toggle('is-pressed',button.dataset.choiceSide===selectedSide);
+ });
+ if(activeKeyHandler){window.removeEventListener('keydown',activeKeyHandler);activeKeyHandler=null}
+ const rt=performance.now()-window.__trialStart;
+ const resolve=currentTrialResolve;
+ currentTrialResolve=null;
+ resolve({key,rt});
+}
 function waitForChoice(start){window.__trialStart=start;responseLock=false;return new Promise(resolve=>{currentTrialResolve=resolve;const handler=e=>{let k=e.key.toLowerCase();if(['arrowleft','arrowright','l','r'].includes(k)){e.preventDefault();resolveChoice(k)}else if(k==='escape'){e.preventDefault();stopped=true;resolveChoice('escape')}};activeKeyHandler=handler;window.addEventListener('keydown',handler)})}
 async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=Math.random()>0.5;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:document.hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
 async function startExperiment(){ $('start').disabled=true; stopped=false; show();try{const created=await api('/api/session',{experiment_version:'online-mvp-0.3-original-instructions-ibmplex-fa',user_agent:navigator.userAgent,screen_width:screen.width,screen_height:screen.height});sessionId=created.session_id;participantCode=created.participant_code;participant={participant:participantCode,session:sessionId,date:nowISO()};if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});const taskOrder=shuffle(['LT','KT']);for(let i=0;i<taskOrder.length;i++){if(stopped)break;await runTask(taskOrder[i],i+1);if(stopped)break;if(i===0){showRest();setStatus('استراحت · برای ادامه فاصله را بزنید');await spaceToContinue();await wait(1500)}}if(!stopped){setStatus('آزمایش تکمیل شد');const unsent=await flushPending();await api('/api/complete',{session_id:sessionId,status:'completed',trial_count:trialCount});showPanel('finish');$('participant-code').textContent='کد شرکت‌کننده: '+participantCode+(unsent?' — هشدار: '+unsent+' پاسخ هنوز فقط روی این دستگاه ذخیره شده و به سرور نرسیده است. اطلاعات مرورگر را پاک نکنید و با تیم پژوهش تماس بگیرید.':'');}else{await flushPending();await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});showPanel('finish');$('finish').querySelector('h1').textContent='آزمایش متوقف شد';$('finish').querySelector('p').textContent='آزمایش متوقف شد. پاسخ‌هایی که پیش‌تر به سرور رسیده‌اند، ذخیره شده‌اند.';$('participant-code').textContent='کد شرکت‌کننده: '+participantCode;}}catch(err){console.error(err);showPanel('finish');$('finish').querySelector('h1').textContent='خطا در اتصال یا اجرای آزمایش';$('finish').querySelector('p').textContent='سرور نتوانست یکی از عملیات‌ها را کامل کند. اگر کد شرکت‌کننده دارید، پیش از شروع دوباره با تیم پژوهش تماس بگیرید.'}finally{$('start').disabled=false}}
