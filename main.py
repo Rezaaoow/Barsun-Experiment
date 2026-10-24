@@ -635,7 +635,7 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
             ).fetchall()
     fields = sorted(
         {row["json_key"] for row in key_rows}
-        | {"server_received_at", "server_run_id", "participant_code", "instrument_code", "instrument_version"}
+        | {"server_received_at", "server_run_id", "server_session_id", "participant_code", "instrument_code", "instrument_version"}
     )
 
     def generate_csv():
@@ -686,6 +686,7 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
                 item = json.loads(row["payload"]) if isinstance(row["payload"], str) else dict(row["payload"])
                 item["server_received_at"] = row["received_at"]
                 item["server_run_id"] = row["run_id"]
+                item["server_session_id"] = row["run_id"]
                 item["participant_code"] = row["participant_code"]
                 item["instrument_code"] = INSTRUMENT_CODE
                 item["instrument_version"] = row["version"]
