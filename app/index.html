@@ -433,7 +433,9 @@ function showInstructionPage(taskKey, pageIndex){
     choices.className='example-choices';
     const later=document.createElement('div');
     later.className='example-choice';
-    later.innerHTML='<strong>۲ میلیون تومان</strong><span>۱ سال بعد</span>';
+    later.innerHTML=taskKey==='KT'
+      ?'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>'
+      :'<strong>۲ میلیون تومان</strong><span>در ازای واگذاری یک سال از عمرتان</span>';
     const or=document.createElement('span');
     or.className='example-or';
     or.textContent='یا';
@@ -452,8 +454,8 @@ function showInstructionPage(taskKey, pageIndex){
     const explanation=document.createElement('p');
     explanation.className='instruction-explanation';
     explanation.textContent=taskKey==='KT'
-      ?'در این مثال، با انتخاب گزینهٔ سمت چپ باید یک سال صبر کنید تا جایزه را دریافت کنید.'
-      :'در این مثال، با انتخاب گزینهٔ سمت چپ، یک سال از عمرتان در ازای دریافت جایزه حذف می‌شود.';
+      ?'در این مثال، با انتخاب گزینهٔ سمت چپ باید یک سال صبر کنید تا مبلغ جایزه را دریافت کنید.'
+      :'در این مثال، گزینهٔ سمت چپ در سناریوی فرضی به معنای واگذاری یک سال از عمرتان در ازای دریافت مبلغ است؛ منظور این نیست که باید یک سال برای دریافت پول صبر کنید.';
     paras.push(explanation);
 
     showInfo('راهنمای انتخاب', paras, '', pageIndex);
