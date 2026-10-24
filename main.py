@@ -603,6 +603,7 @@ def authorize(token: str | None) -> None:
 @app.get("/api/admin/sessions")
 def sessions(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
         rows = connection.execute(
             "SELECT ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
@@ -612,9 +613,7 @@ def sessions(x_admin_token: str | None = Header(default=None)):
             "JOIN participants p ON p.participant_id=sp.participant_id "
             "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
             "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-            "WHERE i.instrument_code=? OR i.instrument_code=%s "
-            "ORDER BY ir.started_at DESC"
-            .replace("? OR i.instrument_code=%s", "?"),
+            "WHERE i.instrument_code=" + marker + " ORDER BY ir.started_at DESC",
             (INSTRUMENT_CODE,),
         ).fetchall()
     return [dict(row) for row in rows]
