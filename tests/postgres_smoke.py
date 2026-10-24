@@ -14,6 +14,7 @@ def main_test():
         created = client.post(
             "/api/session",
             json={
+                "participant_code": "PG-SMOKE-0001",
                 "experiment_version": "postgres-smoke",
                 "user_agent": "ci",
                 "screen_width": 390,
@@ -41,11 +42,11 @@ def main_test():
 
         with main.conn() as connection:
             session = connection.execute(
-                "SELECT trial_count FROM sessions WHERE session_id=%s",
+                "SELECT trial_count FROM instrument_runs WHERE run_id=%s",
                 (session_id,),
             ).fetchone()
             total = connection.execute(
-                "SELECT COUNT(*) AS n FROM trials WHERE session_id=%s",
+                "SELECT COUNT(*) AS n FROM lifetrade_trials WHERE run_id=%s",
                 (session_id,),
             ).fetchone()["n"]
 
@@ -55,6 +56,8 @@ def main_test():
         exported = client.get("/api/admin/export.csv", headers={"x-admin-token": "ci-admin-token"})
         assert exported.status_code == 200, exported.text
         assert "server_session_id" in exported.text
+        assert "participant_code" in exported.text
+        assert "PG-SMOKE-0001" in exported.text
         assert session_id in exported.text
 
         completed = client.post(
@@ -69,7 +72,10 @@ def main_test():
         with TestClient(main.app) as concurrent_client:
             created = concurrent_client.post(
                 "/api/session",
-                json={"experiment_version": "postgres-concurrency-smoke"},
+                json={
+                    "participant_code": f"PG-CONCURRENT-{index:04d}",
+                    "experiment_version": "postgres-concurrency-smoke",
+                },
             )
             assert created.status_code == 200, created.text
             concurrent_session_id = created.json()["session_id"]
@@ -94,7 +100,7 @@ def main_test():
     placeholders = ",".join(["%s"] * len(concurrent_sessions))
     with main.conn() as connection:
         total = connection.execute(
-            f"SELECT SUM(trial_count) AS total FROM sessions WHERE session_id IN ({placeholders})",
+            f"SELECT SUM(trial_count) AS total FROM instrument_runs WHERE run_id IN ({placeholders})",
             tuple(concurrent_sessions),
         ).fetchone()["total"]
     assert total == 120, total
