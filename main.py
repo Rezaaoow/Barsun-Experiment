@@ -411,23 +411,49 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
         buffer.seek(0)
         buffer.truncate(0)
 
-        query = "SELECT session_id,received_at,row_data FROM trials ORDER BY received_at"
-        with conn() as connection:
-            cursor = connection.execute(query)
-            while True:
-                rows = cursor.fetchmany(500)
-                if not rows:
-                    break
-                flattened = []
-                for row in rows:
-                    item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
-                    item["server_received_at"] = row["received_at"]
-                    item["server_session_id"] = row["session_id"]
-                    flattened.append(item)
-                writer.writerows(flattened)
-                yield buffer.getvalue()
-                buffer.seek(0)
-                buffer.truncate(0)
+        last_received_at = None
+        last_event_id = None
+        while True:
+            # Keyset pagination bounds memory and closes the DB connection before
+            # yielding a chunk to the WSGI response iterator.
+            if last_received_at is None:
+                query = (
+                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
+                    "ORDER BY received_at,client_event_id LIMIT 500"
+                )
+                params = ()
+            elif DATABASE_URL:
+                query = (
+                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
+                    "WHERE (received_at,client_event_id) > (%s,%s) "
+                    "ORDER BY received_at,client_event_id LIMIT 500"
+                )
+                params = (last_received_at, last_event_id)
+            else:
+                query = (
+                    "SELECT client_event_id,session_id,received_at,row_data FROM trials "
+                    "WHERE (received_at,client_event_id) > (?,?) "
+                    "ORDER BY received_at,client_event_id LIMIT 500"
+                )
+                params = (last_received_at, last_event_id)
+
+            with conn() as connection:
+                rows = connection.execute(query, params).fetchall()
+            if not rows:
+                break
+
+            last_received_at = rows[-1]["received_at"]
+            last_event_id = rows[-1]["client_event_id"]
+            flattened = []
+            for row in rows:
+                item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
+                item["server_received_at"] = row["received_at"]
+                item["server_session_id"] = row["session_id"]
+                flattened.append(item)
+            writer.writerows(flattened)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
 
     return StreamingResponse(
         generate_csv(),
