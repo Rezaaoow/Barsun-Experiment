@@ -1,6 +1,11 @@
 import os
+import sys
 import tempfile
 import uuid
+from pathlib import Path
+
+# Pytest's import mode can omit the repository root from sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Ensure the test import never targets a production database.
 _TEST_DB = os.path.join(tempfile.gettempdir(), "lifetrade-test-" + uuid.uuid4().hex + ".sqlite3")
