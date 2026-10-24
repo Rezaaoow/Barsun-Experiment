@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import sys
 import tempfile
@@ -128,3 +130,28 @@ def test_complete_marks_existing_session(client):
             (session_id,),
         ).fetchone()["status"]
     assert status == "completed"
+
+
+def test_admin_csv_export_streams_trial_rows(client, monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "test-token")
+    session_id = create_session(client)
+    saved = client.post(
+        "/api/trials",
+        json={
+            "session_id": session_id,
+            "trials": [
+                {"client_event_id": "export-event-1", "row": {"index": 1, "choice": "Now"}},
+                {"client_event_id": "export-event-2", "row": {"index": 2, "choice": "Later"}},
+            ],
+        },
+    )
+    assert saved.status_code == 200
+
+    response = client.get("/api/admin/export.csv", headers={"x-admin-token": "test-token"})
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert len(rows) == 2
+    assert {row["index"] for row in rows} == {"1", "2"}
+    assert {row["choice"] for row in rows} == {"Now", "Later"}
+    assert all(row["server_session_id"] == session_id for row in rows)
+    assert all(row["server_received_at"] for row in rows)
