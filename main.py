@@ -26,7 +26,7 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 DB_POOL_MIN_SIZE = max(0, int(os.getenv("DB_POOL_MIN_SIZE", "1")))
 DB_POOL_MAX_SIZE = max(1, int(os.getenv("DB_POOL_MAX_SIZE", "4")))
 DB_POOL_TIMEOUT = max(0.5, float(os.getenv("DB_POOL_TIMEOUT", "5")))
-DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "32")))
+DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="LifeTrade Research API", version="0.2.0")
@@ -45,7 +45,7 @@ if DATABASE_URL:
     import psycopg
     from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
-    from psycopg_pool import ConnectionPool, PoolTimeout
+    from psycopg_pool import ConnectionPool, PoolTimeout, TooManyRequests
 
     DB_POOL = ConnectionPool(
         DATABASE_URL,
@@ -67,7 +67,7 @@ if DATABASE_URL:
         try:
             with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
                 yield connection
-        except PoolTimeout as exc:
+        except (PoolTimeout, TooManyRequests) as exc:
             # Fail fast under saturation instead of allowing unbounded waiters.
             raise HTTPException(
                 status_code=503,
