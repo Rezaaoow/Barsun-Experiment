@@ -1,168 +1,417 @@
-import os, json, csv, io, uuid, secrets, string
+import csv
+import io
+import json
+import os
+import secrets
+import sqlite3
+import string
+import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Header
+from typing import Any, Iterator
+
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DATABASE_URL = os.getenv('DATABASE_URL', '').replace('postgres://', 'postgresql://', 1)
-ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', '')
-app = FastAPI(title='LifeTrade Research API', version='0.1.0')
+DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 
-def now(): return datetime.now(timezone.utc).isoformat()
-def code(): return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+# PostgreSQL connections are pooled and bounded per application process. Keep the
+# pool small on shared hosting; the total possible connections is pool size times
+# the number of Passenger processes.
+DB_POOL_MIN_SIZE = max(0, int(os.getenv("DB_POOL_MIN_SIZE", "1")))
+DB_POOL_MAX_SIZE = max(1, int(os.getenv("DB_POOL_MAX_SIZE", "4")))
+DB_POOL_TIMEOUT = max(0.5, float(os.getenv("DB_POOL_TIMEOUT", "5")))
+DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "32")))
+SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
+
+app = FastAPI(title="LifeTrade Research API", version="0.2.0")
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
 
 if DATABASE_URL:
     import psycopg
     from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
-    def conn(): return psycopg.connect(DATABASE_URL, row_factory=dict_row)
-    def init_db():
-        with conn() as c:
-            c.execute("CREATE TABLE IF NOT EXISTS sessions(session_id TEXT PRIMARY KEY, participant_code TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, completed_at TEXT, status TEXT NOT NULL DEFAULT 'started', metadata JSONB NOT NULL DEFAULT '{}'::jsonb, trial_count INTEGER NOT NULL DEFAULT 0)")
-            c.execute("CREATE TABLE IF NOT EXISTS trials(client_event_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(session_id), received_at TEXT NOT NULL, row_data JSONB NOT NULL)")
+    from psycopg_pool import ConnectionPool, PoolTimeout
+
+    DB_POOL = ConnectionPool(
+        DATABASE_URL,
+        min_size=min(DB_POOL_MIN_SIZE, DB_POOL_MAX_SIZE),
+        max_size=DB_POOL_MAX_SIZE,
+        timeout=DB_POOL_TIMEOUT,
+        max_waiting=DB_POOL_MAX_WAITING,
+        num_workers=1,
+        kwargs={
+            "row_factory": dict_row,
+            "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
+            "application_name": "lifetrade-api",
+        },
+        open=True,
+    )
+
+    @contextmanager
+    def conn() -> Iterator[Any]:
+        try:
+            with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
+                yield connection
+        except PoolTimeout as exc:
+            # Fail fast under saturation instead of allowing unbounded waiters.
+            raise HTTPException(
+                status_code=503,
+                detail="Database is temporarily busy; please retry.",
+                headers={"Retry-After": "2"},
+            ) from exc
+
+    def init_db() -> None:
+        with conn() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS sessions("
+                "session_id TEXT PRIMARY KEY, "
+                "participant_code TEXT UNIQUE NOT NULL, "
+                "created_at TEXT NOT NULL, completed_at TEXT, "
+                "status TEXT NOT NULL DEFAULT 'started', "
+                "metadata JSONB NOT NULL DEFAULT '{}'::jsonb, "
+                "trial_count INTEGER NOT NULL DEFAULT 0)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS trials("
+                "client_event_id TEXT PRIMARY KEY, "
+                "session_id TEXT NOT NULL REFERENCES sessions(session_id), "
+                "received_at TEXT NOT NULL, row_data JSONB NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trials_session_id ON trials(session_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trials_received_at ON trials(received_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)"
+            )
+
 else:
-    import sqlite3
-    DB_PATH = os.getenv('SQLITE_PATH', os.path.join(ROOT, 'lifetrade.sqlite3'))
-    def conn():
-        c = sqlite3.connect(DB_PATH, timeout=20)
-        c.row_factory = sqlite3.Row
-        c.execute('PRAGMA foreign_keys = ON')
-        return c
-    def init_db():
-        with conn() as c:
-            c.execute("CREATE TABLE IF NOT EXISTS sessions(session_id TEXT PRIMARY KEY, participant_code TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, completed_at TEXT, status TEXT NOT NULL DEFAULT 'started', metadata TEXT NOT NULL DEFAULT '{}', trial_count INTEGER NOT NULL DEFAULT 0)")
-            c.execute("CREATE TABLE IF NOT EXISTS trials(client_event_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(session_id), received_at TEXT NOT NULL, row_data TEXT NOT NULL)")
+    DB_PATH = os.getenv("SQLITE_PATH", os.path.join(ROOT, "lifetrade.sqlite3"))
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
+
+    @contextmanager
+    def conn() -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(
+            DB_PATH,
+            timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+            cached_statements=128,
+        )
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+            connection.execute("PRAGMA synchronous = NORMAL")
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def init_db() -> None:
+        with conn() as connection:
+            # WAL allows readers to continue while a writer commits. SQLite still
+            # serializes writes, so PostgreSQL is recommended for larger studies.
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS sessions("
+                "session_id TEXT PRIMARY KEY, "
+                "participant_code TEXT UNIQUE NOT NULL, "
+                "created_at TEXT NOT NULL, completed_at TEXT, "
+                "status TEXT NOT NULL DEFAULT 'started', "
+                "metadata TEXT NOT NULL DEFAULT '{}', "
+                "trial_count INTEGER NOT NULL DEFAULT 0)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS trials("
+                "client_event_id TEXT PRIMARY KEY, "
+                "session_id TEXT NOT NULL REFERENCES sessions(session_id), "
+                "received_at TEXT NOT NULL, row_data TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trials_session_id ON trials(session_id)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trials_received_at ON trials(received_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at)"
+            )
+
+
 init_db()
 
+
 class SessionIn(BaseModel):
-    experiment_version: str = 'online-mvp-0.1'
+    experiment_version: str = "online-mvp-0.1"
     user_agent: str | None = None
     screen_width: int | None = None
     screen_height: int | None = None
+
+
+class TrialRecord(BaseModel):
+    client_event_id: str = Field(min_length=1, max_length=100)
+    row: dict[str, Any]
+
+
 class TrialIn(BaseModel):
-    session_id: str
-    client_event_id: str
-    row: dict
+    session_id: str = Field(min_length=1, max_length=100)
+    client_event_id: str = Field(min_length=1, max_length=100)
+    row: dict[str, Any]
+
+
+class TrialBatchIn(BaseModel):
+    session_id: str = Field(min_length=1, max_length=100)
+    trials: list[TrialRecord] = Field(min_length=1, max_length=25)
+
+
 class CompleteIn(BaseModel):
-    session_id: str
-    status: str = 'completed'
+    session_id: str = Field(min_length=1, max_length=100)
+    status: str = "completed"
     trial_count: int = 0
 
 
-@app.get('/api/health')
+@app.get("/api/health")
 def health():
-    database_type = 'postgresql' if DATABASE_URL else 'sqlite'
-
+    database_type = "postgresql" if DATABASE_URL else "sqlite"
     try:
-        with conn() as c:
-            c.execute('SELECT 1').fetchone()
-
+        with conn() as connection:
+            connection.execute("SELECT 1").fetchone()
         return {
-            'ok': True,
-            'service': 'lifetrade',
-            'database': database_type,
-            'database_connected': True,
-            'time': now()
+            "ok": True,
+            "service": "lifetrade",
+            "database": database_type,
+            "database_connected": True,
+            "time": now(),
         }
-
-    except Exception as e:
-        # Log only the error type; never expose credentials or connection URL.
-        print(f'ERROR health check: {type(e).__name__}')
-
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Do not expose DSNs, credentials, or raw database error details.
+        print(f"ERROR health check: {type(exc).__name__}")
         raise HTTPException(
             status_code=503,
             detail={
-                'ok': False,
-                'service': 'lifetrade',
-                'database': database_type,
-                'database_connected': False,
-                'time': now()
-            }
-        )
+                "ok": False,
+                "service": "lifetrade",
+                "database": database_type,
+                "database_connected": False,
+                "time": now(),
+            },
+        ) from exc
 
 
-@app.post('/api/session')
+@app.post("/api/session")
 def create_session(data: SessionIn):
-    sid, participant = str(uuid.uuid4()), code()
+    sid = str(uuid.uuid4())
+    participant = code()
     metadata = {
-        'experiment_version': data.experiment_version,
-        'user_agent': data.user_agent,
-        'screen_width': data.screen_width,
-        'screen_height': data.screen_height
+        "experiment_version": data.experiment_version,
+        "user_agent": data.user_agent,
+        "screen_width": data.screen_width,
+        "screen_height": data.screen_height,
     }
-
     try:
-        with conn() as c:
+        with conn() as connection:
             if DATABASE_URL:
-                c.execute(
-                    'INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(%s,%s,%s,%s)',
-                    (sid, participant, now(), Jsonb(metadata))
+                connection.execute(
+                    "INSERT INTO sessions(session_id,participant_code,created_at,metadata) "
+                    "VALUES(%s,%s,%s,%s)",
+                    (sid, participant, now(), Jsonb(metadata)),
                 )
             else:
-                c.execute(
-                    'INSERT INTO sessions(session_id,participant_code,created_at,metadata) VALUES(?,?,?,?)',
-                    (sid, participant, now(), json.dumps(metadata, ensure_ascii=False))
+                connection.execute(
+                    "INSERT INTO sessions(session_id,participant_code,created_at,metadata) "
+                    "VALUES(?,?,?,?)",
+                    (sid, participant, now(), json.dumps(metadata, ensure_ascii=False)),
                 )
-    except Exception as e:
-        print(f'ERROR creating session: {type(e).__name__}: {e}')
-        raise HTTPException(500, 'Could not create session')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Log only exception class; participant metadata and database details are private.
+        print(f"ERROR creating session: {type(exc).__name__}")
+        raise HTTPException(500, "Could not create session") from exc
+    return {"session_id": sid, "participant_code": participant}
 
-    return {'session_id': sid, 'participant_code': participant}
+
+def _persist_trials(session_id: str, records: list[TrialRecord]) -> tuple[int, int]:
+    """Insert a bounded batch atomically and increment the stored count only for new events."""
+    if not records:
+        return 0, 0
+
+    received_times = [now() for _ in records]
+    if DATABASE_URL:
+        values = [
+            (record.client_event_id, session_id, received, Jsonb(record.row))
+            for record, received in zip(records, received_times)
+        ]
+        marker = "%s"
+        conflict_sql = " ON CONFLICT(client_event_id) DO NOTHING"
+    else:
+        values = [
+            (
+                record.client_event_id,
+                session_id,
+                received,
+                json.dumps(record.row, ensure_ascii=False, separators=(",", ":")),
+            )
+            for record, received in zip(records, received_times)
+        ]
+        marker = "?"
+        conflict_sql = ""
+
+    value_sql = ",".join(["(" + ",".join([marker] * 4) + ")"] * len(values))
+    params = tuple(value for row in values for value in row)
+
+    with conn() as connection:
+        if DATABASE_URL:
+            exists = connection.execute(
+                "SELECT 1 FROM sessions WHERE session_id=%s", (session_id,)
+            ).fetchone()
+        else:
+            exists = connection.execute(
+                "SELECT 1 FROM sessions WHERE session_id=?", (session_id,)
+            ).fetchone()
+        if not exists:
+            raise HTTPException(404, "Unknown session")
+
+        if DATABASE_URL:
+            sql = (
+                "INSERT INTO trials(client_event_id,session_id,received_at,row_data) VALUES "
+                + value_sql
+                + conflict_sql
+            )
+        else:
+            sql = (
+                "INSERT OR IGNORE INTO trials(client_event_id,session_id,received_at,row_data) VALUES "
+                + value_sql
+            )
+
+        cursor = connection.execute(sql, params)
+        inserted = max(0, cursor.rowcount or 0)
+        duplicates = len(records) - inserted
+
+        if inserted:
+            if DATABASE_URL:
+                connection.execute(
+                    "UPDATE sessions SET trial_count=trial_count+%s WHERE session_id=%s",
+                    (inserted, session_id),
+                )
+            else:
+                connection.execute(
+                    "UPDATE sessions SET trial_count=trial_count+? WHERE session_id=?",
+                    (inserted, session_id),
+                )
+
+    return inserted, duplicates
 
 
-@app.post('/api/trial')
+@app.post("/api/trial")
 def save_trial(data: TrialIn):
-    with conn() as c:
-        if DATABASE_URL:
-            exists = c.execute('SELECT session_id FROM sessions WHERE session_id=%s', (data.session_id,)).fetchone()
-            if not exists: raise HTTPException(404, 'Unknown session')
-            c.execute('INSERT INTO trials(client_event_id,session_id,received_at,row_data) VALUES(%s,%s,%s,%s) ON CONFLICT(client_event_id) DO NOTHING', (data.client_event_id, data.session_id, now(), Jsonb(data.row)))
-            c.execute('UPDATE sessions SET trial_count=(SELECT COUNT(*) FROM trials WHERE session_id=%s) WHERE session_id=%s', (data.session_id, data.session_id))
-        else:
-            exists = c.execute('SELECT session_id FROM sessions WHERE session_id=?', (data.session_id,)).fetchone()
-            if not exists: raise HTTPException(404, 'Unknown session')
-            c.execute('INSERT OR IGNORE INTO trials(client_event_id,session_id,received_at,row_data) VALUES(?,?,?,?)', (data.client_event_id, data.session_id, now(), json.dumps(data.row, ensure_ascii=False)))
-            c.execute('UPDATE sessions SET trial_count=(SELECT COUNT(*) FROM trials WHERE session_id=?) WHERE session_id=?', (data.session_id, data.session_id))
-    return {'saved': True, 'client_event_id': data.client_event_id}
+    # Retain the original single-trial endpoint for compatibility with old clients.
+    _persist_trials(
+        data.session_id,
+        [TrialRecord(client_event_id=data.client_event_id, row=data.row)],
+    )
+    return {"saved": True, "client_event_id": data.client_event_id}
 
-@app.post('/api/complete')
+
+@app.post("/api/trials")
+def save_trials(data: TrialBatchIn):
+    inserted, duplicates = _persist_trials(data.session_id, data.trials)
+    return {
+        "saved": True,
+        "received_count": len(data.trials),
+        "inserted_count": inserted,
+        "duplicate_count": duplicates,
+    }
+
+
+@app.post("/api/complete")
 def complete(data: CompleteIn):
-    status = data.status if data.status in ('completed', 'stopped', 'error') else 'completed'
-    with conn() as c:
+    status = data.status if data.status in ("completed", "stopped", "error") else "completed"
+    with conn() as connection:
         if DATABASE_URL:
-            result = c.execute('UPDATE sessions SET status=%s,completed_at=%s WHERE session_id=%s RETURNING session_id', (status, now(), data.session_id)).fetchone()
+            result = connection.execute(
+                "UPDATE sessions SET status=%s,completed_at=%s WHERE session_id=%s "
+                "RETURNING session_id",
+                (status, now(), data.session_id),
+            ).fetchone()
         else:
-            result = c.execute('UPDATE sessions SET status=?,completed_at=? WHERE session_id=?', (status, now(), data.session_id)).rowcount
-    if not result: raise HTTPException(404, 'Unknown session')
-    return {'saved': True, 'status': status}
+            result = connection.execute(
+                "UPDATE sessions SET status=?,completed_at=? WHERE session_id=?",
+                (status, now(), data.session_id),
+            ).rowcount
+    if not result:
+        raise HTTPException(404, "Unknown session")
+    return {"saved": True, "status": status}
 
-def authorize(token):
-    if not ADMIN_TOKEN or not secrets.compare_digest(token or '', ADMIN_TOKEN): raise HTTPException(401, 'Unauthorized')
 
-@app.get('/api/admin/sessions')
+def authorize(token: str | None) -> None:
+    if not ADMIN_TOKEN or not secrets.compare_digest(token or "", ADMIN_TOKEN):
+        raise HTTPException(401, "Unauthorized")
+
+
+@app.get("/api/admin/sessions")
 def sessions(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
-    with conn() as c:
-        rows = c.execute('SELECT session_id,participant_code,created_at,completed_at,status,trial_count FROM sessions ORDER BY created_at DESC').fetchall()
-    return [dict(r) for r in rows]
+    with conn() as connection:
+        rows = connection.execute(
+            "SELECT session_id,participant_code,created_at,completed_at,status,trial_count "
+            "FROM sessions ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
 
-@app.get('/api/admin/export.csv')
+
+@app.get("/api/admin/export.csv")
 def export_csv(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
-    with conn() as c: rows = c.execute('SELECT session_id,received_at,row_data FROM trials ORDER BY received_at').fetchall()
-    flattened = []
-    for r in rows:
-        item = json.loads(r['row_data']) if isinstance(r['row_data'], str) else r['row_data']
-        item['server_received_at'] = r['received_at']
-        item['server_session_id'] = r['session_id']
-        flattened.append(item)
-    fields = sorted({k for row in flattened for k in row.keys()})
-    out = io.StringIO(); writer = csv.DictWriter(out, fieldnames=fields, extrasaction='ignore'); writer.writeheader(); writer.writerows(flattened); out.seek(0)
-    return StreamingResponse(iter([out.getvalue()]), media_type='text/csv', headers={'Content-Disposition': 'attachment; filename="lifetrade_trials.csv"'})
+    with conn() as connection:
+        rows = connection.execute(
+            "SELECT session_id,received_at,row_data FROM trials ORDER BY received_at"
+        ).fetchall()
 
-app.mount('/Stimuli', StaticFiles(directory=os.path.join(ROOT, 'app', 'Stimuli')), name='stimuli')
-@app.get('/', response_class=HTMLResponse)
+    flattened = []
+    for row in rows:
+        item = json.loads(row["row_data"]) if isinstance(row["row_data"], str) else dict(row["row_data"])
+        item["server_received_at"] = row["received_at"]
+        item["server_session_id"] = row["session_id"]
+        flattened.append(item)
+
+    fields = sorted({key for row in flattened for key in row})
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(flattened)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="lifetrade_trials.csv"'},
+    )
+
+
+app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
+
+
+@app.get("/", response_class=HTMLResponse)
 def home():
-    with open(os.path.join(ROOT, 'app', 'index.html'), encoding='utf-8') as f: return f.read()
+    with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
+        return file.read()
