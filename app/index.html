@@ -1,77 +1,133 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>آزمایش آنلاین لایف‌ترید</title>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css"><title>آزمایش آنلاین لایف‌ترید</title>
 <style>
-:root{color-scheme:light;font-family:"IBM Plex Sans Arabic",Tahoma,"Segoe UI",Arial,sans-serif}
+:root{
+  color-scheme:light;
+  --ink:#171717;
+  --muted:#626262;
+  --line:#dedede;
+  --soft:#f5f5f5;
+  --soft-2:#ededed;
+  --card:#fff;
+  --radius:22px;
+  font-family:"Vazirmatn",Tahoma,"Segoe UI",Arial,sans-serif;
+  font-synthesis:none;
+  text-rendering:optimizeLegibility;
+}
 *{box-sizing:border-box}
-html,body{margin:0;width:100%;min-height:100%;background:#fff;color:#151515;font-family:"IBM Plex Sans Arabic",Tahoma,"Segoe UI",Arial,sans-serif}
-body{min-height:100vh;display:flex;align-items:stretch;justify-content:center}
-.screen{position:relative;width:100%;min-height:100vh;background:#fff;color:#151515;display:flex;align-items:center;justify-content:center;padding:clamp(12px,3vw,32px)}
+html,body{margin:0;width:100%;min-height:100%;background:var(--soft);color:var(--ink);font-family:"Vazirmatn",Tahoma,"Segoe UI",Arial,sans-serif}
+body{min-height:100svh;display:flex;align-items:stretch;justify-content:center}
+button,input,select{font:inherit}
+button{-webkit-tap-highlight-color:transparent}
+.screen{position:relative;width:100%;height:100svh;min-height:0;background:var(--soft);color:var(--ink);display:flex;align-items:center;justify-content:center;padding:clamp(12px,3vw,30px);overflow:hidden}
 .screen.trial-screen{padding:clamp(8px,2vw,24px);overflow:hidden}
 .hidden{display:none!important}
-.panel{width:min(720px,96vw);padding:clamp(20px,4vw,42px);background:#fff;color:#151515;border:1px solid #dedede;border-radius:16px;line-height:1.9;box-shadow:0 8px 32px rgba(0,0,0,.06);text-align:right}
-.panel h1{font-size:clamp(1.25rem,3vw,1.8rem);line-height:1.5;margin:0 0 14px}
-.panel p{color:#333;margin:0 0 16px;font-size:clamp(.98rem,2vw,1.1rem)}
+.panel{width:min(680px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:clamp(22px,4vw,44px);background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:24px;line-height:1.9;box-shadow:0 14px 42px rgba(0,0,0,.055);text-align:right}
+.panel h1{font-size:clamp(1.35rem,3vw,1.85rem);font-weight:750;line-height:1.55;margin:0 0 16px;letter-spacing:-.025em}
+.panel p{color:#333;margin:0 0 15px;font-size:clamp(.98rem,2vw,1.1rem);line-height:1.95}
 .field{display:flex;flex-direction:column;gap:6px;margin:12px 0}
 .field label{font-size:.95rem;color:#222}
-.field input,.field select{width:100%;padding:11px 12px;background:#fff;border:1px solid #aaa;border-radius:8px;color:#000;font-size:1rem}
-.btn{border:0;border-radius:9px;padding:12px 22px;font-size:1rem;background:#171717;color:#fff;cursor:pointer;font-family:inherit}
-.btn:disabled{opacity:.4;cursor:default}
-.hint{font-size:.9rem!important;color:#666!important;margin-top:14px!important}
-.status{position:fixed;left:12px;bottom:8px;font-size:12px;color:#666;user-select:none;direction:rtl;background:rgba(255,255,255,.8);padding:4px 8px;border-radius:6px}
+.field input,.field select{width:100%;padding:11px 12px;background:#fff;border:1px solid #aaa;border-radius:10px;color:#000;font-size:1rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;border:1px solid var(--ink);border-radius:12px;padding:12px 24px;font-size:1rem;font-weight:650;background:var(--ink);color:#fff;cursor:pointer;font-family:inherit;transition:transform .12s ease,background .12s ease,opacity .12s ease;touch-action:manipulation}
+.btn:hover{background:#303030}
+.btn:active{transform:scale(.99)}
+.btn:focus-visible{outline:3px solid #8b8b8b;outline-offset:3px}
+.btn:disabled{opacity:.45;cursor:default}
+.hint{font-size:.9rem!important;color:var(--muted)!important;margin-top:14px!important}
+.status{position:fixed;left:10px;bottom:max(8px,env(safe-area-inset-bottom));z-index:20;max-width:min(42vw,360px);font-size:11px;color:#505050;user-select:none;direction:rtl;background:rgba(255,255,255,.94);border:1px solid #e7e7e7;padding:5px 9px;border-radius:9px;box-shadow:0 3px 12px rgba(0,0,0,.04)}
 .finish-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-#stimulus{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-.instruction-screen,.interstitial-screen{width:min(780px,94vw);padding:clamp(20px,4vw,42px);text-align:center;line-height:2}
-.instruction-screen h2,.interstitial-screen h2{font-size:clamp(1.3rem,3.2vw,2rem);margin:0 0 18px}
-.instruction-screen p,.interstitial-screen p{font-size:clamp(1rem,2.3vw,1.2rem);margin:0 auto 18px;max-width:62ch;line-height:2}
-.instruction-screen .page-number{color:#666;font-size:.9rem;margin-bottom:10px}
-.continue-note{color:#666;font-size:.9rem;margin-top:28px}
+#stimulus{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:clamp(12px,3vw,28px);overflow:hidden}
+.instruction-screen,.interstitial-screen{width:min(760px,100%);height:min(680px,calc(100dvh - 36px));max-height:100%;min-height:0;padding:clamp(20px,3.5vw,36px);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 14px 42px rgba(0,0,0,.055);text-align:right;line-height:1.85;display:flex;flex-direction:column;align-items:stretch;overflow:hidden}
+.instruction-progress{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:clamp(14px,2.5vh,22px);color:var(--muted);font-size:.82rem}
+.instruction-progress .step-count{color:var(--ink);font-weight:650;white-space:nowrap}
+.progress-track{width:100%;height:4px;background:#ececec;border-radius:99px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--ink);border-radius:99px;transition:width .18s ease}
+.instruction-heading{font-size:clamp(1.35rem,3.2vw,1.9rem);font-weight:750;letter-spacing:-.025em;line-height:1.55;margin:0 0 clamp(12px,2vh,20px);flex:none}
+.instruction-content{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:clamp(10px,2vh,18px);overflow:hidden}
+.instruction-content p{font-size:clamp(.98rem,2vw,1.12rem);margin:0;line-height:1.9;color:#303030}
+.instruction-content .hintline{font-size:.92rem;color:var(--muted);line-height:1.8}
+.continue-note{color:var(--muted);font-size:.9rem;margin-top:12px}
 .trial-layout{width:100%;max-width:1240px;min-height:min(78vh,780px);display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:clamp(8px,2vw,26px);align-items:stretch;direction:ltr}
-.choice-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(12px,3vh,28px);width:100%;min-width:0;min-height:clamp(260px,58vh,560px);padding:clamp(16px,3vw,38px);border:2px solid #d6d6d6;border-radius:18px;background:#fff;color:#111;font-family:inherit;cursor:pointer;touch-action:manipulation;transition:border-color .1s,background .1s}
+.choice-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(12px,3vh,28px);width:100%;min-width:0;min-height:clamp(260px,58vh,560px);padding:clamp(16px,3vw,38px);border:1.5px solid #d3d3d3;border-radius:20px;background:#fff;color:#111;font-family:inherit;cursor:pointer;touch-action:manipulation;transition:border-color .1s,background .1s,box-shadow .1s}
+.choice-card:hover{border-color:#777;box-shadow:0 5px 18px rgba(0,0,0,.045)}
 .choice-card:focus-visible{outline:4px solid #777;outline-offset:3px}
-.choice-card:active{background:#f6f6f6}
+.choice-card:active{background:#f4f4f4}
 .choice-label{font-size:clamp(.95rem,1.7vw,1.1rem);color:#555;direction:rtl}
-.choice-amount{font-size:clamp(1.5rem,4.4vw,3.5rem);font-weight:700;line-height:1.5;text-align:center;direction:rtl;overflow-wrap:anywhere}
-.choice-detail{font-size:clamp(1rem,2.4vw,1.5rem);line-height:1.9;text-align:center;direction:rtl;max-width:25ch}
-.or-divider{align-self:center;display:flex;align-items:center;justify-content:center;width:clamp(34px,5vw,64px);height:clamp(34px,5vw,64px);border-radius:50%;background:#f0f0f0;font-size:clamp(.8rem,1.5vw,1rem);font-weight:700;color:#333}
+.choice-amount{font-size:clamp(1.5rem,4.4vw,3.5rem);font-weight:750;line-height:1.5;text-align:center;direction:rtl;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.choice-detail{font-size:clamp(1rem,2.4vw,1.5rem);line-height:1.8;text-align:center;direction:rtl;max-width:25ch}
+.or-divider{align-self:center;display:flex;align-items:center;justify-content:center;width:clamp(34px,5vw,64px);height:clamp(34px,5vw,64px);border-radius:50%;background:#ededed;font-size:clamp(.8rem,1.5vw,1rem);font-weight:750;color:#333}
 .trial-instruction{position:absolute;top:clamp(8px,2vh,20px);left:50%;transform:translateX(-50%);width:max-content;max-width:95%;text-align:center;font-size:clamp(.85rem,1.8vw,1rem);color:#555;direction:rtl}
 .fixation{font-size:clamp(2rem,5vw,4rem);font-weight:400;line-height:1}
+.page-actions{display:flex;justify-content:stretch;gap:10px;margin-top:auto;padding-top:clamp(16px,3vh,28px);flex:none}
+.next-page{width:100%;min-width:150px}
+.example-box{border:1.5px solid #dedede;padding:clamp(12px,2.2vw,22px);margin:0 auto;width:100%;max-width:620px;text-align:center;background:#fafafa;color:#111;border-radius:16px}
+.example-title{font-size:clamp(.95rem,1.8vw,1.1rem);font-weight:650;margin-bottom:clamp(10px,2vh,18px)}
+.example-choices{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:stretch;justify-content:center;gap:clamp(8px,2vw,20px)}
+.example-choice{display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;background:#171717;color:#fff;border-radius:13px;padding:clamp(10px,2vw,16px) 10px;min-width:0;min-height:76px;font-size:clamp(.85rem,1.5vw,1rem);line-height:1.65}
+.example-choice strong{font-weight:750}
+.example-or{align-self:center;font-size:1rem;color:#555;font-weight:650}
+.example-callout{background:#f1f1f1;color:#181818;border-right:3px solid #171717;padding:clamp(14px,2.4vw,22px);margin:0 auto;text-align:right;max-width:900px;width:100%;line-height:1.9;border-radius:12px;font-size:clamp(.98rem,1.9vw,1.1rem)}
+.device-note{border-right:3px solid #a7a7a7;padding-right:12px;text-align:right;color:#444}
 @media(max-width:640px){
- .screen.trial-screen{padding:10px 8px 30px}
- .trial-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:1fr auto;gap:8px;min-height:72vh}
- .or-divider{grid-column:1 / -1;grid-row:2;width:42px;height:42px;justify-self:center}
- .choice-card{min-height:54vh;padding:12px 8px;gap:14px;border-radius:12px}
- .choice-amount{font-size:clamp(1.15rem,5vw,1.8rem)}
- .choice-detail{font-size:clamp(.9rem,3.4vw,1.15rem)}
- .choice-label{font-size:.88rem}
- .trial-instruction{top:6px;font-size:.82rem}
+  .screen{padding:12px}
+  .screen.trial-screen{padding:10px 8px max(28px,env(safe-area-inset-bottom))}
+  .panel{width:100%;max-height:calc(100dvh - 24px);padding:22px 18px;border-radius:20px}
+  .panel h1{font-size:1.4rem;margin-bottom:12px}
+  .panel p{font-size:.98rem;line-height:1.85;margin-bottom:12px}
+  #stimulus{padding:10px}
+  .instruction-screen,.interstitial-screen{height:calc(100dvh - 20px);padding:18px 16px 15px;border-radius:18px}
+  .instruction-progress{font-size:.76rem;margin-bottom:12px}
+  .instruction-heading{font-size:clamp(1.18rem,5vw,1.5rem);line-height:1.55;margin-bottom:10px}
+  .instruction-content{gap:12px}
+  .instruction-content p{font-size:.96rem;line-height:1.82}
+  .instruction-content .hintline{font-size:.87rem}
+  .page-actions{padding-top:14px}
+  .next-page{min-height:48px}
+  .example-box{padding:12px 10px;border-radius:13px}
+  .example-title{font-size:.94rem;margin-bottom:10px}
+  .example-choices{gap:7px}
+  .example-choice{padding:10px 5px;min-height:68px;font-size:.82rem;border-radius:10px}
+  .example-callout{padding:12px 13px;font-size:.93rem;line-height:1.8}
+  .device-note{padding-right:10px}
+  .trial-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:1fr auto;gap:8px;min-height:72vh}
+  .or-divider{grid-column:1 / -1;grid-row:2;width:42px;height:42px;justify-self:center}
+  .choice-card{min-height:54vh;padding:12px 8px;gap:14px;border-radius:13px}
+  .choice-amount{font-size:clamp(1.1rem,5vw,1.8rem)}
+  .choice-detail{font-size:clamp(.9rem,3.4vw,1.15rem)}
+  .choice-label{font-size:.84rem}
+  .trial-instruction{top:6px;font-size:.82rem}
+  .status{left:7px;bottom:max(5px,env(safe-area-inset-bottom));font-size:10px;padding:4px 7px;max-width:46vw}
+}
+@media(max-height:700px){
+  .instruction-screen,.interstitial-screen{height:calc(100dvh - 20px);padding-top:16px;padding-bottom:14px}
+  .instruction-progress{margin-bottom:10px}
+  .instruction-heading{font-size:clamp(1.12rem,2.8vh,1.5rem);margin-bottom:8px}
+  .instruction-content{gap:10px}
+  .instruction-content p{font-size:clamp(.9rem,1.9vh,1rem);line-height:1.72}
+  .example-box{padding:10px;margin:0 auto}
+  .example-title{margin-bottom:8px}
+  .example-choice{min-height:60px;padding:8px}
+  .example-callout{padding:10px 12px}
+  .page-actions{padding-top:10px}
+}
+@media(max-width:360px){
+  .instruction-screen,.interstitial-screen{padding-right:13px;padding-left:13px}
+  .example-choice{font-size:.78rem}
 }
 @media(max-height:520px) and (min-width:641px){
- .trial-layout{min-height:78vh}
- .choice-card{min-height:70vh;gap:8px;padding:12px}
- .choice-amount{font-size:clamp(1.2rem,4vh,2.2rem)}
- .choice-detail{font-size:clamp(.9rem,2.8vh,1.2rem)}
+  .trial-layout{min-height:78vh}
+  .choice-card{min-height:70vh;gap:8px;padding:12px}
+  .choice-amount{font-size:clamp(1.2rem,4vh,2.2rem)}
+  .choice-detail{font-size:clamp(.9rem,2.8vh,1.2rem)}
 }
-
-.page-actions{display:flex;justify-content:center;margin-top:clamp(20px,4vh,42px)}
-.next-page{min-width:150px}
-.example-box{border:3px solid #111;padding:clamp(12px,2.5vw,24px);margin:12px auto;max-width:680px;text-align:center;background:#fff;color:#111}
-.example-title{font-size:clamp(1rem,2vw,1.2rem);margin-bottom:18px}
-.example-choices{display:flex;align-items:center;justify-content:center;gap:clamp(12px,4vw,36px);flex-wrap:wrap}
-.example-choice{display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;background:#000;color:#fff;border-radius:12px;padding:14px 18px;min-width:130px;min-height:86px}
-.example-or{font-size:1.2rem}
-.example-callout{background:#000;color:#fff;padding:14px 18px;margin:12px auto;text-align:center;max-width:900px;line-height:1.9}
-.device-note{border-right:3px solid #777;padding-right:12px;text-align:right}
-.interstitial-screen{max-height:calc(100vh - 28px);overflow-y:auto}
-@media(max-width:640px){.example-choices{gap:8px}.example-choice{min-width:115px;padding:12px 10px}.page-actions{margin-top:20px}}
-
 </style></head><body><main class="screen" id="screen">
 <section class="panel" id="welcome" dir="rtl">
 <h1>به آزمایش تصمیم‌گیری خوش آمدید</h1>
 <p>در این پژوهش چند بار بین دو گزینه انتخاب می‌کنید. پاسخ‌های شما به‌صورت ناشناس ثبت می‌شوند و یک کد شرکت‌کننده به‌طور خودکار به شما اختصاص داده می‌شود.</p>
-<p>برای انتخاب می‌توانید روی گزینهٔ سمت راست یا چپ بزنید؛ اگر از رایانه استفاده می‌کنید، کلید جهت‌نمای چپ یا راست هم قابل استفاده است.</p>
+<p>برای ثبت هر پاسخ، گزینه‌ای را که ترجیح می‌دهید لمس کنید یا روی آن کلیک کنید.</p>
 <p class="hint">لطفاً آزمایش را در یک نوبت کامل کنید. پاسخ‌ها هنگام انجام آزمایش برای سرور ارسال می‌شوند.</p>
 <button class="btn" id="start">شروع آزمایش</button>
-<p class="hint">برای ادامهٔ صفحه‌های راهنما، کلید فاصله را بزنید یا روی صفحه کلیک کنید. برای توقف با صفحه‌کلید، کلید Escape را فشار دهید.</p>
+<p class="hint">در صفحه‌های راهنما، برای ادامه از دکمهٔ «صفحهٔ بعد» استفاده کنید.</p>
 </section>
 <div id="stimulus" class="hidden" aria-live="off"></div>
 <section class="panel hidden" id="finish" dir="rtl">
@@ -90,53 +146,150 @@ const nowISO=()=>new Date().toISOString();
 function show(){welcome.classList.add('hidden');finish.classList.add('hidden');stimulus.classList.remove('hidden');status.classList.remove('hidden')}
 function showPanel(which){$('screen').classList.remove('trial-screen');stimulus.classList.add('hidden');status.classList.add('hidden');welcome.classList.toggle('hidden',which!=='welcome');finish.classList.toggle('hidden',which!=='finish')}
 function setStatus(text){status.textContent=text}
-function showInfo(title, paragraphs=[], note=''){
- $('screen').classList.remove('trial-screen');stimulus.innerHTML='';
- const box=document.createElement('div');box.className='interstitial-screen';box.dir='rtl';
- const h=document.createElement('h2');h.textContent=title;box.appendChild(h);
- paragraphs.forEach(item=>{if(typeof item==='string'){const p=document.createElement('p');p.textContent=item;box.appendChild(p)}else{box.appendChild(item)}});
- if(note){const n=document.createElement('div');n.className='continue-note';n.textContent=note;box.appendChild(n)}
- const actions=document.createElement('div');actions.className='page-actions';
- const next=document.createElement('button');next.type='button';next.className='btn next-page';next.textContent='صفحهٔ بعد';actions.appendChild(next);box.appendChild(actions);
- next.addEventListener('click',()=>{if(typeof window.__pageContinue==='function')window.__pageContinue()});
- stimulus.appendChild(box);return box
+const INSTRUCTION_PAGE_COUNT = 5;
+function showInfo(title, paragraphs=[], note='', progressIndex=null){
+  $('screen').classList.remove('trial-screen');
+  stimulus.innerHTML='';
+
+  const box=document.createElement('div');
+  box.className='interstitial-screen';
+  box.dir='rtl';
+
+  if(progressIndex !== null){
+    const progress=document.createElement('div');
+    progress.className='instruction-progress';
+    const labels=document.createElement('div');
+    labels.style.flex='1';
+    const kicker=document.createElement('div');
+    kicker.textContent='راهنمای تکلیف';
+    const track=document.createElement('div');
+    track.className='progress-track';
+    const fill=document.createElement('div');
+    fill.className='progress-fill';
+    fill.style.width=((progressIndex+1)/INSTRUCTION_PAGE_COUNT*100)+'%';
+    track.appendChild(fill);
+    labels.append(kicker,track);
+    const count=document.createElement('div');
+    count.className='step-count';
+    count.textContent='مرحلهٔ '+(progressIndex+1)+' از '+INSTRUCTION_PAGE_COUNT;
+    progress.append(labels,count);
+    box.appendChild(progress);
+  }
+
+  if(title){
+    const h=document.createElement('h2');
+    h.className='instruction-heading';
+    h.textContent=title;
+    box.appendChild(h);
+  }
+
+  const content=document.createElement('div');
+  content.className='instruction-content';
+  paragraphs.forEach(item=>{
+    if(typeof item==='string'){
+      const p=document.createElement('p');
+      p.textContent=item;
+      content.appendChild(p);
+    }else{
+      content.appendChild(item);
+    }
+  });
+  if(note){
+    const n=document.createElement('div');
+    n.className='continue-note';
+    n.textContent=note;
+    content.appendChild(n);
+  }
+  box.appendChild(content);
+
+  const actions=document.createElement('div');
+  actions.className='page-actions';
+  const next=document.createElement('button');
+  next.type='button';
+  next.className='btn next-page';
+  next.textContent='صفحهٔ بعد';
+  actions.appendChild(next);
+  box.appendChild(actions);
+  next.addEventListener('click',()=>{
+    if(typeof window.__pageContinue==='function')window.__pageContinue();
+  });
+  stimulus.appendChild(box);
+  return box;
 }
+
 function showInstructionPage(taskKey, pageIndex){
- const title=taskKey==='KT'?'به تکلیف «5-Trial DD Task» خوش آمدید!':'به تکلیف «Life-Trade Reward» خوش آمدید!';
- if(pageIndex===0){
-  const box=showInfo(title,[], '');
-  box.querySelector('.next-page').textContent='صفحهٔ بعد';
-  return;
- }
- if(pageIndex===1){
-  const paras=[];
-  paras.push('در هر مرحله از این تکلیف یک انتخاب بین دو گزینه شامل مبالغ فرضی پول به عنوان جایزه به شما پیشنهاد می‌شود و شما باید تصمیم بگیرید که کدام گزینه را ترجیح می‌دهید.');
-  const ex=document.createElement('div');ex.className='example-box';ex.dir='rtl';
-  const exTitle=document.createElement('div');exTitle.className='example-title';exTitle.textContent='به عنوان مثال: کدام گزینه را ترجیح می‌دهید؟';ex.appendChild(exTitle);
-  const choices=document.createElement('div');choices.className='example-choices';
-  const later=document.createElement('div');later.className='example-choice';later.innerHTML='<strong>۲ میلیون تومان</strong><span>۱ سال بعد</span>';
-  const or=document.createElement('span');or.className='example-or';or.textContent='یا';
-  const now=document.createElement('div');now.className='example-choice';now.innerHTML='<strong>۱ میلیون تومان</strong><span>الان</span>';
-  choices.append(later,or,now);ex.appendChild(choices);paras.push(ex);
-  const black=document.createElement('div');black.className='example-callout';black.textContent=taskKey==='KT'?'در این مرحله با انتخاب گزینه سمت چپ، شما باید ۱ سال صبر کنید و بعد از آن جایزه را دریافت خواهید کرد.':'در این مرحله با انتخاب گزینه سمت چپ، شما ۱ سال را در زمانی طی می‌کنید که از عمرتان حذف می‌شود؛ و بعد از آن جایزه را دریافت خواهید کرد.';paras.push(black);
-  paras.push('اگر گزینه سمت راست را ترجیح می‌دهید، دکمه جهت راست <right> را روی کیبورد فشار دهید.');
-  paras.push('اگر گزینه سمت چپ را ترجیح می‌دهید، دکمه جهت چپ <left> را روی کیبورد فشار دهید.');
-  paras.push('انگشت اشاره خود را روی دکمه جهت چپ <left>، و انگشت وسط خود را روی دکمه جهت راست <right> قرار دهید و پاسخ‌ها را وارد کنید.');
-  const device=document.createElement('p');device.className='device-note';device.textContent='اگر با موبایل هستید، روی گزینهٔ سمت چپ یا راست صفحه لمس کنید. اگر با کامپیوتر هستید، از کلیدهای جهت‌نمای چپ و راست یا ماوس برای انتخاب استفاده کنید.';paras.push(device);
-  const box=showInfo('راهنمای انتخاب',paras,'');box.querySelector('.next-page').textContent='صفحهٔ بعد';return;
- }
- if(pageIndex===2){
-  const box=showInfo('',[
-   'بدانید که مبلغ جایزه‌ها فرضی است و شما جایزه‌ای که انتخاب کردید را دریافت نخواهید کرد. صرفاً تصور کنید که اگر این انتخاب را در زندگی واقعی داشتید، کدام گزینه را انتخاب می‌کردید.'
-  ],'');box.querySelector('.next-page').textContent='صفحهٔ بعد';return;
- }
- const box=showInfo('',[
-  'اگر برای شروع تکلیف آماده هستید، دکمهٔ «شروع تکلیف» را فشار دهید.'
- ],'');
- const btn=box.querySelector('.next-page');btn.textContent='شروع تکلیف';btn.classList.add('start-task-button');
- window.__pageContinue=()=>{};
- btn.addEventListener('click',()=>{window.__pageContinue=null});
+  const title=taskKey==='KT'?'به تکلیف «5-Trial DD Task» خوش آمدید!':'به تکلیف «Life-Trade Reward» خوش آمدید!';
+
+  if(pageIndex===0){
+    showInfo(title, [], '', pageIndex);
+    return;
+  }
+
+  if(pageIndex===1){
+    const paras=[];
+    paras.push('در هر مرحله از این تکلیف یک انتخاب بین دو گزینه شامل مبالغ فرضی پول به عنوان جایزه به شما پیشنهاد می‌شود و شما باید تصمیم بگیرید که کدام گزینه را ترجیح می‌دهید.');
+
+    const ex=document.createElement('div');
+    ex.className='example-box';
+    ex.dir='rtl';
+    const exTitle=document.createElement('div');
+    exTitle.className='example-title';
+    exTitle.textContent='به عنوان مثال: کدام گزینه را ترجیح می‌دهید؟';
+    ex.appendChild(exTitle);
+
+    const choices=document.createElement('div');
+    choices.className='example-choices';
+    const later=document.createElement('div');
+    later.className='example-choice';
+    later.innerHTML='<strong>۲ میلیون تومان</strong><span>۱ سال بعد</span>';
+    const or=document.createElement('span');
+    or.className='example-or';
+    or.textContent='یا';
+    const now=document.createElement('div');
+    now.className='example-choice';
+    now.innerHTML='<strong>۱ میلیون تومان</strong><span>الان</span>';
+    choices.append(later,or,now);
+    ex.appendChild(choices);
+    paras.push(ex);
+
+    showInfo('راهنمای انتخاب', paras, '', pageIndex);
+    return;
+  }
+
+  if(pageIndex===2){
+    const explanation=document.createElement('div');
+    explanation.className='example-callout';
+    explanation.textContent=taskKey==='KT'
+      ?'در این مرحله با انتخاب گزینه سمت چپ، شما باید ۱ سال صبر کنید و بعد از آن جایزه را دریافت خواهید کرد.'
+      :'در این مرحله با انتخاب گزینه سمت چپ، شما ۱ سال را در زمانی طی می‌کنید که از عمرتان حذف می‌شود؛ و بعد از آن جایزه را دریافت خواهید کرد.';
+
+    const instruction=document.createElement('p');
+    instruction.className='hintline';
+    instruction.textContent='برای ثبت انتخاب، گزینهٔ موردنظر خود را لمس کنید یا روی آن کلیک کنید.';
+
+    showInfo('راهنمای انتخاب', [explanation, instruction], '', pageIndex);
+    return;
+  }
+
+  if(pageIndex===3){
+    showInfo('', [
+      'بدانید که مبلغ جایزه‌ها فرضی است و شما جایزه‌ای که انتخاب کردید را دریافت نخواهید کرد. صرفاً تصور کنید که اگر این انتخاب را در زندگی واقعی داشتید، کدام گزینه را انتخاب می‌کردید.'
+    ], '', pageIndex);
+    const heading=stimulus.querySelector('.instruction-heading');
+    if(heading)heading.textContent='نکته دربارهٔ مبالغ';
+    return;
+  }
+
+  showInfo('', [
+    'اگر برای شروع تکلیف آماده هستید، دکمهٔ «شروع تکلیف» را فشار دهید.'
+  ], '', pageIndex);
+  const heading=stimulus.querySelector('.instruction-heading');
+  if(heading)heading.textContent='آمادهٔ شروع هستید؟';
+  const btn=stimulus.querySelector('.next-page');
+  btn.textContent='شروع تکلیف';
+  btn.classList.add('start-task-button');
 }
+
 function showFixation(){ $('screen').classList.add('trial-screen');stimulus.innerHTML='';const d=document.createElement('div');d.className='fixation';d.textContent='+';d.setAttribute('aria-hidden','true');stimulus.appendChild(d)}
 function showRest(){showInfo('استراحت کوتاه',['بخش اول تمام شد. کمی استراحت کنید؛ وقتی آماده بودید، برای ادامه فاصله را بزنید یا روی صفحه کلیک کنید.'])}
 function showThanks(){showInfo('از مشارکت شما سپاسگزاریم.',['پاسخ‌های شما ثبت شده‌اند. لطفاً کد شرکت‌کننده را در صفحهٔ بعد یادداشت کنید.'])}
@@ -160,7 +313,8 @@ function optionText(taskKey,magnitude,trialData,isNow){
  return {amount:amounts.later,detail:`در ازای ${persianDelay(trialData.delay)} از عمرتان`,label:'گزینهٔ مربوط به عمر'};
 }
 function optionLabel(taskKey,magnitude,trialData,isNow){const o=optionText(taskKey,magnitude,trialData,isNow);return `${o.amount} — ${o.detail}`;}
-async function api(path, body){const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!res.ok)throw new Error(`Server save failed (${res.status})`);return res.json()}
+const APP_BASE_PATH='/lifetrade';
+async function api(path, body){const url=APP_BASE_PATH+(path.startsWith('/')?path:'/'+path);const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!res.ok)throw new Error(`Server save failed (${res.status})`);return res.json()}
 async function saveTrial(row){const key='lifetrade_pending_'+sessionId;let pending=JSON.parse(localStorage.getItem(key)||'[]');pending.push(row);localStorage.setItem(key,JSON.stringify(pending));try{const result=await api('/api/trial',{session_id:sessionId,client_event_id:row.client_event_id,row});pending=pending.filter(x=>x.client_event_id!==row.client_event_id);localStorage.setItem(key,JSON.stringify(pending));return result}catch(e){setStatus('اختلال اتصال: پاسخ موقتاً روی این دستگاه ذخیره شد؛ تلاش دوباره انجام می‌شود…');return {saved_locally:true}}}
 async function flushPending(){if(!sessionId)return;const key='lifetrade_pending_'+sessionId;let pending=JSON.parse(localStorage.getItem(key)||'[]');for(const row of pending){try{await api('/api/trial',{session_id:sessionId,client_event_id:row.client_event_id,row});pending=pending.filter(x=>x.client_event_id!==row.client_event_id);localStorage.setItem(key,JSON.stringify(pending))}catch(e){break}}return pending.length}
 window.addEventListener('online',()=>{flushPending().catch(()=>{})});window.addEventListener('focus',()=>{flushPending().catch(()=>{})});
@@ -181,7 +335,7 @@ function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
 }
 function resolveChoice(key){if(!currentTrialResolve||responseLock)return;responseLock=true;if(activeKeyHandler){window.removeEventListener('keydown',activeKeyHandler);activeKeyHandler=null}const rt=performance.now()-window.__trialStart;const resolve=currentTrialResolve;currentTrialResolve=null;resolve({key,rt})}
 function waitForChoice(start){window.__trialStart=start;responseLock=false;return new Promise(resolve=>{currentTrialResolve=resolve;const handler=e=>{let k=e.key.toLowerCase();if(['arrowleft','arrowright','l','r'].includes(k)){e.preventDefault();resolveChoice(k)}else if(k==='escape'){e.preventDefault();stopped=true;resolveChoice('escape')}};activeKeyHandler=handler;window.addEventListener('keydown',handler)})}
-async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<4;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=Math.random()>0.5;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:document.hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
+async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=Math.random()>0.5;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:document.hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
 async function startExperiment(){ $('start').disabled=true; stopped=false; show();try{const created=await api('/api/session',{experiment_version:'online-mvp-0.3-original-instructions-ibmplex-fa',user_agent:navigator.userAgent,screen_width:screen.width,screen_height:screen.height});sessionId=created.session_id;participantCode=created.participant_code;participant={participant:participantCode,session:sessionId,date:nowISO()};if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});const taskOrder=shuffle(['LT','KT']);for(let i=0;i<taskOrder.length;i++){if(stopped)break;await runTask(taskOrder[i],i+1);if(stopped)break;if(i===0){showRest();setStatus('استراحت · برای ادامه فاصله را بزنید');await spaceToContinue();await wait(1500)}}if(!stopped){setStatus('آزمایش تکمیل شد');const unsent=await flushPending();await api('/api/complete',{session_id:sessionId,status:'completed',trial_count:trialCount});showPanel('finish');$('participant-code').textContent='کد شرکت‌کننده: '+participantCode+(unsent?' — هشدار: '+unsent+' پاسخ هنوز فقط روی این دستگاه ذخیره شده و به سرور نرسیده است. اطلاعات مرورگر را پاک نکنید و با تیم پژوهش تماس بگیرید.':'');}else{await flushPending();await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});showPanel('finish');$('finish').querySelector('h1').textContent='آزمایش متوقف شد';$('finish').querySelector('p').textContent='آزمایش متوقف شد. پاسخ‌هایی که پیش‌تر به سرور رسیده‌اند، ذخیره شده‌اند.';$('participant-code').textContent='کد شرکت‌کننده: '+participantCode;}}catch(err){console.error(err);showPanel('finish');$('finish').querySelector('h1').textContent='خطا در اتصال یا اجرای آزمایش';$('finish').querySelector('p').textContent='سرور نتوانست یکی از عملیات‌ها را کامل کند. اگر کد شرکت‌کننده دارید، پیش از شروع دوباره با تیم پژوهش تماس بگیرید.'}finally{$('start').disabled=false}}
 $('start').addEventListener('click',startExperiment);$('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
 </script></body></html>
