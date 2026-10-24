@@ -120,6 +120,64 @@ button{-webkit-tap-highlight-color:transparent}
   .choice-amount{font-size:clamp(1.2rem,4vh,2.2rem)}
   .choice-detail{font-size:clamp(.9rem,2.8vh,1.2rem)}
 }
+
+/* Refinements requested after mobile review */
+.interstitial-screen,.instruction-screen{ text-align:center; }
+.instruction-heading{ text-align:center; width:100%; }
+.instruction-content{ align-items:center; text-align:center; gap:clamp(10px,1.8vh,16px); }
+.instruction-content p{ text-align:center; font-size:clamp(1.06rem,2.1vw,1.2rem); font-weight:650; line-height:1.82; color:#222; }
+.instruction-content .hintline{font-weight:500;font-size:1rem;}
+.interstitial-screen.title-only .instruction-heading{
+  flex:1; display:flex; align-items:center; justify-content:center;
+  margin:0; text-align:center; line-height:1.65;
+}
+.interstitial-screen.title-only .instruction-content{display:none;}
+.interstitial-screen .instruction-progress{width:100%;text-align:right;}
+.instruction-explanation{
+  width:100%; margin:0; padding:0 2px; font-weight:700!important;
+  font-size:clamp(1.08rem,2.2vw,1.22rem)!important; color:#171717!important;
+  line-height:1.85!important; text-align:center!important;
+}
+.example-note{
+  margin:9px 0 0!important; color:#666!important; font-size:.82rem!important;
+  font-weight:500!important; line-height:1.65!important; text-align:center!important;
+}
+.choice-label{display:none!important;}
+.status{display:none!important;}
+.choice-card{
+  position:relative; transform:translateZ(0);
+  transition:transform .09s ease-out,background .09s ease-out,border-color .09s ease-out,box-shadow .09s ease-out;
+  user-select:none;-webkit-user-select:none;
+}
+.choice-card:active,.choice-card.is-pressed{
+  transform:scale(.975); background:#e9e9e9; border-color:#171717;
+  box-shadow:inset 0 0 0 2px #171717,0 3px 10px rgba(0,0,0,.10);
+}
+@media(max-width:640px){
+  .interstitial-screen,.instruction-screen{ text-align:center; }
+  .instruction-content{gap:10px;}
+  .instruction-content p{font-size:1.04rem;font-weight:650;line-height:1.72;}
+  .instruction-explanation{font-size:1.07rem!important;line-height:1.7!important;}
+  .example-note{font-size:.78rem!important;line-height:1.55!important;margin-top:7px!important;}
+  .example-box{padding:10px 9px;}
+  .example-title{margin-bottom:8px;}
+  .example-choice{min-height:58px;padding:8px 4px;}
+  .trial-layout{min-height:0;height:auto;align-content:center;grid-template-rows:auto auto;}
+  .choice-card{min-height:clamp(180px,30svh,240px);height:auto;padding:10px 6px;gap:10px;}
+  .choice-amount{font-size:clamp(1.06rem,4.8vw,1.65rem);line-height:1.45;}
+  .choice-detail{font-size:clamp(.85rem,3.3vw,1.05rem);line-height:1.65;}
+}
+@media(max-height:620px){
+  .interstitial-screen{height:calc(100dvh - 16px);padding-top:10px;padding-bottom:10px;}
+  .instruction-progress{margin-bottom:8px;}
+  .instruction-heading{font-size:clamp(1.1rem,2.8vh,1.45rem);margin-bottom:6px;}
+  .instruction-content{gap:8px;}
+  .instruction-content p{font-size:clamp(.92rem,1.9vh,1rem);line-height:1.65;}
+  .instruction-explanation{font-size:clamp(.95rem,2vh,1.08rem)!important;line-height:1.6!important;}
+  .page-actions{padding-top:8px;}
+  .next-page{min-height:44px;padding:9px 18px;}
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel" id="welcome" dir="rtl">
 <h1>به آزمایش تصمیم‌گیری خوش آمدید</h1>
@@ -146,7 +204,7 @@ const nowISO=()=>new Date().toISOString();
 function show(){welcome.classList.add('hidden');finish.classList.add('hidden');stimulus.classList.remove('hidden');status.classList.remove('hidden')}
 function showPanel(which){$('screen').classList.remove('trial-screen');stimulus.classList.add('hidden');status.classList.add('hidden');welcome.classList.toggle('hidden',which!=='welcome');finish.classList.toggle('hidden',which!=='finish')}
 function setStatus(text){status.textContent=text}
-const INSTRUCTION_PAGE_COUNT = 5;
+const INSTRUCTION_PAGE_COUNT = 4;
 function showInfo(title, paragraphs=[], note='', progressIndex=null){
   $('screen').classList.remove('trial-screen');
   stimulus.innerHTML='';
@@ -154,6 +212,9 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
   const box=document.createElement('div');
   box.className='interstitial-screen';
   box.dir='rtl';
+  if(progressIndex===0 && title && paragraphs.length===0 && !note){
+    box.classList.add('title-only');
+  }
 
   if(progressIndex !== null){
     const progress=document.createElement('div');
@@ -232,6 +293,7 @@ function showInstructionPage(taskKey, pageIndex){
     const ex=document.createElement('div');
     ex.className='example-box';
     ex.dir='rtl';
+
     const exTitle=document.createElement('div');
     exTitle.className='example-title';
     exTitle.textContent='به عنوان مثال: کدام گزینه را ترجیح می‌دهید؟';
@@ -250,30 +312,27 @@ function showInstructionPage(taskKey, pageIndex){
     now.innerHTML='<strong>۱ میلیون تومان</strong><span>الان</span>';
     choices.append(later,or,now);
     ex.appendChild(choices);
+
+    const notice=document.createElement('p');
+    notice.className='example-note';
+    notice.textContent='این گزینه‌ها فقط برای مثال هستند و قابل انتخاب نیستند.';
+    ex.appendChild(notice);
     paras.push(ex);
+
+    const explanation=document.createElement('p');
+    explanation.className='instruction-explanation';
+    explanation.textContent=taskKey==='KT'
+      ?'در این مثال، با انتخاب گزینهٔ سمت چپ باید یک سال صبر کنید تا جایزه را دریافت کنید.'
+      :'در این مثال، با انتخاب گزینهٔ سمت چپ، یک سال از عمرتان در ازای دریافت جایزه حذف می‌شود.';
+    paras.push(explanation);
 
     showInfo('راهنمای انتخاب', paras, '', pageIndex);
     return;
   }
 
   if(pageIndex===2){
-    const explanation=document.createElement('div');
-    explanation.className='example-callout';
-    explanation.textContent=taskKey==='KT'
-      ?'در این مرحله با انتخاب گزینه سمت چپ، شما باید ۱ سال صبر کنید و بعد از آن جایزه را دریافت خواهید کرد.'
-      :'در این مرحله با انتخاب گزینه سمت چپ، شما ۱ سال را در زمانی طی می‌کنید که از عمرتان حذف می‌شود؛ و بعد از آن جایزه را دریافت خواهید کرد.';
-
-    const instruction=document.createElement('p');
-    instruction.className='hintline';
-    instruction.textContent='برای ثبت انتخاب، گزینهٔ موردنظر خود را لمس کنید یا روی آن کلیک کنید.';
-
-    showInfo('راهنمای انتخاب', [explanation, instruction], '', pageIndex);
-    return;
-  }
-
-  if(pageIndex===3){
     showInfo('نکته دربارهٔ مبالغ', [
-      'بدانید که مبلغ جایزه‌ها فرضی است و شما جایزه‌ای که انتخاب کردید را دریافت نخواهید کرد. صرفاً تصور کنید که اگر این انتخاب را در زندگی واقعی داشتید، کدام گزینه را انتخاب می‌کردید.'
+      'مبالغ جایزه‌ها فرضی هستند و جایزه‌ای دریافت نخواهید کرد. تصور کنید اگر با چنین انتخابی در زندگی واقعی روبه‌رو می‌شدید، کدام گزینه را انتخاب می‌کردید.'
     ], '', pageIndex);
     return;
   }
@@ -323,7 +382,7 @@ function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
   const label=document.createElement('span');label.className='choice-label';label.textContent=info.label;
   const amount=document.createElement('span');amount.className='choice-amount';amount.textContent=info.amount;
   const detail=document.createElement('span');detail.className='choice-detail';detail.textContent=info.detail;
-  b.append(label,amount,detail);b.addEventListener('click',()=>resolveChoice(`tap-${side}`));return b
+  b.append(label,amount,detail);b.addEventListener('click',()=>{b.classList.add('is-pressed');resolveChoice(`tap-${side}`)});return b
  }
  const leftCard=card(left,'left'),rightCard=card(right,'right');
  const or=document.createElement('div');or.className='or-divider';or.textContent='یا';or.setAttribute('aria-hidden','true');
