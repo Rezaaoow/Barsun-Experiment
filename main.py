@@ -282,6 +282,11 @@ def _persist_trials(session_id: str, records: list[TrialRecord]) -> tuple[int, i
     params = tuple(value for row in values for value in row)
 
     with conn() as connection:
+        if not DATABASE_URL:
+            # Acquire SQLite's single-writer lock before reading, preventing a
+            # concurrent read-to-write transaction upgrade from failing mid-batch.
+            connection.execute("BEGIN IMMEDIATE")
+
         if DATABASE_URL:
             exists = connection.execute(
                 "SELECT 1 FROM sessions WHERE session_id=%s", (session_id,)
