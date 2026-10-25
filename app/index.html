@@ -344,11 +344,54 @@ button{-webkit-tap-highlight-color:transparent}
   .instruction-example-page .next-page{min-height:38px;padding:6px 12px;}
 }
 
+
+/* Final UI polish: calmer examples, cleaner text hierarchy and a centered participant code. */
+#welcome .field label{text-align:center;}
+#welcome .participant-code-field{gap:8px;margin:18px auto 20px;}
+#welcome .participant-code-field input{max-width:360px;margin-inline:auto;}
+#finish .finish-actions{flex-direction:column;align-items:stretch;gap:14px;}
+#finish #participant-code{
+ display:flex;flex:0 0 100%;flex-direction:column;align-items:center;justify-content:center;
+ width:100%;max-width:100%;gap:7px;margin:4px auto 8px!important;padding:16px 14px;
+ border:1px solid #e7e7e7;border-radius:14px;background:#fafafa;
+ text-align:center!important;direction:rtl;overflow-wrap:anywhere;
+}
+#finish #participant-code .participant-code-label{font-size:.94rem;font-weight:600;color:#666;}
+#finish #participant-code .participant-code-value{
+ display:block;max-width:100%;text-align:center;direction:ltr;unicode-bidi:isolate;
+ font-size:clamp(1.3rem,3vw,1.65rem);font-weight:800;letter-spacing:.035em;overflow-wrap:anywhere;color:#171717;
+}
+#finish #participant-code .participant-code-warning{
+ display:block;width:100%;max-width:48ch;text-align:center;color:#8b2626;font-size:.86rem;line-height:1.6;font-weight:500;
+}
+.instruction-example-page .instruction-content>p:not(.instruction-explanation){max-width:62ch;margin-inline:auto;}
+.instruction-example-page .example-box{background:#f8f8f8;border-color:#ededed;}
+.instruction-example-page .example-choice{
+ background:#fff;color:#171717;border:1px solid #dedede;box-shadow:none;border-radius:11px;
+}
+.instruction-example-page .example-choice strong{font-size:1rem;font-weight:800;}
+.instruction-example-page .example-choice span{color:#666;}
+.instruction-example-page .example-or{
+ display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;
+ background:#ededed;font-size:.88rem;
+}
+.instruction-example-page .instruction-explanation{
+ max-width:66ch;margin-inline:auto!important;padding:9px 13px!important;
+ border:1px solid #ededed;border-radius:11px;background:#f8f8f8;
+ font-weight:550!important;color:#333!important;
+}
+@media(max-width:640px){
+ #finish #participant-code{padding:14px 12px;}
+ #finish #participant-code .participant-code-value{font-size:1.35rem;}
+ .instruction-example-page .instruction-content>p:not(.instruction-explanation){max-width:44ch;}
+ .instruction-example-page .example-choice strong{font-size:.78rem;}
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel" id="welcome" dir="rtl">
 <h1>آزمون تنزیل تعویقی</h1>
-<p>برای ثبت پاسخ‌ها، کد شرکت‌کننده‌ای را که در اختیار دارید وارد کنید. همین کد برای اتصال داده‌های بخش‌های مختلف پژوهش استفاده می‌شود.</p>
-<p>برای انتخاب می‌توانید گزینه سمت راست یا چپ را فشار دهید یا روی آن کلیک کنید.</p>
+<p>کد شرکت‌کننده را وارد کنید. این کد پاسخ‌های دو بخش آزمایش را به هم مرتبط می‌کند.</p>
+<p>برای پاسخ، روی گزینهٔ راست یا چپ بزنید.</p>
 <div class="field participant-code-field">
 <label for="participant-code-input">کد شرکت‌کننده</label>
 <input id="participant-code-input" type="text" name="participant_code" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="کد خود را وارد کنید" dir="ltr" required>
@@ -368,9 +411,40 @@ button{-webkit-tap-highlight-color:transparent}
 const DATA = {"KT":{"1M":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"100M":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"10B":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"blocks":[{"block_name":"Low","magnitude":"1M"},{"block_name":"Mid","magnitude":"100M"},{"block_name":"High","magnitude":"10B"}]},"LT":{"1M":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"100M":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"10B":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167,"delED50":0.05893,"immK":24,"delK":17},{"index":2,"delay":"2 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":3,"delay":"3 hr","choice":5,"immED50":0.1021,"delED50":0.1444,"immK":9.79,"delK":6.93},{"index":4,"delay":"4 hr","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":5,"delay":"6 hr","choice":5,"immED50":0.2041,"delED50":0.3062,"immK":4.9,"delK":3.27},{"index":6,"delay":"9 hr","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":7,"delay":"12 hr","choice":5,"immED50":0.433,"delED50":0.7071,"immK":2.31,"delK":1.41},{"index":8,"delay":"1 day","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":9,"delay":"1.5 days","choice":5,"immED50":1.225,"delED50":1.732,"immK":0.816,"delK":0.577},{"index":10,"delay":"2 days","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":11,"delay":"3 days","choice":5,"immED50":2.45,"delED50":3.464,"immK":0.408,"delK":0.289},{"index":12,"delay":"4 days","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":13,"delay":"1 week","choice":5,"immED50":5.292,"delED50":8.573,"immK":0.189,"delK":0.117},{"index":14,"delay":"1.5 weeks","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":15,"delay":"2 weeks","choice":5,"immED50":12.12,"delED50":17.15,"immK":0.0825,"delK":0.0583},{"index":16,"delay":"3 weeks","choice":1,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":17,"delay":"1 month","choice":5,"immED50":25.28,"delED50":43.05,"immK":0.0396,"delK":0.0232},{"index":18,"delay":"2 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":19,"delay":"3 months","choice":5,"immED50":74.56,"delED50":105.4,"immK":0.0134,"delK":0.00949},{"index":20,"delay":"4 months","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":21,"delay":"6 months","choice":5,"immED50":149.1,"delED50":210.9,"immK":0.00671,"delK":0.004741},{"index":22,"delay":"8 months","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":23,"delay":"1 year","choice":5,"immED50":298.2,"delED50":516.5,"immK":0.00335,"delK":0.00194},{"index":24,"delay":"2 years","choice":2,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":25,"delay":"3 years","choice":5,"immED50":894.7,"delED50":1265,"immK":0.00112,"delK":0.000791},{"index":26,"delay":"4 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":27,"delay":"5 years","choice":5,"immED50":1633,"delED50":2310,"immK":0.000612,"delK":0.000433},{"index":28,"delay":"8 years","choice":3,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":29,"delay":"12 years","choice":5,"immED50":3579,"delED50":5368,"immK":0.000279,"delK":0.000186},{"index":30,"delay":"18 years","choice":4,"immED50":null,"delED50":null,"immK":null,"delK":null},{"index":31,"delay":"25 years","choice":5,"immED50":7748,"delED50":9131,"immK":0.000129,"delK":0.00011}],"blocks":[{"block_name":"Low","magnitude":"1M"},{"block_name":"Mid","magnitude":"100M"},{"block_name":"High","magnitude":"10B"}]}};
 const $ = id => document.getElementById(id);
 const stimulus=$('stimulus'), welcome=$('welcome'), finish=$('finish'), status=$('status');
-let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null;
-const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
+function randomInt(maxExclusive){
+ if(!Number.isInteger(maxExclusive)||maxExclusive<1||maxExclusive>0x100000000)throw new RangeError('Invalid random range');
+ try{
+  const cryptoSource=window.crypto;
+  if(cryptoSource&&typeof cryptoSource.getRandomValues==='function'){
+   const range=0x100000000;
+   const limit=Math.floor(range/maxExclusive)*maxExclusive;
+   const value=new Uint32Array(1);
+   do{cryptoSource.getRandomValues(value)}while(value[0]>=limit);
+   return value[0]%maxExclusive;
+  }
+ }catch(e){}
+ return Math.floor(Math.random()*maxExclusive);
+}
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
 const nowISO=()=>new Date().toISOString();
+function renderParticipantCode(code, warning=''){
+ const output=$('participant-code');
+ output.replaceChildren();
+ const label=document.createElement('span');
+ label.className='participant-code-label';
+ label.textContent='کد شرکت‌کننده';
+ const value=document.createElement('strong');
+ value.className='participant-code-value';
+ value.textContent=code||'—';
+ output.append(label,value);
+ if(warning){
+  const message=document.createElement('span');
+  message.className='participant-code-warning';
+  message.textContent=warning;
+  output.appendChild(message);
+ }
+}
 function show(){welcome.classList.add('hidden');finish.classList.add('hidden');stimulus.classList.remove('hidden');status.classList.remove('hidden')}
 function showPanel(which){$('screen').classList.remove('trial-screen');stimulus.classList.add('hidden');status.classList.add('hidden');welcome.classList.toggle('hidden',which!=='welcome');finish.classList.toggle('hidden',which!=='finish')}
 function setStatus(text){status.textContent=text}
@@ -459,7 +533,7 @@ function showInstructionPage(taskKey, pageIndex){
 
   if(pageIndex===1){
     const paras=[];
-    paras.push('در هر مرحله از این تکلیف یک انتخاب بین دو گزینه شامل مبالغ فرضی پول به عنوان جایزه به شما پیشنهاد می‌شود و شما باید تصمیم بگیرید که کدام گزینه را ترجیح می‌دهید.');
+    paras.push('در هر مرحله دو گزینهٔ فرضی با مبالغ متفاوت می‌بینید. گزینه‌ای را انتخاب کنید که ترجیح می‌دهید.');
 
     const ex=document.createElement('div');
     ex.className='example-box';
@@ -495,8 +569,8 @@ function showInstructionPage(taskKey, pageIndex){
     const explanation=document.createElement('p');
     explanation.className='instruction-explanation';
     explanation.textContent=taskKey==='KT'
-      ?'در این مثال، گزینهٔ سمت چپ به این معناست که شما ۱ میلیون تومان را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست به این معناست که باید یک سال صبر کنید تا ۲ میلیون تومان را دریافت کنید.'
-      :'در این مثال، گزینهٔ سمت چپ در سناریوی فرضی به این معناست که شما مبلغ اعلام‌شده را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست در سناریوی فرضی به معنای واگذاری یک سال از عمرتان در ازای دریافت مبلغ اعلام‌شده است؛ یعنی شما از الان یک سال به جلو برده می‌شوید، آن یک سال از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
+      ?'سمت چپ: دریافت ۱ میلیون تومان همین حالا. سمت راست: دریافت ۲ میلیون تومان پس از یک سال.'
+      :'سمت چپ: دریافت ۱ میلیون تومان همین حالا. سمت راست: دریافت ۲ میلیون تومان در ازای حذف یک سال از عمر فرضی شما؛ در این سناریو یک سال جلو می‌روید و آن را تجربه نمی‌کنید.';
     paras.push(explanation);
 
     showInfo('راهنمای انتخاب', paras, '', pageIndex);
@@ -505,13 +579,13 @@ function showInstructionPage(taskKey, pageIndex){
 
   if(pageIndex===2){
     showInfo('نکته دربارهٔ مبالغ', [
-      'مبالغ جایزه‌ها فرضی هستند و جایزه‌ای دریافت نخواهید کرد. تصور کنید اگر با چنین انتخابی در زندگی واقعی روبه‌رو می‌شدید، کدام گزینه را انتخاب می‌کردید.'
+      'مبالغ فرضی‌اند و هیچ پرداخت واقعی انجام نمی‌شود. هنگام انتخاب، تصور کنید در زندگی واقعی با چنین تصمیمی روبه‌رو شده‌اید.'
     ], '', pageIndex);
     return;
   }
 
   showInfo('آمادهٔ شروع هستید؟', [
-    'اگر برای شروع تکلیف آماده هستید، دکمهٔ «شروع تکلیف» را فشار دهید.'
+    'اگر آماده‌اید، دکمهٔ «شروع تکلیف» را بزنید.'
   ], '', pageIndex);
   const btn=stimulus.querySelector('.next-page');
   btn.textContent='شروع تکلیف';
@@ -519,7 +593,7 @@ function showInstructionPage(taskKey, pageIndex){
 }
 
 function showFixation(){ $('screen').classList.add('trial-screen');stimulus.innerHTML='';const d=document.createElement('div');d.className='fixation';d.textContent='+';d.setAttribute('aria-hidden','true');stimulus.appendChild(d)}
-function showRest(){showInfo('استراحت کوتاه',['بخش اول تمام شد. کمی استراحت کنید؛ وقتی آماده بودید، برای ادامه فاصله را بزنید یا روی صفحه کلیک کنید.'])}
+function showRest(){showInfo('استراحت کوتاه',['بخش اول تمام شد. کمی استراحت کنید؛ برای ادامه، دکمهٔ «ادامه» را بزنید.']);const button=stimulus.querySelector('.next-page');if(button)button.textContent='ادامه';}
 function showThanks(){showInfo('از مشارکت شما سپاسگزاریم.',['پاسخ‌های شما ثبت شده‌اند. لطفاً کد شرکت‌کننده را در صفحهٔ بعد یادداشت کنید.'])}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 function spaceToContinue(){return new Promise(resolve=>{
@@ -558,7 +632,11 @@ function readPending(){
   return Array.isArray(value)?value.filter(item=>item&&typeof item.client_event_id==='string'):[];
  }catch(e){return [];}
 }
-function writePending(rows){localStorage.setItem(pendingStorageKey(),JSON.stringify(rows));}
+function writePending(rows){
+ const key=pendingStorageKey();
+ if(rows.length)localStorage.setItem(key,JSON.stringify(rows));
+ else localStorage.removeItem(key);
+}
 async function flushPending(){
  if(!sessionId)return 0;
  if(pendingFlushPromise){
@@ -592,11 +670,44 @@ async function saveTrial(row){
   pending.push(row);
   writePending(pending);
  }
- // Queue locally first; send a single transaction for every group of five trials.
- if(pending.length>=TRIAL_BATCH_SIZE)await flushPending();
+ // Queue locally first; trigger network uploads in the background so network latency
+ // does not lengthen the measured experiment schedule.
+ if(pending.length>=TRIAL_BATCH_SIZE&&pending.length%TRIAL_BATCH_SIZE===0){
+  flushPending().catch(()=>{});
+ }
  return {saved_locally:readPending().some(item=>item.client_event_id===row.client_event_id)};
 }
 window.addEventListener('online',()=>{flushPending().catch(()=>{})});window.addEventListener('focus',()=>{flushPending().catch(()=>{})});
+async function recoverOrphanedPendingQueues(){
+ const prefix='lifetrade_pending_';
+ const keys=Object.keys(localStorage).filter(key=>key.startsWith(prefix)&&key!==pendingStorageKey());
+ for(const key of keys){
+  const oldSessionId=key.slice(prefix.length);
+  if(!oldSessionId||oldSessionId==='null')continue;
+  let pending;
+  try{pending=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){continue}
+  if(!Array.isArray(pending)){continue}
+  if(!pending.length){localStorage.removeItem(key);continue}
+  if(pending.some(row=>!row||typeof row.client_event_id!=='string'||(row.session_id&&row.session_id!==oldSessionId))){
+   throw new Error('PENDING_RECOVERY_INVALID');
+  }
+  while(pending.length){
+   const batch=pending.slice(0,TRIAL_BATCH_MAX);
+   await api('/api/trials',{
+    session_id:oldSessionId,
+    trials:batch.map(row=>({client_event_id:row.client_event_id,row}))
+   });
+   const sentIds=new Set(batch.map(row=>row.client_event_id));
+   let latest;
+   try{latest=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){latest=pending}
+   if(!Array.isArray(latest))latest=pending;
+   const remaining=latest.filter(row=>!sentIds.has(row.client_event_id));
+   if(remaining.length)localStorage.setItem(key,JSON.stringify(remaining));
+   else localStorage.removeItem(key);
+   pending=remaining;
+  }
+}
+
 function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
  $('screen').classList.add('trial-screen');stimulus.innerHTML='';
  const layout=document.createElement('div');layout.className='trial-layout';layout.setAttribute('role','group');layout.setAttribute('aria-label','دو گزینه برای انتخاب');
@@ -625,13 +736,110 @@ function resolveChoice(key){
   button.classList.toggle('is-pressed',button.dataset.choiceSide===selectedSide);
  });
  if(activeKeyHandler){window.removeEventListener('keydown',activeKeyHandler);activeKeyHandler=null}
+ if(activeVisibilityHandler){document.removeEventListener('visibilitychange',activeVisibilityHandler);activeVisibilityHandler=null}
  const rt=performance.now()-window.__trialStart;
  const resolve=currentTrialResolve;
  currentTrialResolve=null;
- resolve({key,rt});
+ resolve({key,rt,visibility_hidden:trialWasHidden||document.hidden});
 }
-function waitForChoice(start){window.__trialStart=start;responseLock=false;return new Promise(resolve=>{currentTrialResolve=resolve;const handler=e=>{let k=e.key.toLowerCase();if(['arrowleft','arrowright','l','r'].includes(k)){e.preventDefault();resolveChoice(k)}else if(k==='escape'){e.preventDefault();stopped=true;resolveChoice('escape')}};activeKeyHandler=handler;window.addEventListener('keydown',handler)})}
-async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=Math.random()>0.5;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:document.hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
-async function startExperiment(){ const codeInput=$('participant-code-input');const codeError=$('participant-code-error');const enteredCode=codeInput.value.trim();if(!enteredCode){codeError.textContent='لطفاً کد شرکت‌کننده را وارد کنید.';codeError.classList.remove('hidden');codeInput.focus();return;}codeError.classList.add('hidden');$('start').disabled=true; stopped=false; show();try{const created=await api('/api/session',{participant_code:enteredCode,experiment_version:'online-mvp-0.3-original-instructions-ibmplex-fa',user_agent:navigator.userAgent,screen_width:screen.width,screen_height:screen.height});sessionId=created.session_id;participantCode=created.participant_code;participant={participant:participantCode,session:sessionId,date:nowISO()};if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});const taskOrder=shuffle(['LT','KT']);for(let i=0;i<taskOrder.length;i++){if(stopped)break;await runTask(taskOrder[i],i+1);if(stopped)break;if(i===0){showRest();setStatus('استراحت · برای ادامه فاصله را بزنید');await spaceToContinue();await wait(1500)}}if(!stopped){setStatus('آزمایش تکمیل شد');const unsent=await flushPending();await api('/api/complete',{session_id:sessionId,status:'completed',trial_count:trialCount});showPanel('finish');$('participant-code').textContent='کد شرکت‌کننده: '+participantCode+(unsent?' — هشدار: '+unsent+' پاسخ هنوز فقط روی این دستگاه ذخیره شده و به سرور نرسیده است. اطلاعات مرورگر را پاک نکنید و با تیم پژوهش تماس بگیرید.':'');}else{await flushPending();await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});showPanel('finish');$('finish').querySelector('h1').textContent='آزمایش متوقف شد';$('finish').querySelector('p').textContent='آزمایش متوقف شد. پاسخ‌هایی که پیش‌تر به سرور رسیده‌اند، ذخیره شده‌اند.';$('participant-code').textContent='کد شرکت‌کننده: '+participantCode;}}catch(err){console.error(err);showPanel('finish');$('finish').querySelector('h1').textContent='خطا در اتصال یا اجرای آزمایش';$('finish').querySelector('p').textContent='سرور نتوانست یکی از عملیات‌ها را کامل کند. اگر کد شرکت‌کننده دارید، پیش از شروع دوباره با تیم پژوهش تماس بگیرید.'}finally{$('start').disabled=false}}
+function waitForChoice(start){
+ window.__trialStart=start;
+ responseLock=false;
+ trialWasHidden=Boolean(document.hidden);
+ activeVisibilityHandler=()=>{if(document.hidden)trialWasHidden=true};
+ document.addEventListener('visibilitychange',activeVisibilityHandler);
+ return new Promise(resolve=>{
+  currentTrialResolve=resolve;
+  const handler=e=>{
+   const k=e.key.toLowerCase();
+   if(['arrowleft','arrowright','l','r'].includes(k)){e.preventDefault();resolveChoice(k)}
+   else if(k==='escape'){e.preventDefault();stopped=true;resolveChoice('escape')}
+  };
+  activeKeyHandler=handler;
+  window.addEventListener('keydown',handler);
+ });
+}
+async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
+async function startExperiment(){
+ const codeInput=$('participant-code-input');
+ const codeError=$('participant-code-error');
+ const startButton=$('start');
+ const enteredCode=codeInput.value.trim();
+ if(!enteredCode){
+  codeError.textContent='لطفاً کد شرکت‌کننده را وارد کنید.';
+  codeError.classList.remove('hidden');
+  codeInput.focus();
+  return;
+ }
+ codeError.classList.add('hidden');
+ const originalButtonText=startButton.textContent;
+ startButton.disabled=true;
+ startButton.textContent='در حال آماده‌سازی…';
+ stopped=false;
+ sessionId=null;
+ participantCode=null;
+ try{
+  try{await recoverOrphanedPendingQueues()}
+  catch(error){error.pendingRecovery=true;throw error}
+  show();
+  const created=await api('/api/session',{
+   participant_code:enteredCode,
+   experiment_version:'online-mvp-0.4-randomization-visibility-fa',
+   user_agent:navigator.userAgent,
+   screen_width:screen.width,
+   screen_height:screen.height
+  });
+  sessionId=created.session_id;
+  participantCode=created.participant_code;
+  participant={participant:participantCode,session:sessionId,date:nowISO()};
+  if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});
+  // Independently randomize order for each new run. Either order may legitimately repeat.
+  const taskOrder=shuffle(['LT','KT']);
+  for(let i=0;i<taskOrder.length;i++){
+   if(stopped)break;
+   await runTask(taskOrder[i],i+1);
+   if(stopped)break;
+   if(i===0){
+    showRest();
+    setStatus('استراحت · برای ادامه دکمهٔ ادامه را بزنید');
+    await spaceToContinue();
+    await wait(1500);
+   }
+  }
+  if(!stopped){
+   setStatus('آزمایش تکمیل شد');
+   const unsent=await flushPending();
+   await api('/api/complete',{session_id:sessionId,status:'completed',trial_count:trialCount});
+   const warning=unsent?'تعداد '+unsent+' پاسخ هنوز به سرور نرسیده است. اتصال را بررسی کنید و این صفحه را نبندید.':'';
+   showPanel('finish');
+   renderParticipantCode(participantCode,warning);
+  }else{
+   await flushPending();
+   await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
+   showPanel('finish');
+   $('finish').querySelector('h1').textContent='آزمایش متوقف شد';
+   $('finish').querySelector('p').textContent='آزمایش متوقف شد. پاسخ‌هایی که پیش‌تر به سرور رسیده‌اند، ذخیره شده‌اند.';
+   renderParticipantCode(participantCode);
+  }
+ }catch(err){
+  console.error(err);
+  if(err&&err.pendingRecovery){
+   showPanel('welcome');
+   codeError.textContent='چند پاسخ از اجرای قبلی هنوز روی این دستگاه ذخیره‌اند و ارسال آن‌ها موفق نشد. اتصال را بررسی کنید و دوباره تلاش کنید؛ داده‌های ذخیره‌شده پاک نشده‌اند.';
+   codeError.classList.remove('hidden');
+   return;
+  }
+  if(sessionId){
+   await flushPending().catch(()=>{});
+   await api('/api/complete',{session_id:sessionId,status:'error',trial_count:trialCount}).catch(()=>{});
+  }
+  showPanel('finish');
+  $('finish').querySelector('h1').textContent='خطا در اتصال یا اجرای آزمایش';
+  $('finish').querySelector('p').textContent='سرور نتوانست یکی از عملیات‌ها را کامل کند. اگر کد شرکت‌کننده دارید، پیش از شروع دوباره با تیم پژوهش تماس بگیرید.';
+ }finally{
+  startButton.disabled=false;
+  startButton.textContent=originalButtonText;
+ }
+}
 $('start').addEventListener('click',startExperiment);$('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
 </script></body></html>
