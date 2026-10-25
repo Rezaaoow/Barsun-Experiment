@@ -304,6 +304,46 @@ button{-webkit-tap-highlight-color:transparent}
 #welcome .participant-code-field label{font-size:.98rem;font-weight:700;color:#222;}
 #welcome .participant-code-field input{text-align:center;direction:ltr;font-weight:650;letter-spacing:.04em;min-height:48px;}
 #welcome #participant-code-error{margin:6px 0 0!important;color:#9b1c1c!important;font-size:.9rem!important;text-align:center;}
+
+/* Stage 2: keep the example, choices and explanatory text fully visible without scrolling. */
+.instruction-example-page .instruction-content{gap:clamp(6px,1.1vh,10px);}
+.instruction-example-page .instruction-content>p:not(.instruction-explanation){font-size:clamp(.92rem,1.7vw,1.02rem);line-height:1.55;font-weight:550;}
+.instruction-example-page .instruction-explanation{font-size:clamp(.94rem,1.7vw,1.06rem)!important;line-height:1.55!important;font-weight:600!important;}
+.instruction-example-page .example-box{padding:clamp(8px,1.4vw,14px);}
+.instruction-example-page .example-title{margin-bottom:clamp(5px,1vh,9px);}
+.instruction-example-page .example-choice{min-height:54px;padding:7px 6px;gap:3px;font-size:clamp(.78rem,1.35vw,.9rem);line-height:1.45;}
+.instruction-example-page .example-note{margin-top:4px!important;font-size:.72rem!important;line-height:1.4!important;}
+@media(max-width:640px){
+  .instruction-example-page{padding:12px 12px 10px;height:calc(100dvh - 12px);}
+  .instruction-example-page .instruction-progress{font-size:.7rem;margin-bottom:6px;}
+  .instruction-example-page .instruction-heading{font-size:1.12rem;line-height:1.35;margin-bottom:5px;}
+  .instruction-example-page .instruction-content{gap:7px;}
+  .instruction-example-page .instruction-content>p:not(.instruction-explanation){font-size:.88rem;line-height:1.48;font-weight:500;}
+  .instruction-example-page .example-box{padding:7px 8px;border-radius:10px;}
+  .instruction-example-page .example-title{font-size:.82rem;margin-bottom:6px;}
+  .instruction-example-page .example-choices{gap:5px;}
+  .instruction-example-page .example-choice{min-height:48px;padding:5px 3px;font-size:.74rem;line-height:1.35;}
+  .instruction-example-page .example-choice strong{font-size:.82rem;}
+  .instruction-example-page .example-note{font-size:.67rem!important;line-height:1.3!important;margin-top:4px!important;}
+  .instruction-example-page .instruction-explanation{font-size:.88rem!important;line-height:1.45!important;}
+  .instruction-example-page .page-actions{padding-top:6px;}
+  .instruction-example-page .next-page{min-height:42px;padding:7px 14px;}
+}
+@media(max-height:620px){
+  .instruction-example-page{padding-top:10px;padding-bottom:9px;}
+  .instruction-example-page .instruction-progress{margin-bottom:5px;}
+  .instruction-example-page .instruction-heading{font-size:clamp(1.05rem,2.5vh,1.3rem);line-height:1.3;margin-bottom:4px;}
+  .instruction-example-page .instruction-content{gap:5px;}
+  .instruction-example-page .instruction-content>p:not(.instruction-explanation){font-size:clamp(.82rem,1.6vh,.92rem);line-height:1.38;}
+  .instruction-example-page .example-box{padding:6px 7px;}
+  .instruction-example-page .example-title{font-size:.78rem;margin-bottom:4px;}
+  .instruction-example-page .example-choice{min-height:42px;padding:4px 3px;font-size:.7rem;line-height:1.28;}
+  .instruction-example-page .example-note{font-size:.64rem!important;line-height:1.22!important;margin-top:3px!important;}
+  .instruction-example-page .instruction-explanation{font-size:clamp(.82rem,1.65vh,.92rem)!important;line-height:1.38!important;}
+  .instruction-example-page .page-actions{padding-top:5px;}
+  .instruction-example-page .next-page{min-height:38px;padding:6px 12px;}
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel" id="welcome" dir="rtl">
 <h1>آزمون تنزیل تعویقی</h1>
@@ -341,6 +381,7 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 
   const box=document.createElement('div');
   box.className='interstitial-screen';
+  if(progressIndex===1) box.classList.add('instruction-example-page');
   box.dir='rtl';
   if(progressIndex===0 && title && paragraphs.length===0 && !note){
     box.classList.add('title-only');
@@ -435,7 +476,7 @@ function showInstructionPage(taskKey, pageIndex){
     later.className='example-choice';
     later.innerHTML=taskKey==='KT'
       ?'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>'
-      :'<strong>۲ میلیون تومان</strong><span>در ازای واگذاری یک سال از عمرتان</span>';
+      :'<strong>۲ میلیون تومان</strong><span>در ازای ۱ سال از عمرتان</span>';
     const or=document.createElement('span');
     or.className='example-or';
     or.textContent='یا';
@@ -454,8 +495,8 @@ function showInstructionPage(taskKey, pageIndex){
     const explanation=document.createElement('p');
     explanation.className='instruction-explanation';
     explanation.textContent=taskKey==='KT'
-      ?'در این مثال، با انتخاب گزینهٔ سمت چپ باید یک سال صبر کنید تا مبلغ جایزه را دریافت کنید.'
-      :'در این مثال، گزینهٔ سمت چپ در سناریوی فرضی به معنای واگذاری یک سال از عمرتان در ازای دریافت مبلغ است؛ منظور این نیست که باید یک سال برای دریافت پول صبر کنید.';
+      ?'در این مثال، گزینهٔ سمت چپ به این معناست که شما ۱ میلیون تومان را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست به این معناست که باید یک سال صبر کنید تا ۲ میلیون تومان را دریافت کنید.'
+      :'در این مثال، گزینهٔ سمت چپ در سناریوی فرضی به این معناست که شما مبلغ اعلام‌شده را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست در سناریوی فرضی به معنای واگذاری یک سال از عمرتان در ازای دریافت مبلغ اعلام‌شده است؛ یعنی شما از الان یک سال به جلو برده می‌شوید، آن یک سال از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
     paras.push(explanation);
 
     showInfo('راهنمای انتخاب', paras, '', pageIndex);
