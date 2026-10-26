@@ -20,8 +20,9 @@ The existing `/lifetrade` deployment URL is retained while the new participant-f
 - `instrument_versions`: version and settings metadata for a module.
 - `instrument_runs`: one attempt to complete a module, including status, timestamps, attempt-specific metadata and trial count.
 - `experiment_stage_progress`: current status for each module in a participant's study participation, including current attempt, current run ID and JSON draft.
+- `questionnaire_responses`: one current answer per questionnaire run and hidden question code. Changing an answer upserts that run/question pair, so revisiting a question replaces the value for that question within the same questionnaire attempt.
 
-The existing `lifetrade_trials` table continues to hold Life-Trade trial-level responses. A separate questionnaire response format and an `ultimatum_rounds` result table will be finalized after the questionnaire and Ultimatum protocols are specified; do not store Ultimatum data in `lifetrade_trials`.
+The existing `lifetrade_trials` table continues to hold Life-Trade trial-level responses. Questionnaire answers are stored in `questionnaire_responses` and keyed by internal question code (for example `B1` or `PJ1`); those codes are not shown in the participant interface. An `ultimatum_rounds` result table will be designed after the Ultimatum protocol is specified; do not store Ultimatum data in `lifetrade_trials`.
 
 ## Relationship
 
@@ -55,10 +56,13 @@ Do not distribute the generated links until the participant-facing HTML flow has
 - `POST /api/experiment/identify`: checks invitation token + entered participant code and returns the condition plus progress for all three modules.
 - `POST /api/experiment/stages/start`: starts the first attempt, restores an in-progress questionnaire draft, or supersedes/restarts an incomplete task attempt.
 - `POST /api/experiment/stages/draft`: saves questionnaire draft data.
-- `POST /api/experiment/stages/complete`: marks the current attempt completed; questionnaire completion requires its final payload.
+- `POST /api/experiment/questionnaire/answer`: upserts an answer using the hidden question code and updates the resumable questionnaire draft.
+- `POST /api/experiment/stages/complete`: marks the current attempt completed; questionnaire completion requires all 25 configured question responses.
+- `GET /api/admin/progress`: protected monitoring endpoint with one row per assigned participant and status/attempt numbers for all three stages.
+- `GET /api/admin/questionnaire/export.csv`: protected CSV export in long format, one row per completed questionnaire answer.
 - `GET /api/health`: checks service/database connectivity.
 
-The module UI and protocol-specific validation are intentionally being added in stages. Before production use, connect the HTML to these endpoints, implement the actual consent/transparency and questionnaire screens, define the Ultimatum round data model, and test interruption/re-entry using the production deployment.
+The questionnaire landing pages, per-question UI and API storage are being connected in stages. The module UI and protocol-specific validation are intentionally being added in stages. Before production use, connect the HTML to these endpoints, implement the actual consent/transparency and questionnaire screens, define the Ultimatum round data model, and test interruption/re-entry using the production deployment.
 
 ## PostgreSQL and deployment
 
