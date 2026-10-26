@@ -1,64 +1,76 @@
-# LifeTrade database architecture
+# BarSan Experiment — database architecture
 
-## Design intent
+## Application shape
 
-The database is shared by the overall study, but data for each instrument is stored separately. A participant enters an existing participant code at the start of the study. The API normalizes the value by trimming surrounding whitespace and converting letters to uppercase; it does not generate a participant-facing code.
+The target is one FastAPI/Python application and one PostgreSQL database. It contains three separately versioned modules:
 
-The internal participant_id, participation_id, run_id, and instrument_version_id values are database identifiers, not codes that participants are asked to use.
+1. `questionnaire` — questionnaire and resumable answer draft.
+2. `lifetrade` — the existing DD vs Life-Trade task.
+3. `ultimatum` — the planned Ultimatum Game.
 
-## Current LifeTrade tables
+The existing `/lifetrade` deployment URL is retained while the new participant-facing flow is built. Changing the public URL or deployment mapping is a separate rollout step.
 
-- studies: study/event metadata (configured with STUDY_CODE and STUDY_NAME).
-- participants: one row for each entered participant code.
-- study_participations: links a participant to a particular study. The unique constraint prevents multiple participation records for the same participant and study.
-- instruments: registry of instruments. The initial entry is lifetrade.
-- instrument_versions: records the version string sent by the browser and its configuration metadata.
-- instrument_runs: one execution of one instrument version by a study participant, including timestamps, status and trial count.
-- lifetrade_trials: only LifeTrade trial-level responses. Each event has a unique client_event_id; the complete original response object is retained in payload, and common analysis fields are also stored in typed columns.
+## Shared entities
 
-The main relationship is:
+- `studies`: study/event metadata (configured with `STUDY_CODE` and `STUDY_NAME`).
+- `participants`: one row per participant code.
+- `study_participations`: joins a participant to the study.
+- `experiment_assignments`: one preassigned condition and a hashed, per-person invitation token for a participant in the study. The raw token is returned only when the assignment/link is created.
+- `instruments`: registry of modules.
+- `instrument_versions`: version and settings metadata for a module.
+- `instrument_runs`: one attempt to complete a module, including status, timestamps, attempt-specific metadata and trial count.
+- `experiment_stage_progress`: current status for each module in a participant's study participation, including current attempt, current run ID and JSON draft.
 
-participants → study_participations → instrument_runs → lifetrade_trials
+The existing `lifetrade_trials` table continues to hold Life-Trade trial-level responses. A separate questionnaire response format and an `ultimatum_rounds` result table will be finalized after the questionnaire and Ultimatum protocols are specified; do not store Ultimatum data in `lifetrade_trials`.
 
-An instrument run references one instrument_version, which references instruments. A second instrument can use the same study_participations record while writing results to its own run and result tables.
+## Relationship
 
-## Add future instruments
+`participants → study_participations → experiment_assignments`
 
-When the second task is ready:
+`study_participations → experiment_stage_progress → instrument_runs → module-specific data`
 
-1. Add an instruments registry entry and version.
-2. Create a task-specific run/result table (for example, ultimatum_rounds) with a foreign key to instrument_runs.run_id, or introduce a separate instrument-run subtype if the task needs distinct run metadata.
-3. Keep one shared participant code and one study_participations record; do not create a new participant for each task.
-4. For a questionnaire, use versioned questionnaire definitions and a separate response table keyed to its instrument run. Do not put questionnaire fields into lifetrade_trials.
+A participant has one fixed assignment for the study, but can have one current attempt per module. The assignment's condition is resolved server-side from the invitation token and participant code; the browser must not be trusted to provide or change the condition.
 
-This keeps the current LifeTrade data isolated while allowing cross-instrument analysis by joining through participation and participant records.
+## Module order and status
 
-## Participant code behavior
+The required module order is:
 
-The first use of an entered code creates a participant record if that code is not already present; subsequent instruments using the same normalized code resolve to the same participant. No participant-facing code is generated. This does mean a mistyped code would be treated as a different code. If the study has a prepared approved list of codes, load that list into participants before collection and add a validation-only check so unknown codes are rejected.
+`questionnaire → dd_lifetrade → ultimatum`
 
-## Database choice and scaling
+Each module has `not_started`, `in_progress` or `completed` progress status. The first module can be saved as a JSON draft while in progress. On re-entry, the saved draft and the same run ID are returned so the interface can restore answers already entered.
 
-PostgreSQL is the intended production database for a synchronized event with many participants. The app uses a bounded per-process connection pool and bulk-inserts up to 25 trials per request. Remember the total possible database connections are approximately:
+For `dd_lifetrade` and `ultimatum`, starting a module that has an incomplete current attempt marks the old run `superseded` and creates a new attempt from the beginning. Old partial rows are preserved for audit/recovery but are excluded from the primary Life-Trade CSV export. This is preferable to physically deleting trial data during each restart. Only the latest non-superseded attempt is intended for the main analysis export.
 
-DB_POOL_MAX_SIZE × number of application processes
+A completed module is not restarted when the participant re-enters. The workflow returns its completed status and routes to the next unfinished module. The server enforces the required preceding-module completion when starting a module.
 
-The defaults are conservative for shared hosting. Do not increase the pool without checking the provider's connection limit and memory limits.
+## Per-participant links and assignments
 
-SQLite remains supported for local development and testing, with WAL and a busy timeout; it is not the preferred production store for many simultaneous writers.
+The research team preassigns condition A/B (or a later named condition) before sending links. The admin assignment endpoint accepts participant-code/condition pairs and creates a random invitation token for each person. Only a SHA-256 hash is stored in PostgreSQL. The URL contains the opaque token, not the condition. The participant must also enter the expected participant code; both are checked together.
 
-## Environment variables
+Do not distribute the generated links until the participant-facing HTML flow has been connected to the new identity/progress endpoints and end-to-end tested. During the migration, the old Life-Trade-only start flow is still present and does not yet use invitation tokens.
 
-Set these in the hosting panel; never commit credentials to GitHub:
+## Foundational APIs
 
-- DATABASE_URL: PostgreSQL connection string provided by the host.
-- STUDY_CODE: stable short code for this event/study (default main-study).
-- STUDY_NAME: display name for this study (default Main behavioral study).
-- DB_POOL_MIN_SIZE: optional, default 1.
-- DB_POOL_MAX_SIZE: optional, default 4.
-- DB_POOL_TIMEOUT: optional, default 5 seconds.
-- DB_POOL_MAX_WAITING: optional, default 128.
-- DB_CONNECT_TIMEOUT: optional, default 5 seconds.
-- ADMIN_TOKEN: required for the admin listing and CSV export endpoints.
+- `POST /api/admin/assignments`: protected by `X-Admin-Token`; creates fixed assignments and per-participant links.
+- `POST /api/experiment/identify`: checks invitation token + entered participant code and returns the condition plus progress for all three modules.
+- `POST /api/experiment/stages/start`: starts the first attempt, restores an in-progress questionnaire draft, or supersedes/restarts an incomplete task attempt.
+- `POST /api/experiment/stages/draft`: saves questionnaire draft data.
+- `POST /api/experiment/stages/complete`: marks the current attempt completed; questionnaire completion requires its final payload.
+- `GET /api/health`: checks service/database connectivity.
 
-On startup, the application creates any missing schema objects and registers the study and LifeTrade instrument idempotently. It does not drop tables. Existing legacy SQLite sessions and trials tables are left intact; their data is not automatically copied into the normalized tables.
+The module UI and protocol-specific validation are intentionally being added in stages. Before production use, connect the HTML to these endpoints, implement the actual consent/transparency and questionnaire screens, define the Ultimatum round data model, and test interruption/re-entry using the production deployment.
+
+## PostgreSQL and deployment
+
+PostgreSQL is the intended production database for concurrent participation. SQLite remains supported for local tests. Schema initialization is additive and must not drop existing tables.
+
+Environment variables:
+
+- `DATABASE_URL`: PostgreSQL connection string.
+- `STUDY_CODE`: stable study identifier.
+- `STUDY_NAME`: study display name.
+- `PUBLIC_EXPERIMENT_URL`: base URL used in invitation links (defaults to the current Life-Trade URL during migration).
+- `ADMIN_TOKEN`: required for assignment creation, admin listing and CSV export.
+- `DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE`, `DB_POOL_TIMEOUT`, `DB_POOL_MAX_WAITING`, `DB_CONNECT_TIMEOUT`: optional connection-pool settings.
+
+Keep database credentials and `ADMIN_TOKEN` out of GitHub and out of browser JavaScript.
