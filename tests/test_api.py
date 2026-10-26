@@ -257,7 +257,7 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
     assert q["attempt_number"] == 1
     qrun = q["run_id"]
 
-    draft = {"age_range": "25-34", "answers": {"q1": "option_b"}}
+    draft = {"age_range": "25-34", "answers": {"B1": "2"}, "current_question_index": 0}
     saved = client.post(
         "/api/experiment/stages/draft",
         json={**identity, "run_id": qrun, "draft_payload": draft},
@@ -280,10 +280,21 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
     assert resumed.json()["run_id"] == qrun
     assert resumed.json()["draft_payload"] == draft
 
+    # Save each of the configured 25 questions through the per-code endpoint.
+    final_answers = {}
+    for question_code in main.QUESTIONNAIRE_QUESTION_CODES:
+        answer = client.post(
+            "/api/experiment/questionnaire/answer",
+            json={**identity, "run_id": qrun, "question_code": question_code,
+                  "response_value": "3", "current_question_index": 0},
+        )
+        assert answer.status_code == 200, answer.text
+        final_answers[question_code] = "3"
+
     completed_questionnaire = client.post(
         "/api/experiment/stages/complete",
         json={**identity, "stage_code": "questionnaire", "run_id": qrun,
-              "final_payload": {"answers": {"q1": "option_b", "q2": "option_a"}}},
+              "final_payload": {"answers": final_answers}},
     )
     assert completed_questionnaire.status_code == 200, completed_questionnaire.text
 
@@ -338,6 +349,53 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
     )
     assert ultimatum.status_code == 200, ultimatum.text
     assert ultimatum.json()["attempt_number"] == 1
+
+
+def test_questionnaire_answer_is_upserted_by_hidden_question_code(client, monkeypatch):
+    token = _create_assignment(client, monkeypatch, code="BS-Q-0001", condition="B")
+    identity = {"invitation_token": token, "participant_code": "BS-Q-0001"}
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire"},
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["run_id"]
+
+    first = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={**identity, "run_id": run_id, "question_code": "PJ1",
+              "response_value": "2", "current_question_index": 5},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={**identity, "run_id": run_id, "question_code": "PJ1",
+              "response_value": "4", "current_question_index": 5},
+    )
+    assert second.status_code == 200, second.text
+
+    unknown = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={**identity, "run_id": run_id, "question_code": "NOT_A_CODE",
+              "response_value": "4", "current_question_index": 5},
+    )
+    assert unknown.status_code == 422
+
+    with main.conn() as connection:
+        rows = connection.execute(
+            "SELECT question_code,response_value FROM questionnaire_responses WHERE run_id=?",
+            (run_id,),
+        ).fetchall()
+        record = connection.execute(
+            "SELECT draft_payload FROM experiment_stage_progress WHERE current_run_id=?",
+            (run_id,),
+        ).fetchone()
+    assert len(rows) == 1
+    assert rows[0]["question_code"] == "PJ1"
+    assert rows[0]["response_value"] == "4"
+    import json
+    draft_payload = record["draft_payload"] if isinstance(record["draft_payload"], dict) else json.loads(record["draft_payload"])
+    assert draft_payload["answers"]["PJ1"] == "4"
 
 
 def test_assignment_creation_requires_admin_and_does_not_allow_reassignment(client, monkeypatch):
