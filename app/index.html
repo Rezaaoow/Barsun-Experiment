@@ -1805,6 +1805,7 @@ async function startUltimatumInstructions() {
    responseStartPerf:0,
    decisionScreenShownAt:null,
    waitDurationMs:0,
+   resolveInFlight:false,
    results:[]
   };
   utRenderWelcome();
@@ -1874,12 +1875,13 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
  utButton(actions,"ارسال پیشنهاد",function(){
   const offer=Number(slider.value);
   const responseTime=Math.max(0,performance.now()-ultimatumState.responseStartPerf);
-  utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime);
+  const respondedAt=nowISO();
+  utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime,respondedAt);
  },"");
  ultimatumState.responseStartPerf=performance.now();
  ultimatumState.decisionScreenShownAt=nowISO();
 }
-async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime) {
+async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime,respondedAt) {
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
  utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
@@ -1893,7 +1895,7 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
   round_id:ultimatumState.currentRound.round_id,
   participant_offer_to_opponent:offer,
   decision_screen_shown_at:ultimatumState.decisionScreenShownAt,
-  responded_at:nowISO(),
+  responded_at:respondedAt,
   reaction_time_ms:Number(responseTime.toFixed(2)),
   wait_duration_ms:waited,
   client_metadata:utMetadata()
@@ -1901,6 +1903,8 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
  await utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
 }
 async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
+ if(ultimatumState.resolveInFlight)return;
+ ultimatumState.resolveInFlight=true;
  try {
   const result=await api("/api/experiment/ultimatum/resolve",payload);
   ultimatumState.lastResult=result;
@@ -1913,6 +1917,8 @@ async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
   utShowError("ثبت این دور موفق نشد؛ پاسخ قبلی را دوباره ارسال کنید.",function(){
    utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
   });
+ } finally {
+  ultimatumState.resolveInFlight=false;
  }
 }
 function utRenderWaiting(condition,message,progress) {
