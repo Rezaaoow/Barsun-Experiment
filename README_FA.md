@@ -28,7 +28,7 @@
 1. Python 3.11+ نصب کنید.
 2. `pip install -r requirements.txt`
 3. یک توکن مدیریتی تنظیم کنید: `export ADMIN_TOKEN='یک-رمز-طولانی'`
-4. `uvicorn main:app --reload`
+4. `uvicorn barsan_experiment:app --reload`
 5. مرورگر: `http://127.0.0.1:8000`
 6. سلامت API: `http://127.0.0.1:8000/api/health`
 
