@@ -1518,6 +1518,32 @@ def complete_experiment_stage(data: StageCompleteIn):
                     or any(row["trial_sequence"] != (row["block_order"] - 1) * 5 + row["trial_in_block"] for row in block_rows)
                 ):
                     raise HTTPException(422, "یکی از بلوک‌های اولتیماتوم ناقص یا نامعتبر است.")
+            order_by_position = {
+                int(row["block_order"]): row["block_code"]
+                for row in main
+            }
+            if len(order_by_position) != 4 or set(order_by_position) != {1, 2, 3, 4}:
+                raise HTTPException(422, "هر موقعیت بلوک باید دقیقاً به یک بلوک اختصاص داشته باشد.")
+            recorded_order = data.final_payload.get("block_order")
+            if (
+                not isinstance(recorded_order, list)
+                or len(recorded_order) != 4
+                or any(recorded_order[index] != order_by_position[index + 1] for index in range(4))
+            ):
+                raise HTTPException(422, "ترتیب بلوک‌های ثبت‌شده با داده‌های دورها مطابقت ندارد.")
+            totals = connection.execute(
+                "SELECT COALESCE(SUM(points_earned),0) AS score,"
+                "COALESCE(SUM(potential_points_lost),0) AS lost "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
+                (data.run_id,),
+            ).fetchone()
+            try:
+                submitted_score = int(data.final_payload.get("final_score"))
+                submitted_lost = int(data.final_payload.get("total_potential_points_lost"))
+            except (TypeError, ValueError):
+                raise HTTPException(422, "امتیاز نهایی یا امتیاز ازدست‌رفتهٔ نهایی معتبر نیست.")
+            if submitted_score != int(totals["score"] or 0) or submitted_lost != int(totals["lost"] or 0):
+                raise HTTPException(422, "جمع امتیازهای نهایی با پاسخ‌های ثبت‌شده مطابقت ندارد.")
             payload_param = _json_param(data.final_payload)
             connection.execute(
                 "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
@@ -1946,7 +1972,6 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
     )
 
 
-app.mount("/assets", StaticFiles(directory=os.path.join(ROOT, "app")), name="assets")
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
 
