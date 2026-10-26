@@ -149,11 +149,16 @@ def resolve_proposer(client, identity, run_id, round_id, offer_to_opponent):
             "reaction_time_ms": 321.5,
             "wait_duration_ms": 2000,
             "client_metadata": {"test_response": True},
+            "client_event_timestamps": {
+                "proposer_screen_shown_at": main.now(),
+                "offer_submitted_at": main.now(),
+                "waiting_started_at": main.now(),
+                "waiting_ended_at": main.now(),
+            },
         },
     )
     assert response.status_code == 200, response.text
     return response.json()
-
 
 def resolve_responder(client, identity, run_id, round_id, decision, wait_ms=3000):
     response = client.post(
@@ -168,11 +173,30 @@ def resolve_responder(client, identity, run_id, round_id, decision, wait_ms=3000
             "reaction_time_ms": 456.25,
             "wait_duration_ms": wait_ms,
             "client_metadata": {"test_response": True},
+            "client_event_timestamps": {
+                "waiting_started_at": main.now(),
+                "waiting_ended_at": main.now(),
+                "responder_offer_shown_at": main.now(),
+                "participant_choice_at": main.now(),
+            },
         },
     )
     assert response.status_code == 200, response.text
     return response.json()
 
+
+def record_round_events(client, identity, run_id, round_id, event_timestamps):
+    response = client.post(
+        "/api/experiment/ultimatum/events",
+        json={
+            **identity,
+            "run_id": run_id,
+            "round_id": round_id,
+            "event_timestamps": event_timestamps,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, monkeypatch):
     identity, run_id = create_active_ultimatum(client, monkeypatch)
@@ -256,6 +280,37 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     assert len(final_results) == 20
     assert {row["block_code"] for row in final_results} == set(main.ULTIMATUM_BLOCKS)
 
+    # Post-result events are append-only on retries and remain visible in CSV export.
+    event_round_id = final_results[-1]["round_id"]
+    result_shown_at = main.now()
+    advance_clicked_at = main.now()
+    saved_events = record_round_events(
+        client,
+        identity,
+        run_id,
+        event_round_id,
+        {"result_screen_shown_at": result_shown_at, "advance_clicked_at": advance_clicked_at},
+    )
+    record_round_events(
+        client,
+        identity,
+        run_id,
+        event_round_id,
+        {"result_screen_shown_at": main.now(), "advance_clicked_at": main.now()},
+    )
+    assert saved_events["event_timestamps"]["result_screen_shown_at"] == result_shown_at
+
+    invalid_event = client.post(
+        "/api/experiment/ultimatum/events",
+        json={
+            **identity,
+            "run_id": run_id,
+            "round_id": event_round_id,
+            "event_timestamps": {"unapproved_event_name": main.now()},
+        },
+    )
+    assert invalid_event.status_code == 422
+
     with main.conn() as connection:
         score_rows = connection.execute(
             "SELECT COALESCE(SUM(points_earned),0) AS score,"
@@ -319,6 +374,21 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     assert {row["block_code"] for row in csv_rows if row["phase"] == "main"} == set(main.ULTIMATUM_BLOCKS)
     assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
     assert all(row["run_id"] == run_id for row in csv_rows)
+    assert "client_event_timestamps_json" in csv_headers
+    assert "opponent_offer_generated_at" in csv_headers
+    assert "opponent_response_generated_at" in csv_headers
+    event_row = next(row for row in csv_rows if row["round_id"] == event_round_id)
+    saved_csv_events = json.loads(event_row["client_event_timestamps_json"])
+    assert saved_csv_events["result_screen_shown_at"] == result_shown_at
+    assert saved_csv_events["advance_clicked_at"] == advance_clicked_at
+    assert any(
+        row["phase"] == "main" and row["role"] == "responder" and row["opponent_offer_generated_at"]
+        for row in csv_rows
+    )
+    assert any(
+        row["phase"] == "main" and row["role"] == "proposer" and row["opponent_response_generated_at"]
+        for row in csv_rows
+    )
 
 
 def test_ultimatum_rejects_wrong_block_order_and_old_attempt(client, monkeypatch):
