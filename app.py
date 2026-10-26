@@ -1,6 +1,5 @@
-"""Compatibility entry point for platforms that expect app.py.
+"""Compatibility entry point for ASGI hosts that import app:app.
 
-The FastAPI application is defined in main.py; this module re-exports it
-so platforms can use either `app:app` or `main:app` as the ASGI target.
+The canonical BarSan Experiment application is defined in barsan_experiment.py.
 """
 from barsan_experiment import app
