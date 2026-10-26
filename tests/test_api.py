@@ -489,3 +489,371 @@ def test_assignment_creation_requires_admin_and_does_not_allow_reassignment(clie
         json={"assignments": [{"participant_code": "BS-0003", "condition_code": "B"}]},
     )
     assert duplicate.status_code == 409
+
+
+def _start_ultimatum_run(client, monkeypatch, code="BS-ULT-001", condition="A"):
+    token = _create_assignment(client, monkeypatch, code=code, condition=condition)
+    identity = {"invitation_token": token, "participant_code": code}
+
+    questionnaire = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire"},
+    )
+    assert questionnaire.status_code == 200, questionnaire.text
+    questionnaire_run = questionnaire.json()["run_id"]
+    answers = {}
+    for index, question_code in enumerate(main.QUESTIONNAIRE_QUESTION_CODES):
+        answer = client.post(
+            "/api/experiment/questionnaire/answer",
+            json={
+                **identity,
+                "run_id": questionnaire_run,
+                "question_code": question_code,
+                "response_value": "3",
+                "current_question_index": index,
+            },
+        )
+        assert answer.status_code == 200, answer.text
+        answers[question_code] = "3"
+    completed_questionnaire = client.post(
+        "/api/experiment/stages/complete",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "run_id": questionnaire_run,
+            "final_payload": {"answers": answers},
+        },
+    )
+    assert completed_questionnaire.status_code == 200, completed_questionnaire.text
+
+    dd = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "dd_lifetrade"},
+    )
+    assert dd.status_code == 200, dd.text
+    completed_dd = client.post(
+        "/api/experiment/stages/complete",
+        json={
+            **identity,
+            "stage_code": "dd_lifetrade",
+            "run_id": dd.json()["run_id"],
+        },
+    )
+    assert completed_dd.status_code == 200, completed_dd.text
+
+    ultimatum = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "ultimatum"},
+    )
+    assert ultimatum.status_code == 200, ultimatum.text
+    return identity, ultimatum.json()
+
+
+def _resolve_ultimatum_round(client, identity, run_id, round_id, offer=None, decision=None):
+    payload = {
+        **identity,
+        "run_id": run_id,
+        "round_id": round_id,
+        "decision_screen_shown_at": main.now(),
+        "responded_at": main.now(),
+        "reaction_time_ms": 123.45,
+        "wait_duration_ms": 2000,
+        "client_metadata": {
+            "user_agent": "pytest",
+            "screen_width": 390,
+            "screen_height": 844,
+        },
+    }
+    if offer is not None:
+        payload["participant_offer_to_opponent"] = offer
+    else:
+        payload["participant_decision"] = decision
+    response = client.post("/api/experiment/ultimatum/resolve", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_ultimatum_ai_models_are_bounded_and_auditable(monkeypatch):
+    monkeypatch.setattr(main.random, "choices", lambda values, weights, k: [4])
+    participant_share, offer_model = main._sample_ai_offer_to_participant()
+    assert participant_share == 6
+    assert offer_model["model"] == "discrete_truncated_normal"
+    assert offer_model["sampled_ai_self_share"] == 4
+    assert offer_model["sampled_participant_share"] == 6
+    assert offer_model["support"] == list(range(11))
+    assert offer_model["mean"] == 5.0
+    assert offer_model["sd"] == 2.0
+
+    # Six successes out of ten at p=.6 cross the acceptance threshold.
+    draws = iter([0.1] * 6 + [0.9] * 4)
+    monkeypatch.setattr(main.random, "random", lambda: next(draws))
+    accepted = main._sample_ai_response(6)
+    assert accepted["model"] == "binomial_threshold"
+    assert accepted["n"] == 10
+    assert accepted["p"] == 0.6
+    assert accepted["draw"] == 6
+    assert accepted["decision"] == "accept"
+
+    # Four successes out of ten at p=.4 do not cross the threshold.
+    draws = iter([0.1] * 4 + [0.9] * 6)
+    monkeypatch.setattr(main.random, "random", lambda: next(draws))
+    rejected = main._sample_ai_response(4)
+    assert rejected["p"] == 0.4
+    assert rejected["draw"] == 4
+    assert rejected["decision"] == "reject"
+
+
+def test_ultimatum_blocks_are_server_randomized_and_order_enforced(client, monkeypatch):
+    identity, started = _start_ultimatum_run(
+        client, monkeypatch, code="BS-ULT-ORDER-01", condition="A"
+    )
+    run_id = started["run_id"]
+    block_order = started["draft_payload"]["block_order"]
+    assert len(block_order) == main.ULTIMATUM_MAIN_BLOCK_COUNT
+    assert len(set(block_order)) == main.ULTIMATUM_MAIN_BLOCK_COUNT
+    assert set(block_order) == set(main.ULTIMATUM_BLOCKS)
+
+    with main.conn() as connection:
+        run = connection.execute(
+            "SELECT metadata FROM instrument_runs WHERE run_id=?", (run_id,)
+        ).fetchone()
+    metadata = main._json_value(run["metadata"])
+    assert metadata["block_order"] == block_order
+
+    # The server will not allow a participant to skip the practice phase.
+    blocked_main = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "main",
+            "block_code": block_order[0], "block_order": 1,
+            "trial_in_block": 1, "trial_sequence": 1,
+        },
+    )
+    assert blocked_main.status_code == 409
+
+    # Nor can the responder practice be started before the proposer practice is completed.
+    practice_proposer = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "practice",
+            "block_code": "practice_proposer_agent", "block_order": 0,
+            "trial_in_block": 1, "trial_sequence": 0,
+        },
+    )
+    assert practice_proposer.status_code == 200, practice_proposer.text
+    premature_responder = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "practice",
+            "block_code": "practice_responder_coworker", "block_order": 0,
+            "trial_in_block": 1, "trial_sequence": 0,
+        },
+    )
+    assert premature_responder.status_code == 409
+
+    resolved_practice_proposer = _resolve_ultimatum_round(
+        client, identity, run_id, practice_proposer.json()["round_id"], offer=4
+    )
+    assert resolved_practice_proposer["phase"] == "practice"
+    assert resolved_practice_proposer["total_score"] == 0
+    assert resolved_practice_proposer["total_potential_lost"] == 0
+
+    practice_responder = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "practice",
+            "block_code": "practice_responder_coworker", "block_order": 0,
+            "trial_in_block": 1, "trial_sequence": 0,
+        },
+    )
+    assert practice_responder.status_code == 200, practice_responder.text
+    resolved_practice_responder = _resolve_ultimatum_round(
+        client, identity, run_id, practice_responder.json()["round_id"], decision="accept"
+    )
+    assert resolved_practice_responder["phase"] == "practice"
+    assert resolved_practice_responder["total_score"] == 0
+
+    # The URL/client cannot replace the randomized block order saved at stage start.
+    wrong_code = next(code for code in main.ULTIMATUM_BLOCKS if code != block_order[0])
+    wrong_order = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "main",
+            "block_code": wrong_code, "block_order": 1,
+            "trial_in_block": 1, "trial_sequence": 1,
+        },
+    )
+    assert wrong_order.status_code == 409
+
+
+def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
+    identity, started = _start_ultimatum_run(
+        client, monkeypatch, code="BS-ULT-COMPLETE-01", condition="A"
+    )
+    run_id = started["run_id"]
+    block_order = started["draft_payload"]["block_order"]
+
+    first_block = block_order[0]
+    first_round = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "main",
+            "block_code": first_block, "block_order": 1,
+            "trial_in_block": 1, "trial_sequence": 1,
+        },
+    )
+    assert first_round.status_code == 409  # practice must be completed first
+
+    practice_1 = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "practice",
+            "block_code": "practice_proposer_agent", "block_order": 0,
+            "trial_in_block": 1, "trial_sequence": 0,
+        },
+    )
+    assert practice_1.status_code == 200, practice_1.text
+    _resolve_ultimatum_round(client, identity, run_id, practice_1.json()["round_id"], offer=0)
+    practice_2 = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "practice",
+            "block_code": "practice_responder_coworker", "block_order": 0,
+            "trial_in_block": 1, "trial_sequence": 0,
+        },
+    )
+    assert practice_2.status_code == 200, practice_2.text
+    _resolve_ultimatum_round(client, identity, run_id, practice_2.json()["round_id"], decision="accept")
+
+    # Re-create the first main round now that practice is complete.
+    first_round = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "main",
+            "block_code": first_block, "block_order": 1,
+            "trial_in_block": 1, "trial_sequence": 1,
+        },
+    )
+    assert first_round.status_code == 200, first_round.text
+    skipped = client.post(
+        "/api/experiment/ultimatum/prepare",
+        json={
+            **identity, "run_id": run_id, "phase": "main",
+            "block_code": first_block, "block_order": 1,
+            "trial_in_block": 2, "trial_sequence": 2,
+        },
+    )
+    assert skipped.status_code == 409  # cannot move on while round 1 is unresolved
+
+    first_result = _resolve_ultimatum_round(
+        client, identity, run_id, first_round.json()["round_id"], offer=0
+    )
+    assert first_result["participant_share"] == 10
+    assert first_result["opponent_share"] == 0
+    assert first_result["accepted"] is False
+    assert first_result["points_earned"] == 0
+    assert first_result["potential_points_lost"] == 10
+
+    main_results = [first_result]
+    for block_index, block_code in enumerate(block_order, start=1):
+        first_trial = 2 if block_index == 1 else 1
+        for trial in range(first_trial, main.ULTIMATUM_MAIN_BLOCK_TRIALS + 1):
+            sequence = (block_index - 1) * main.ULTIMATUM_MAIN_BLOCK_TRIALS + trial
+            prepared = client.post(
+                "/api/experiment/ultimatum/prepare",
+                json={
+                    **identity, "run_id": run_id, "phase": "main",
+                    "block_code": block_code, "block_order": block_index,
+                    "trial_in_block": trial, "trial_sequence": sequence,
+                },
+            )
+            assert prepared.status_code == 200, prepared.text
+            round_data = prepared.json()
+            assert round_data["participant_share"] is None if round_data["role"] == "proposer" else (
+                0 <= round_data["participant_share"] <= 10
+                and round_data["participant_share"] + round_data["opponent_share"] == 10
+            )
+            if round_data["role"] == "proposer":
+                # Offer 1..5 in subsequent proposer trials; offer 0 was tested above.
+                response_data = _resolve_ultimatum_round(
+                    client, identity, run_id, round_data["round_id"], offer=trial
+                )
+            else:
+                decision = "accept" if trial % 2 else "reject"
+                response_data = _resolve_ultimatum_round(
+                    client, identity, run_id, round_data["round_id"], decision=decision
+                )
+            assert response_data["points_earned"] == (
+                response_data["participant_share"] if response_data["accepted"] else 0
+            )
+            assert response_data["potential_points_lost"] == (
+                0 if response_data["accepted"] else response_data["participant_share"]
+            )
+            main_results.append(response_data)
+
+    assert len(main_results) == main.ULTIMATUM_MAIN_TRIALS
+    assert {item["block_code"] for item in main_results} == set(main.ULTIMATUM_BLOCKS)
+    final_score = sum(item["points_earned"] for item in main_results)
+    final_lost = sum(item["potential_points_lost"] for item in main_results)
+    block_summaries = {
+        code: {
+            "block_order": index,
+            "points_earned": sum(item["points_earned"] for item in main_results if item["block_code"] == code),
+            "potential_points_lost": sum(
+                item["potential_points_lost"] for item in main_results if item["block_code"] == code
+            ),
+        }
+        for index, code in enumerate(block_order, start=1)
+    }
+    completed = client.post(
+        "/api/experiment/stages/complete",
+        json={
+            **identity,
+            "stage_code": "ultimatum",
+            "run_id": run_id,
+            "final_payload": {
+                "schema_version": 1,
+                "condition_code": "A",
+                "feedback_group": "Frame",
+                "block_order": block_order,
+                "final_score": final_score,
+                "total_potential_points_lost": final_lost,
+                "block_summaries": block_summaries,
+                "practice_excluded_from_score": True,
+            },
+        },
+    )
+    assert completed.status_code == 200, completed.text
+
+    with main.conn() as connection:
+        stage = connection.execute(
+            "SELECT status,current_run_id FROM experiment_stage_progress "
+            "WHERE stage_code='ultimatum' AND current_run_id=?",
+            (run_id,),
+        ).fetchone()
+        rows = connection.execute(
+            "SELECT phase,status,opponent_actual_type,COUNT(*) AS n "
+            "FROM ultimatum_trials WHERE run_id=? GROUP BY phase,status,opponent_actual_type",
+            (run_id,),
+        ).fetchall()
+    assert stage["status"] == "completed"
+    counts = {(row["phase"], row["status"], row["opponent_actual_type"]): row["n"] for row in rows}
+    assert counts[("practice", "completed", "computer")] == 2
+    assert counts[("main", "completed", "computer")] == main.ULTIMATUM_MAIN_TRIALS
+
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "ultimatum-export-token")
+    exported = client.get(
+        "/api/admin/ultimatum/export.csv",
+        headers={"x-admin-token": "ultimatum-export-token"},
+    )
+    assert exported.status_code == 200, exported.text
+    csv_rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff"))))
+    assert len(csv_rows) == main.ULTIMATUM_MAIN_TRIALS + 2
+    assert sum(row["phase"] == "practice" for row in csv_rows) == 2
+    assert sum(row["phase"] == "main" for row in csv_rows) == main.ULTIMATUM_MAIN_TRIALS
+    assert all(row["run_id"] == run_id for row in csv_rows)
+    assert all(row["feedback_group"] == "Frame" for row in csv_rows)
+    assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
+    assert all(row["final_score"] == str(final_score) for row in csv_rows)
+    assert any("offer_model" in row["payload_json"] for row in csv_rows if row["role"] == "responder")
+    assert any("decision_model" in row["payload_json"] for row in csv_rows if row["role"] == "proposer")
