@@ -1936,7 +1936,12 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "completed_at", "server_resolved_at", "feedback_group", "final_score",
         "final_potential_points_lost", "block_order_json", "final_stage_payload_json",
         "run_metadata_json", "client_metadata_json", "client_metadata_resolve_json",
-        "client_event_timestamps_json", "opponent_offer_generated_at", "opponent_response_generated_at",
+        "client_event_timestamps_json", "client_event_server_received_at",
+        "proposer_screen_shown_at", "slider_first_changed_at", "slider_last_changed_at",
+        "offer_submitted_at", "waiting_started_at", "waiting_ended_at",
+        "opponent_offer_generated_at", "opponent_response_generated_at",
+        "responder_offer_shown_at", "participant_choice_at", "result_screen_shown_at",
+        "next_trial_clicked_at", "advance_clicked_at",
         "opponent_model", "offer_model_json", "decision_model_json", "normal_mean",
         "normal_sd", "normal_ai_self_share", "normal_participant_share",
         "binomial_n", "binomial_p", "binomial_draw", "binomial_accept_threshold",
@@ -1982,6 +1987,15 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
             item["client_event_timestamps_json"] = json.dumps(
                 payload.get("client_event_timestamps") or {}, ensure_ascii=False, separators=(",", ":")
             )
+            item["client_event_server_received_at"] = payload.get("client_event_server_received_at")
+            event_timestamps = payload.get("client_event_timestamps") or {}
+            for event_name in (
+                "proposer_screen_shown_at", "slider_first_changed_at", "slider_last_changed_at",
+                "offer_submitted_at", "waiting_started_at", "waiting_ended_at",
+                "responder_offer_shown_at", "participant_choice_at", "result_screen_shown_at",
+                "next_trial_clicked_at", "advance_clicked_at",
+            ):
+                item[event_name] = event_timestamps.get(event_name)
             item["opponent_offer_generated_at"] = payload.get("opponent_offer_generated_at")
             item["opponent_response_generated_at"] = payload.get("opponent_response_generated_at")
             offer_model = _json_value(payload.get("offer_model"))
