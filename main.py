@@ -30,6 +30,13 @@ STAGE_TO_INSTRUMENT = {
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
+QUESTIONNAIRE_QUESTION_CODES = tuple(
+    [f"B{i}" for i in range(1, 6)]
+    + [f"PJ{i}" for i in range(1, 8)]
+    + [f"DJ{i}" for i in range(1, 5)]
+    + [f"IJ{i}" for i in range(1, 5)]
+    + [f"INJ{i}" for i in range(1, 6)]
+)
 
 # Bounded PostgreSQL connections: total possible connections are pool size times
 # the number of Passenger processes. Keep this conservative on shared hosting.
@@ -151,6 +158,13 @@ if DATABASE_URL:
                 "PRIMARY KEY(participation_id, stage_code))"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
+                "run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "question_code TEXT NOT NULL, response_value TEXT NOT NULL "
+                "CHECK(response_value IN ('1','2','3','4','5','NA')), "
+                "updated_at TEXT NOT NULL, PRIMARY KEY(run_id, question_code))"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
                 "ON study_participations(participant_id)"
             )
@@ -264,6 +278,13 @@ else:
                 "draft_payload TEXT NOT NULL DEFAULT '{}', "
                 "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(participation_id, stage_code))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
+                "run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "question_code TEXT NOT NULL, response_value TEXT NOT NULL "
+                "CHECK(response_value IN ('1','2','3','4','5','NA')), "
+                "updated_at TEXT NOT NULL, PRIMARY KEY(run_id, question_code))"
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
@@ -381,6 +402,13 @@ class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
     run_id: str = Field(min_length=1, max_length=100)
     draft_payload: dict[str, Any]
+
+
+class QuestionnaireAnswerIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    question_code: str = Field(min_length=1, max_length=16)
+    response_value: Literal["1", "2", "3", "4", "5", "NA"]
+    current_question_index: int = Field(default=0, ge=0, le=100)
 
 
 class StageCompleteIn(ExperimentIdentityIn):
@@ -879,6 +907,58 @@ def save_questionnaire_draft(data: StageDraftIn):
     return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id}
 
 
+@app.post("/api/experiment/questionnaire/answer")
+def save_questionnaire_answer(data: QuestionnaireAnswerIn):
+    """Upsert one answer by its hidden question code and refresh the server-side draft."""
+    if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
+        raise HTTPException(422, "Unknown questionnaire question code")
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        marker = "%s" if DATABASE_URL else "?"
+        state = connection.execute(
+            "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
+            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
+            (assignment["participation_id"], "questionnaire"),
+        ).fetchone()
+        if not state or state["current_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if state["status"] != "in_progress":
+            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
+        timestamp = now()
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
+                "VALUES(%s,%s,%s,%s) ON CONFLICT(run_id,question_code) DO UPDATE SET "
+                "response_value=EXCLUDED.response_value,updated_at=EXCLUDED.updated_at",
+                (data.run_id, data.question_code, data.response_value, timestamp),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
+                "VALUES(?,?,?,?) ON CONFLICT(run_id,question_code) DO UPDATE SET "
+                "response_value=excluded.response_value,updated_at=excluded.updated_at",
+                (data.run_id, data.question_code, data.response_value, timestamp),
+            )
+        draft = _json_value(state["draft_payload"])
+        answers = draft.get("answers")
+        if not isinstance(answers, dict):
+            answers = {}
+        answers[data.question_code] = data.response_value
+        draft["answers"] = answers
+        draft["current_question_index"] = data.current_question_index
+        connection.execute(
+            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+            (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+        )
+    return {
+        "saved": True,
+        "question_code": data.question_code,
+        "response_value": data.response_value,
+        "current_question_index": data.current_question_index,
+    }
+
+
 @app.post("/api/experiment/stages/complete")
 def complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
@@ -900,6 +980,19 @@ def complete_experiment_stage(data: StageCompleteIn):
         if data.stage_code == "questionnaire":
             if data.final_payload is None:
                 raise HTTPException(422, "پاسخ نهایی پرسشنامه باید ارسال شود.")
+            final_answers = data.final_payload.get("answers")
+            if not isinstance(final_answers, dict) or any(
+                code not in final_answers
+                or str(final_answers[code]) not in {"1", "2", "3", "4", "5", "NA"}
+                for code in QUESTIONNAIRE_QUESTION_CODES
+            ):
+                raise HTTPException(422, "تمام سؤال‌های پرسشنامه باید پاسخ معتبر داشته باشند.")
+            count_row = connection.execute(
+                "SELECT COUNT(*) AS n FROM questionnaire_responses WHERE run_id=" + marker,
+                (data.run_id,),
+            ).fetchone()
+            if int(count_row["n"]) != len(QUESTIONNAIRE_QUESTION_CODES):
+                raise HTTPException(422, "پاسخ همهٔ سؤال‌ها هنوز در سرور ذخیره نشده است.")
             payload_param = _json_param(data.final_payload)
             connection.execute(
                 "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
