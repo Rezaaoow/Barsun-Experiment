@@ -436,7 +436,7 @@ def test_admin_progress_and_questionnaire_csv(client, monkeypatch):
 
     exported = client.get("/api/admin/questionnaire/export.csv", headers=headers)
     assert exported.status_code == 200, exported.text
-    rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\\ufeff"))))
+    rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff"))))
     assert len(rows) == len(main.QUESTIONNAIRE_QUESTION_CODES)
     assert {row["question_code"] for row in rows} == set(main.QUESTIONNAIRE_QUESTION_CODES)
     assert all(row["participant_code"] == "BS-PROGRESS-01" for row in rows)
