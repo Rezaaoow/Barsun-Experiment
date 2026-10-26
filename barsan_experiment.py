@@ -1797,7 +1797,7 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "opponent_share", "participant_decision", "opponent_decision", "accepted",
         "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
         "started_at", "decision_screen_shown_at", "responded_at", "received_at",
-        "completed_at", "attempt_number", "feedback_group", "final_score",
+        "completed_at", "feedback_group", "final_score",
         "final_potential_points_lost", "payload_json",
     ]
 
