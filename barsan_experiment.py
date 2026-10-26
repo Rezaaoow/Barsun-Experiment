@@ -1873,7 +1873,7 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
 
     def generate_csv():
         buffer = io.StringIO(newline="")
-        buffer.write("\\ufeff")
+        buffer.write("\ufeff")
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         yield buffer.getvalue()
