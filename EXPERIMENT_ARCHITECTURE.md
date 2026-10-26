@@ -58,6 +58,7 @@ Do not distribute invitation URLs for final data collection yet. The UI includes
 - Questionnaire draft save, per-question answer upsert and validated stage completion endpoints.
 - Protected module-progress monitoring and questionnaire CSV export endpoints.
 - Ultimatum table `ultimatum_trials`, server-side offer/decision generation, server-randomized block order, strict practice/block/trial sequencing, scoring, attempt-level audit metadata and protected trial CSV export.
+- Structured Ultimatum client interaction timestamps and server-side opponent-generation timestamps are persisted in the existing trial JSON payload (no destructive schema migration); CSV export exposes them for analysis and audit.
 - Protected assignment creation endpoint.
 - Primary Life-Trade CSV export excludes runs marked `superseded`.
 
@@ -101,7 +102,11 @@ Body: `invitation_token`, `participant_code`, `run_id`, `phase`, `block_code`, `
 
 `POST /api/experiment/ultimatum/resolve`
 
-Body: invitation/code/run/round IDs, either the participant's offer to the opponent (proposer role) or `accept`/`reject` (responder role), plus timing and client metadata. The server resolves the opponent decision for proposer trials and persists points earned/lost and timing.
+Body: invitation/code/run/round IDs, either the participant's offer to the opponent (proposer role) or `accept`/`reject` (responder role), plus timing, client metadata, and allowlisted event timestamps such as proposer-screen display, first/last slider change, offer submission, waiting start/end, responder offer display, and participant choice. The server resolves the opponent decision for proposer trials and persists points earned/lost, client event timestamps, and server-side opponent-generation timestamps.
+
+`POST /api/experiment/ultimatum/events`
+
+Body: invitation/code/run/round IDs and allowlisted post-resolution timestamps such as result-screen display and the continue/next-trial click. These events can only be attached to a completed trial in the participant's active attempt. Retries preserve the first timestamp for each event name.
 
 `GET /api/admin/ultimatum/export.csv`
 
