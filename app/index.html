@@ -471,6 +471,213 @@ button{-webkit-tap-highlight-color:transparent}
  .scale-option{min-height:94px;}
  .scale-option .scale-label{font-size:.59rem;}
 }
+
+/* Questionnaire refinements: native Persian RTL layout, consistent font, compact single-screen pages. */
+.questionnaire-screen,
+.questionnaire-screen * {
+  font-family: "Vazirmatn", Tahoma, "Segoe UI", Arial, sans-serif !important;
+}
+.questionnaire-screen {
+  height: min(680px, calc(100dvh - 24px));
+  max-height: 100%;
+  padding: clamp(12px, 2.4vw, 24px);
+}
+.questionnaire-meta {
+  flex: none;
+  margin-bottom: clamp(7px, 1.25vh, 12px);
+  font-size: .78rem;
+}
+.questionnaire-screen h2 {
+  flex: none;
+  margin-bottom: clamp(7px, 1.2vh, 12px);
+  font-size: clamp(1.05rem, 2.35vw, 1.4rem);
+  line-height: 1.5;
+}
+.questionnaire-question {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  justify-content: center;
+}
+.questionnaire-statement {
+  flex: none;
+  margin: 0 0 clamp(8px, 1.35vh, 13px);
+  font-size: clamp(1rem, 1.8vw, 1.14rem);
+  line-height: 1.65;
+}
+.questionnaire-scale {
+  flex: none;
+  direction: rtl;
+  gap: clamp(4px, .85vw, 8px);
+}
+.scale-option {
+  height: clamp(82px, 11.5vh, 100px);
+  min-height: 0;
+  max-height: 100px;
+  flex: 0 0 auto;
+  padding: 5px 3px;
+  gap: 5px;
+  overflow: hidden;
+}
+.scale-option .scale-number {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+}
+.scale-option .scale-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-height: 3.9em;
+  font-size: clamp(.62rem, 1.05vw, .82rem);
+  line-height: 1.3;
+  font-weight: 600;
+}
+.scale-na {
+  flex: none;
+  min-height: 40px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: .82rem;
+}
+.questionnaire-save-status {
+  flex: none;
+  min-height: 17px;
+  margin-top: 5px;
+  font-size: .74rem;
+  line-height: 1.4;
+}
+.questionnaire-actions {
+  flex: none;
+  gap: 9px;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.questionnaire-actions .btn {
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 14px;
+  flex: 1 1 0;
+}
+@media (max-width: 640px) {
+  .questionnaire-screen {
+    height: calc(100dvh - 16px);
+    padding: 11px 10px;
+    border-radius: 16px;
+  }
+  .questionnaire-meta {
+    font-size: .72rem;
+    margin-bottom: 6px;
+    gap: 7px;
+  }
+  .questionnaire-screen h2 {
+    margin-bottom: 7px;
+    font-size: 1.02rem;
+    line-height: 1.45;
+  }
+  .questionnaire-statement {
+    margin-bottom: 9px;
+    font-size: .97rem;
+    line-height: 1.6;
+  }
+  .questionnaire-scale {
+    gap: 4px;
+  }
+  .scale-option {
+    height: clamp(78px, 13vh, 92px);
+    max-height: 92px;
+    padding: 5px 2px;
+    gap: 4px;
+    border-radius: 10px;
+  }
+  .scale-option .scale-number {
+    flex-basis: 26px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    font-size: .84rem;
+  }
+  .scale-option .scale-label {
+    font-size: clamp(.56rem, 2.5vw, .7rem);
+    line-height: 1.28;
+    -webkit-line-clamp: 3;
+  }
+  .scale-na {
+    min-height: 37px;
+    margin-top: 7px;
+    padding: 5px 7px;
+    font-size: .76rem;
+    line-height: 1.35;
+  }
+  .questionnaire-save-status {
+    min-height: 15px;
+    margin-top: 4px;
+    font-size: .69rem;
+  }
+  .questionnaire-actions {
+    gap: 7px;
+    padding-top: 7px;
+    margin-top: 6px;
+  }
+  .questionnaire-actions .btn {
+    min-height: 40px;
+    padding: 7px 8px;
+    font-size: .86rem;
+  }
+}
+@media (max-height: 560px) {
+  .questionnaire-screen {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .questionnaire-meta {
+    margin-bottom: 5px;
+  }
+  .questionnaire-screen h2 {
+    margin-bottom: 5px;
+    font-size: .98rem;
+  }
+  .questionnaire-statement {
+    margin-bottom: 6px;
+    font-size: .93rem;
+    line-height: 1.45;
+  }
+  .scale-option {
+    height: 70px;
+    max-height: 70px;
+    gap: 3px;
+    padding: 3px 2px;
+  }
+  .scale-option .scale-number {
+    flex-basis: 24px;
+    width: 24px;
+    height: 24px;
+  }
+  .scale-option .scale-label {
+    font-size: .58rem;
+    line-height: 1.2;
+  }
+  .scale-na {
+    min-height: 32px;
+    margin-top: 5px;
+    padding: 4px 7px;
+  }
+  .questionnaire-save-status {
+    min-height: 13px;
+    margin-top: 3px;
+  }
+  .questionnaire-actions {
+    padding-top: 5px;
+    margin-top: 4px;
+  }
+  .questionnaire-actions .btn {
+    min-height: 36px;
+    padding: 5px 8px;
+  }
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
@@ -741,7 +948,7 @@ function optionText(taskKey,magnitude,trialData,isNow){
 }
 function optionLabel(taskKey,magnitude,trialData,isNow){const o=optionText(taskKey,magnitude,trialData,isNow);return `${o.amount} — ${o.detail}`;}
 const QUESTIONNAIRE_ITEMS = [
-  {code:"B1", text:"رانندگانی با شرایط کاری و سابقه‌ای مشابه شما، چقدر احتمال دارد در یک سال آینده همکاری خود را با این شرکت تغییر دهند"},
+  {code:"B1", text:"رانندگانی با شرایط کاری و سابقه‌ای مشابه شما، احتمال دارد در یک سال آینده همکاری خود را با این شرکت تغییر دهند"},
   {code:"B2", text:"جست‌وجوی فرصت‌های شغلی در شرکت‌های دیگر، در میان رانندگانی با شرایط مشابه شما، رایج است"},
   {code:"B3", text:"رانندگانی با شرایط کاری مشابه شما، ممکن است به ادامه همکاری با این شرکت به‌عنوان گزینه بلندمدت نگاه نکنند"},
   {code:"B4", text:"اگر شرایط کاری رانندگانی با شرایطی مشابه شما در چند ماه آینده تغییر نکند، احتمال دارد فرصت‌های شغلی خارج از این شرکت را بررسی کنند"},
@@ -1064,7 +1271,7 @@ function showQuestionnaireIntro(pageIndex=0){
   const scale=document.createElement('div');scale.className='intro-scale';
   const title=document.createElement('div');title.className='intro-scale-title';title.textContent='مقیاس پاسخ‌گویی';
   const list=document.createElement('div');list.className='intro-scale-list';
-  for(const option of LIKERT_OPTIONS.slice(0,5)){
+  for(const option of LIKERT_OPTIONS.slice(0,5).reverse()){
    const item=document.createElement('div');item.className='intro-scale-item';
    const n=document.createElement('strong');n.textContent=option.value;
    const label=document.createElement('span');label.textContent=option.label;
@@ -1094,7 +1301,7 @@ function showQuestionnaireIntro(pageIndex=0){
   back.addEventListener('click',()=>showQuestionnaireIntro(0));
   next.addEventListener('click',()=>startQuestionnaireRun(next));
  }
- actions.append(back,next);box.appendChild(actions);
+ actions.append(next,back);box.appendChild(actions);
  stimulus.replaceChildren(box);
 }
 
@@ -1238,7 +1445,7 @@ function showQuestionnaireQuestion(index){
  const question=document.createElement('div');question.className='questionnaire-question';
  const statement=document.createElement('p');statement.className='questionnaire-statement';statement.textContent=item.text;
  const scale=document.createElement('div');scale.className='questionnaire-scale';
- for(const option of LIKERT_OPTIONS.slice(0,5)){
+ for(const option of LIKERT_OPTIONS.slice(0,5).reverse()){
   const button=document.createElement('button');button.type='button';button.className='scale-option';
   button.dataset.scaleValue=option.value;button.setAttribute('aria-pressed',workflow.questionnaireAnswers[item.code]===option.value?'true':'false');
   const number=document.createElement('span');number.className='scale-number';number.textContent=option.value;
@@ -1259,7 +1466,7 @@ function showQuestionnaireQuestion(index){
  next.textContent=workflow.questionIndex===QUESTIONNAIRE_ITEMS.length-1?'ثبت پرسشنامه و ادامه':'سؤال بعد';
  next.disabled=!workflow.questionnaireAnswers[item.code]||workflow.questionnaireSavedAnswers[item.code]!==workflow.questionnaireAnswers[item.code];
  next.addEventListener('click',()=>moveQuestionnaire(1));
- actions.append(prev,next);box.appendChild(actions);
+ actions.append(next,prev);box.appendChild(actions);
  stimulus.replaceChildren(box);
 }
 
