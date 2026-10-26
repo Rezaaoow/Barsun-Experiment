@@ -375,12 +375,18 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
     assert all(row["run_id"] == run_id for row in csv_rows)
     assert "client_event_timestamps_json" in csv_headers
+    assert "client_event_server_received_at" in csv_headers
+    assert "result_screen_shown_at" in csv_headers
+    assert "advance_clicked_at" in csv_headers
     assert "opponent_offer_generated_at" in csv_headers
     assert "opponent_response_generated_at" in csv_headers
     event_row = next(row for row in csv_rows if row["round_id"] == event_round_id)
     saved_csv_events = json.loads(event_row["client_event_timestamps_json"])
     assert saved_csv_events["result_screen_shown_at"] == result_shown_at
     assert saved_csv_events["advance_clicked_at"] == advance_clicked_at
+    assert event_row["result_screen_shown_at"] == result_shown_at
+    assert event_row["advance_clicked_at"] == advance_clicked_at
+    assert event_row["client_event_server_received_at"]
     assert any(
         row["phase"] == "main" and row["role"] == "responder" and row["opponent_offer_generated_at"]
         for row in csv_rows
