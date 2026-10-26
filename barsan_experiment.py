@@ -1861,13 +1861,19 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "opponent_share", "participant_decision", "opponent_decision", "accepted",
         "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
         "started_at", "decision_screen_shown_at", "responded_at", "received_at",
-        "completed_at", "feedback_group", "final_score",
-        "final_potential_points_lost", "payload_json",
+        "completed_at", "server_resolved_at", "feedback_group", "final_score",
+        "final_potential_points_lost", "block_order_json", "final_stage_payload_json",
+        "run_metadata_json", "client_metadata_json", "client_metadata_resolve_json",
+        "opponent_model", "offer_model_json", "decision_model_json", "normal_mean",
+        "normal_sd", "normal_ai_self_share", "normal_participant_share",
+        "binomial_n", "binomial_p", "binomial_draw", "binomial_accept_threshold",
+        "participant_offer_to_opponent", "participant_offer_to_self",
+        "computer_offer_to_participant", "computer_offer_to_self", "payload_json",
     ]
 
     def generate_csv():
         buffer = io.StringIO(newline="")
-        buffer.write("\ufeff")
+        buffer.write("\\ufeff")
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         yield buffer.getvalue()
@@ -1877,25 +1883,61 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
             item = dict(raw)
             run_metadata = _json_value(item.pop("run_metadata", {}))
             current_run_id = item.pop("current_stage_run_id", None)
-            final_stage_payload = _json_value(item.pop("final_stage_payload", {}))
+            stage_payload = _json_value(item.pop("final_stage_payload", {}))
             condition_code = str(item.get("condition_code") or "").strip().upper()
+            current_completed_run = (
+                current_run_id == item.get("run_id") and item.get("run_status") == "completed"
+            )
             item["attempt_number"] = _int_or_none(run_metadata.get("attempt_number"))
             item["feedback_group"] = (
                 "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
             )
-            if current_run_id == item.get("run_id") and item.get("run_status") == "completed":
-                item["final_score"] = final_stage_payload.get("final_score")
-                item["final_potential_points_lost"] = final_stage_payload.get(
-                    "total_potential_points_lost"
-                )
-            else:
-                item["final_score"] = None
-                item["final_potential_points_lost"] = None
-            payload = item.pop("payload", {})
-            item["payload_json"] = (
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-                if not isinstance(payload, str)
-                else payload
+            item["block_order_json"] = json.dumps(
+                run_metadata.get("block_order") or [], ensure_ascii=False, separators=(",", ":")
+            )
+            final_payload = stage_payload if current_completed_run else {}
+            item["final_score"] = final_payload.get("final_score")
+            item["final_potential_points_lost"] = final_payload.get("total_potential_points_lost")
+            item["final_stage_payload_json"] = json.dumps(
+                final_payload, ensure_ascii=False, separators=(",", ":")
+            )
+            item["run_metadata_json"] = json.dumps(
+                run_metadata, ensure_ascii=False, separators=(",", ":")
+            )
+
+            payload = _json_value(item.pop("payload", {}))
+            offer_model = _json_value(payload.get("offer_model"))
+            decision_model = _json_value(payload.get("decision_model"))
+            item["opponent_model"] = (
+                decision_model.get("model") or offer_model.get("model") or ""
+            )
+            item["offer_model_json"] = json.dumps(
+                offer_model, ensure_ascii=False, separators=(",", ":")
+            ) if offer_model else ""
+            item["decision_model_json"] = json.dumps(
+                decision_model, ensure_ascii=False, separators=(",", ":")
+            ) if decision_model else ""
+            item["normal_mean"] = offer_model.get("mean")
+            item["normal_sd"] = offer_model.get("sd")
+            item["normal_ai_self_share"] = offer_model.get("sampled_ai_self_share")
+            item["normal_participant_share"] = offer_model.get("sampled_participant_share")
+            item["binomial_n"] = decision_model.get("n")
+            item["binomial_p"] = decision_model.get("p")
+            item["binomial_draw"] = decision_model.get("draw")
+            item["binomial_accept_threshold"] = decision_model.get("accept_threshold")
+            for field in (
+                "participant_offer_to_opponent", "participant_offer_to_self",
+                "computer_offer_to_participant", "computer_offer_to_self", "server_resolved_at",
+            ):
+                item[field] = payload.get(field)
+            item["client_metadata_json"] = json.dumps(
+                payload.get("client_metadata") or {}, ensure_ascii=False, separators=(",", ":")
+            )
+            item["client_metadata_resolve_json"] = json.dumps(
+                payload.get("client_metadata_resolve") or {}, ensure_ascii=False, separators=(",", ":")
+            )
+            item["payload_json"] = json.dumps(
+                payload, ensure_ascii=False, separators=(",", ":")
             )
             writer.writerow(item)
             yield buffer.getvalue()
