@@ -37,6 +37,7 @@ QUESTIONNAIRE_QUESTION_CODES = tuple(
     + [f"IJ{i}" for i in range(1, 5)]
     + [f"INJ{i}" for i in range(1, 6)]
 )
+CONSENT_VERSION = "barsan-consent-v1"
 
 # Bounded PostgreSQL connections: total possible connections are pool size times
 # the number of Passenger processes. Keep this conservative on shared hosting.
@@ -144,6 +145,12 @@ if DATABASE_URL:
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
                 "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_consents ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
+                "PRIMARY KEY(assignment_id, consent_version))"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -266,6 +273,12 @@ else:
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
                 "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_consents ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
+                "PRIMARY KEY(assignment_id, consent_version))"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -392,6 +405,10 @@ class AssignmentBatchIn(BaseModel):
 class ExperimentIdentityIn(BaseModel):
     invitation_token: str = Field(min_length=20, max_length=200)
     participant_code: str = Field(min_length=1, max_length=100)
+
+
+class ExperimentConsentIn(ExperimentIdentityIn):
+    accepted: bool
 
 
 class StageStartIn(ExperimentIdentityIn):
@@ -653,6 +670,17 @@ def _lookup_assignment(connection: Any, invitation_token: str, participant_code:
     return dict(row)
 
 
+def _require_consent(connection: Any, assignment_id: str) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT 1 FROM experiment_consents WHERE assignment_id=" + marker
+        + " AND consent_version=" + marker,
+        (assignment_id, CONSENT_VERSION),
+    ).fetchone()
+    if not row:
+        raise HTTPException(403, "رضایت برای مشارکت ثبت نشده است.")
+
+
 def _get_stage_rows(connection: Any, participation_id: str) -> dict[str, dict[str, Any]]:
     marker = "%s" if DATABASE_URL else "?"
     rows = connection.execute(
@@ -739,11 +767,45 @@ def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Head
     return {"created_count": len(created), "assignments": created}
 
 
+@app.post("/api/experiment/consent")
+def record_experiment_consent(data: ExperimentConsentIn):
+    """Persist acceptance of the current consent text without storing IP or device identity."""
+    if not data.accepted:
+        raise HTTPException(403, "شرکت در پژوهش تأیید نشده است.")
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        timestamp = now()
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO experiment_consents(assignment_id,consent_version,accepted_at) "
+                "VALUES(%s,%s,%s) ON CONFLICT(assignment_id,consent_version) DO NOTHING",
+                (assignment["assignment_id"], CONSENT_VERSION, timestamp),
+            )
+            row = connection.execute(
+                "SELECT accepted_at FROM experiment_consents "
+                "WHERE assignment_id=%s AND consent_version=%s",
+                (assignment["assignment_id"], CONSENT_VERSION),
+            ).fetchone()
+        else:
+            connection.execute(
+                "INSERT OR IGNORE INTO experiment_consents(assignment_id,consent_version,accepted_at) "
+                "VALUES(?,?,?)",
+                (assignment["assignment_id"], CONSENT_VERSION, timestamp),
+            )
+            row = connection.execute(
+                "SELECT accepted_at FROM experiment_consents "
+                "WHERE assignment_id=? AND consent_version=?",
+                (assignment["assignment_id"], CONSENT_VERSION),
+            ).fetchone()
+    return {"accepted": True, "consent_version": CONSENT_VERSION, "accepted_at": row["accepted_at"]}
+
+
 @app.post("/api/experiment/identify")
 def identify_experiment_participant(data: ExperimentIdentityIn):
     """Resolve the preassigned link/code and return authoritative saved stage progress."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
         rows = _get_stage_rows(connection, assignment["participation_id"])
     states = [_public_stage_state(stage, rows.get(stage)) for stage in STAGE_ORDER]
     current_stage = next((state["stage_code"] for state in states if state["status"] != "completed"), None)
@@ -760,6 +822,7 @@ def start_experiment_stage(data: StageStartIn):
     """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
         rows = _get_stage_rows(connection, assignment["participation_id"])
         existing = rows.get(data.stage_code)
 
@@ -889,6 +952,7 @@ def save_questionnaire_draft(data: StageDraftIn):
     """Persist questionnaire answers continuously so a refresh restores the same draft."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
             "SELECT status,current_run_id FROM experiment_stage_progress "
@@ -914,6 +978,7 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
         raise HTTPException(422, "Unknown questionnaire question code")
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
             "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
@@ -964,6 +1029,7 @@ def complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
             "SELECT status,current_run_id,attempt_number,draft_payload FROM experiment_stage_progress "
