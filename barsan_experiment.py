@@ -1349,6 +1349,8 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             participant_decision = None
             payload = _json_value(record["payload"])
             payload["decision_model"] = ai_response
+            payload["participant_offer_to_opponent"] = opponent_share
+            payload["participant_offer_to_self"] = participant_share
         else:
             if data.participant_decision is None or data.participant_offer_to_opponent is not None:
                 raise HTTPException(422, "برای نقش پاسخ‌دهنده باید قبول یا رد ثبت شود.")
@@ -1358,6 +1360,8 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             opponent_decision = None
             accepted = participant_decision == "accept"
             payload = _json_value(record["payload"])
+            payload["computer_offer_to_participant"] = participant_share
+            payload["computer_offer_to_self"] = opponent_share
         points_earned = participant_share if accepted else 0
         potential_points_lost = 0 if accepted else participant_share
         completed_at = now()
@@ -1380,7 +1384,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "client_metadata_resolve": data.client_metadata,
             "server_resolved_at": completed_at,
         })
-        connection.execute(
+        update_cursor = connection.execute(
             "UPDATE ultimatum_trials SET status='completed',participant_share=" + marker
             + ",opponent_share=" + marker + ",participant_decision=" + marker + ",opponent_decision=" + marker
             + ",accepted=" + marker + ",points_earned=" + marker + ",potential_points_lost=" + marker
@@ -1393,6 +1397,19 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
                 responded_at, received_at, completed_at, _json_param(payload), data.round_id,
             ),
         )
+        if update_cursor.rowcount != 1:
+            # A concurrent duplicate submission may have completed this round first.
+            # Return the persisted result without double-counting the run.
+            current = connection.execute(
+                "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+                (data.round_id, data.run_id),
+            ).fetchone()
+            if current and current["status"] == "completed":
+                saved_payload = _json_value(current["payload"])
+                saved_result = saved_payload.get("resolve_result")
+                if saved_result:
+                    return saved_result
+            raise HTTPException(409, "این دور هم‌زمان ثبت شده است؛ وضعیت بازی را دوباره بررسی کنید.")
         connection.execute(
             "UPDATE instrument_runs SET trial_count=trial_count+1 WHERE run_id=" + marker,
             (data.run_id,),
