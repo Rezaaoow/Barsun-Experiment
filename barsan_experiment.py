@@ -2,7 +2,9 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
+import random
 import secrets
 import sqlite3
 import uuid
@@ -30,6 +32,25 @@ STAGE_TO_INSTRUMENT = {
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
+ULTIMATUM_TOTAL_POINTS = 10
+ULTIMATUM_MAIN_BLOCK_TRIALS = 5
+ULTIMATUM_MAIN_BLOCK_COUNT = 4
+ULTIMATUM_MAIN_TRIALS = ULTIMATUM_MAIN_BLOCK_TRIALS * ULTIMATUM_MAIN_BLOCK_COUNT
+# Provisional, auditable opponent models. These can be adjusted after protocol confirmation.
+ULTIMATUM_AI_OFFER_NORMAL_MEAN = 5.0
+ULTIMATUM_AI_OFFER_NORMAL_SD = 2.0
+ULTIMATUM_BINOMIAL_N = 10
+ULTIMATUM_BINOMIAL_ACCEPT_THRESHOLD = 5
+ULTIMATUM_BLOCKS = {
+    "proposer_agent": {"role": "proposer", "opponent_condition": "agent"},
+    "responder_agent": {"role": "responder", "opponent_condition": "agent"},
+    "proposer_coworker": {"role": "proposer", "opponent_condition": "coworker"},
+    "responder_coworker": {"role": "responder", "opponent_condition": "coworker"},
+}
+ULTIMATUM_PRACTICE_BLOCKS = {
+    "practice_proposer_agent": {"role": "proposer", "opponent_condition": "agent"},
+    "practice_responder_coworker": {"role": "responder", "opponent_condition": "coworker"},
+}
 QUESTIONNAIRE_QUESTION_CODES = tuple(
     [f"B{i}" for i in range(1, 6)]
     + [f"PJ{i}" for i in range(1, 8)]
@@ -171,6 +192,52 @@ if DATABASE_URL:
                 "CHECK(response_value IN ('1','2','3','4','5','NA')), "
                 "updated_at TEXT NOT NULL, PRIMARY KEY(run_id, question_code))"
             )
+            if DATABASE_URL:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS ultimatum_trials ("
+                    "round_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                    "phase TEXT NOT NULL CHECK(phase IN ('practice','main')), block_code TEXT NOT NULL, "
+                    "block_order INTEGER NOT NULL, trial_in_block INTEGER NOT NULL, trial_sequence INTEGER NOT NULL, "
+                    "role TEXT NOT NULL CHECK(role IN ('proposer','responder')), "
+                    "opponent_condition TEXT NOT NULL CHECK(opponent_condition IN ('agent','coworker')), "
+                    "opponent_actual_type TEXT NOT NULL DEFAULT 'computer', "
+                    "status TEXT NOT NULL DEFAULT 'prepared' CHECK(status IN ('prepared','completed')), "
+                    "participant_share INTEGER CHECK(participant_share BETWEEN 0 AND 10), "
+                    "opponent_share INTEGER CHECK(opponent_share BETWEEN 0 AND 10), "
+                    "participant_decision TEXT CHECK(participant_decision IN ('accept','reject') OR participant_decision IS NULL), "
+                    "opponent_decision TEXT CHECK(opponent_decision IN ('accept','reject') OR opponent_decision IS NULL), "
+                    "accepted INTEGER CHECK(accepted IN (0,1) OR accepted IS NULL), "
+                    "points_earned INTEGER NOT NULL DEFAULT 0, potential_points_lost INTEGER NOT NULL DEFAULT 0, "
+                    "reaction_time_ms DOUBLE PRECISION, wait_duration_ms INTEGER, "
+                    "started_at TEXT NOT NULL, decision_screen_shown_at TEXT, responded_at TEXT, "
+                    "received_at TEXT NOT NULL, completed_at TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, "
+                    "UNIQUE(run_id,phase,block_code,trial_in_block))"
+                )
+            else:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS ultimatum_trials ("
+                    "round_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                    "phase TEXT NOT NULL CHECK(phase IN ('practice','main')), block_code TEXT NOT NULL, "
+                    "block_order INTEGER NOT NULL, trial_in_block INTEGER NOT NULL, trial_sequence INTEGER NOT NULL, "
+                    "role TEXT NOT NULL CHECK(role IN ('proposer','responder')), "
+                    "opponent_condition TEXT NOT NULL CHECK(opponent_condition IN ('agent','coworker')), "
+                    "opponent_actual_type TEXT NOT NULL DEFAULT 'computer', "
+                    "status TEXT NOT NULL DEFAULT 'prepared' CHECK(status IN ('prepared','completed')), "
+                    "participant_share INTEGER CHECK(participant_share BETWEEN 0 AND 10), "
+                    "opponent_share INTEGER CHECK(opponent_share BETWEEN 0 AND 10), "
+                    "participant_decision TEXT CHECK(participant_decision IN ('accept','reject') OR participant_decision IS NULL), "
+                    "opponent_decision TEXT CHECK(opponent_decision IN ('accept','reject') OR opponent_decision IS NULL), "
+                    "accepted INTEGER CHECK(accepted IN (0,1) OR accepted IS NULL), "
+                    "points_earned INTEGER NOT NULL DEFAULT 0, potential_points_lost INTEGER NOT NULL DEFAULT 0, "
+                    "reaction_time_ms REAL, wait_duration_ms INTEGER, "
+                    "started_at TEXT NOT NULL, decision_screen_shown_at TEXT, responded_at TEXT, "
+                    "received_at TEXT NOT NULL, completed_at TEXT, payload TEXT NOT NULL DEFAULT '{}', "
+                    "UNIQUE(run_id,phase,block_code,trial_in_block))"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ultimatum_trials_run "
+                "ON ultimatum_trials(run_id,phase,block_order,trial_sequence)"
+            )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
                 "ON study_participations(participant_id)"
@@ -298,6 +365,52 @@ else:
                 "question_code TEXT NOT NULL, response_value TEXT NOT NULL "
                 "CHECK(response_value IN ('1','2','3','4','5','NA')), "
                 "updated_at TEXT NOT NULL, PRIMARY KEY(run_id, question_code))"
+            )
+            if DATABASE_URL:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS ultimatum_trials ("
+                    "round_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                    "phase TEXT NOT NULL CHECK(phase IN ('practice','main')), block_code TEXT NOT NULL, "
+                    "block_order INTEGER NOT NULL, trial_in_block INTEGER NOT NULL, trial_sequence INTEGER NOT NULL, "
+                    "role TEXT NOT NULL CHECK(role IN ('proposer','responder')), "
+                    "opponent_condition TEXT NOT NULL CHECK(opponent_condition IN ('agent','coworker')), "
+                    "opponent_actual_type TEXT NOT NULL DEFAULT 'computer', "
+                    "status TEXT NOT NULL DEFAULT 'prepared' CHECK(status IN ('prepared','completed')), "
+                    "participant_share INTEGER CHECK(participant_share BETWEEN 0 AND 10), "
+                    "opponent_share INTEGER CHECK(opponent_share BETWEEN 0 AND 10), "
+                    "participant_decision TEXT CHECK(participant_decision IN ('accept','reject') OR participant_decision IS NULL), "
+                    "opponent_decision TEXT CHECK(opponent_decision IN ('accept','reject') OR opponent_decision IS NULL), "
+                    "accepted INTEGER CHECK(accepted IN (0,1) OR accepted IS NULL), "
+                    "points_earned INTEGER NOT NULL DEFAULT 0, potential_points_lost INTEGER NOT NULL DEFAULT 0, "
+                    "reaction_time_ms DOUBLE PRECISION, wait_duration_ms INTEGER, "
+                    "started_at TEXT NOT NULL, decision_screen_shown_at TEXT, responded_at TEXT, "
+                    "received_at TEXT NOT NULL, completed_at TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, "
+                    "UNIQUE(run_id,phase,block_code,trial_in_block))"
+                )
+            else:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS ultimatum_trials ("
+                    "round_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                    "phase TEXT NOT NULL CHECK(phase IN ('practice','main')), block_code TEXT NOT NULL, "
+                    "block_order INTEGER NOT NULL, trial_in_block INTEGER NOT NULL, trial_sequence INTEGER NOT NULL, "
+                    "role TEXT NOT NULL CHECK(role IN ('proposer','responder')), "
+                    "opponent_condition TEXT NOT NULL CHECK(opponent_condition IN ('agent','coworker')), "
+                    "opponent_actual_type TEXT NOT NULL DEFAULT 'computer', "
+                    "status TEXT NOT NULL DEFAULT 'prepared' CHECK(status IN ('prepared','completed')), "
+                    "participant_share INTEGER CHECK(participant_share BETWEEN 0 AND 10), "
+                    "opponent_share INTEGER CHECK(opponent_share BETWEEN 0 AND 10), "
+                    "participant_decision TEXT CHECK(participant_decision IN ('accept','reject') OR participant_decision IS NULL), "
+                    "opponent_decision TEXT CHECK(opponent_decision IN ('accept','reject') OR opponent_decision IS NULL), "
+                    "accepted INTEGER CHECK(accepted IN (0,1) OR accepted IS NULL), "
+                    "points_earned INTEGER NOT NULL DEFAULT 0, potential_points_lost INTEGER NOT NULL DEFAULT 0, "
+                    "reaction_time_ms REAL, wait_duration_ms INTEGER, "
+                    "started_at TEXT NOT NULL, decision_screen_shown_at TEXT, responded_at TEXT, "
+                    "received_at TEXT NOT NULL, completed_at TEXT, payload TEXT NOT NULL DEFAULT '{}', "
+                    "UNIQUE(run_id,phase,block_code,trial_in_block))"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ultimatum_trials_run "
+                "ON ultimatum_trials(run_id,phase,block_order,trial_sequence)"
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
@@ -432,6 +545,31 @@ class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
     final_payload: dict[str, Any] | None = None
+
+
+class UltimatumPrepareIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    phase: Literal["practice", "main"]
+    block_code: Literal[
+        "practice_proposer_agent", "practice_responder_coworker",
+        "proposer_agent", "responder_agent", "proposer_coworker", "responder_coworker"
+    ]
+    block_order: int = Field(ge=0, le=4)
+    trial_in_block: int = Field(ge=1, le=5)
+    trial_sequence: int = Field(ge=0, le=20)
+    client_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class UltimatumResolveIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    round_id: str = Field(min_length=1, max_length=100)
+    participant_offer_to_opponent: int | None = Field(default=None, ge=0, le=10)
+    participant_decision: Literal["accept", "reject"] | None = None
+    decision_screen_shown_at: str | None = Field(default=None, max_length=80)
+    responded_at: str | None = Field(default=None, max_length=80)
+    reaction_time_ms: float | None = Field(default=None, ge=0, le=3600000)
+    wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    client_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -1024,6 +1162,283 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
     }
 
 
+def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    state = connection.execute(
+        "SELECT status,current_run_id FROM experiment_stage_progress "
+        "WHERE participation_id=" + marker + " AND stage_code='ultimatum'",
+        (participation_id,),
+    ).fetchone()
+    if not state or state["status"] != "in_progress" or state["current_run_id"] != run_id:
+        raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
+    instrument = connection.execute(
+        "SELECT iv.instrument_code FROM instrument_runs ir "
+        "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+        "WHERE ir.run_id=" + marker,
+        (run_id,),
+    ).fetchone()
+    if not instrument or instrument["instrument_code"] != "ultimatum":
+        raise HTTPException(409, "شناسهٔ اجرای اولتیماتوم معتبر نیست.")
+
+
+def _sample_ai_offer_to_participant() -> tuple[int, dict[str, Any]]:
+    # A discretized normal distribution on integers 0..10, centered at 5 points.
+    values = list(range(ULTIMATUM_TOTAL_POINTS + 1))
+    weights = [
+        math.exp(-0.5 * ((value - ULTIMATUM_AI_OFFER_NORMAL_MEAN) / ULTIMATUM_AI_OFFER_NORMAL_SD) ** 2)
+        for value in values
+    ]
+    ai_self_share = random.choices(values, weights=weights, k=1)[0]
+    participant_share = ULTIMATUM_TOTAL_POINTS - ai_self_share
+    return participant_share, {
+        "model": "discrete_truncated_normal",
+        "mean": ULTIMATUM_AI_OFFER_NORMAL_MEAN,
+        "sd": ULTIMATUM_AI_OFFER_NORMAL_SD,
+        "support": values,
+        "weights": weights,
+        "sampled_ai_self_share": ai_self_share,
+        "sampled_participant_share": participant_share,
+    }
+
+
+def _sample_ai_response(ai_share: int) -> dict[str, Any]:
+    # Provisional binomial-response operationalization: p is the share offered to the AI / 10.
+    n = ULTIMATUM_BINOMIAL_N
+    p = max(0.0, min(1.0, ai_share / ULTIMATUM_TOTAL_POINTS))
+    draw = sum(1 for _ in range(n) if random.random() < p)
+    accepted = draw >= ULTIMATUM_BINOMIAL_ACCEPT_THRESHOLD
+    return {
+        "model": "binomial_threshold",
+        "n": n,
+        "p": p,
+        "draw": draw,
+        "accept_threshold": ULTIMATUM_BINOMIAL_ACCEPT_THRESHOLD,
+        "decision": "accept" if accepted else "reject",
+    }
+
+
+@app.post("/api/experiment/ultimatum/prepare")
+def prepare_ultimatum_round(data: UltimatumPrepareIn):
+    """Create a server-audited round; AI-generated offers are sampled on the server."""
+    if data.phase == "practice":
+        expected = ULTIMATUM_PRACTICE_BLOCKS.get(data.block_code)
+        if data.block_order != 0 or data.trial_in_block != 1 or data.trial_sequence != 0 or not expected:
+            raise HTTPException(422, "مشخصات دور تمرینی اولتیماتوم معتبر نیست.")
+    else:
+        expected = ULTIMATUM_BLOCKS.get(data.block_code)
+        if (
+            not expected
+            or data.block_order not in {1, 2, 3, 4}
+            or data.trial_sequence != (data.block_order - 1) * ULTIMATUM_MAIN_BLOCK_TRIALS + data.trial_in_block
+        ):
+            raise HTTPException(422, "مشخصات بلوک یا شمارهٔ دور اولتیماتوم معتبر نیست.")
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
+        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        if data.phase == "main":
+            same_order = connection.execute(
+                "SELECT DISTINCT block_code FROM ultimatum_trials "
+                "WHERE run_id=" + ("%s" if DATABASE_URL else "?") + " AND phase='main' AND block_order="
+                + ("%s" if DATABASE_URL else "?"),
+                (data.run_id, data.block_order),
+            ).fetchall()
+            if any(row["block_code"] != data.block_code for row in same_order):
+                raise HTTPException(409, "ترتیب بلوک‌ها در این اجرای اولتیماتوم تغییر کرده است.")
+            other_order = connection.execute(
+                "SELECT DISTINCT block_order FROM ultimatum_trials "
+                "WHERE run_id=" + ("%s" if DATABASE_URL else "?") + " AND phase='main' AND block_code="
+                + ("%s" if DATABASE_URL else "?"),
+                (data.run_id, data.block_code),
+            ).fetchall()
+            if any(int(row["block_order"]) != data.block_order for row in other_order):
+                raise HTTPException(409, "هر بلوک اولتیماتوم باید فقط یک‌بار اجرا شود.")
+        marker = "%s" if DATABASE_URL else "?"
+        existing = connection.execute(
+            "SELECT * FROM ultimatum_trials WHERE run_id=" + marker
+            + " AND phase=" + marker + " AND block_code=" + marker + " AND trial_in_block=" + marker,
+            (data.run_id, data.phase, data.block_code, data.trial_in_block),
+        ).fetchone()
+        if existing:
+            if existing["status"] != "prepared":
+                raise HTTPException(409, "این دور اولتیماتوم قبلاً تکمیل شده است.")
+            row = dict(existing)
+            return {
+                "round_id": row["round_id"],
+                "phase": row["phase"],
+                "block_code": row["block_code"],
+                "role": row["role"],
+                "opponent_condition": row["opponent_condition"],
+                "participant_share": row["participant_share"],
+                "opponent_share": row["opponent_share"],
+                "started_at": row["started_at"],
+                "offer_model": _json_value(row["payload"]).get("offer_model"),
+            }
+        round_id = str(uuid.uuid4())
+        timestamp = now()
+        participant_share = None
+        opponent_share = None
+        payload: dict[str, Any] = {
+            "phase": data.phase,
+            "block_code": data.block_code,
+            "block_order": data.block_order,
+            "trial_in_block": data.trial_in_block,
+            "trial_sequence": data.trial_sequence,
+            "role": expected["role"],
+            "opponent_condition": expected["opponent_condition"],
+            "opponent_actual_type": "computer",
+            "client_metadata": data.client_metadata,
+        }
+        if expected["role"] == "responder":
+            participant_share, offer_model = _sample_ai_offer_to_participant()
+            opponent_share = ULTIMATUM_TOTAL_POINTS - participant_share
+            payload["offer_model"] = offer_model
+        try:
+            connection.execute(
+                "INSERT INTO ultimatum_trials(round_id,run_id,phase,block_code,block_order,trial_in_block,"
+                "trial_sequence,role,opponent_condition,opponent_actual_type,status,participant_share,opponent_share,"
+                "started_at,received_at,payload) VALUES("
+                + ",".join([marker] * 16) + ")",
+                (
+                    round_id, data.run_id, data.phase, data.block_code, data.block_order, data.trial_in_block,
+                    data.trial_sequence, expected["role"], expected["opponent_condition"], "computer", "prepared",
+                    participant_share, opponent_share, timestamp, now(), _json_param(payload),
+                ),
+            )
+        except Exception as exc:
+            raise HTTPException(409, "این دور اولتیماتوم هم‌زمان ایجاد شده است؛ دوباره تلاش کنید.") from exc
+        return {
+            "round_id": round_id,
+            "phase": data.phase,
+            "block_code": data.block_code,
+            "role": expected["role"],
+            "opponent_condition": expected["opponent_condition"],
+            "participant_share": participant_share,
+            "opponent_share": opponent_share,
+            "started_at": timestamp,
+            "offer_model": payload.get("offer_model"),
+        }
+
+
+@app.post("/api/experiment/ultimatum/resolve")
+def resolve_ultimatum_round(data: UltimatumResolveIn):
+    """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
+        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        marker = "%s" if DATABASE_URL else "?"
+        row = connection.execute(
+            "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+            (data.round_id, data.run_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
+        record = dict(row)
+        if record["status"] == "completed":
+            saved_payload = _json_value(record["payload"])
+            return saved_payload.get("resolve_result", {})
+        if record["role"] == "proposer":
+            if data.participant_offer_to_opponent is None or data.participant_decision is not None:
+                raise HTTPException(422, "برای نقش پیشنهاددهنده باید مقدار پیشنهاد ارسال شود.")
+            opponent_share = int(data.participant_offer_to_opponent)
+            participant_share = ULTIMATUM_TOTAL_POINTS - opponent_share
+            ai_response = _sample_ai_response(opponent_share)
+            opponent_decision = ai_response["decision"]
+            accepted = opponent_decision == "accept"
+            participant_decision = None
+            payload = _json_value(record["payload"])
+            payload["decision_model"] = ai_response
+        else:
+            if data.participant_decision is None or data.participant_offer_to_opponent is not None:
+                raise HTTPException(422, "برای نقش پاسخ‌دهنده باید قبول یا رد ثبت شود.")
+            participant_share = int(record["participant_share"])
+            opponent_share = int(record["opponent_share"])
+            participant_decision = data.participant_decision
+            opponent_decision = None
+            accepted = participant_decision == "accept"
+            payload = _json_value(record["payload"])
+        points_earned = participant_share if accepted else 0
+        potential_points_lost = 0 if accepted else participant_share
+        completed_at = now()
+        responded_at = data.responded_at or completed_at
+        received_at = now()
+        reaction_time = data.reaction_time_ms
+        wait_duration = data.wait_duration_ms
+        payload.update({
+            "participant_share": participant_share,
+            "opponent_share": opponent_share,
+            "participant_decision": participant_decision,
+            "opponent_decision": opponent_decision,
+            "accepted": accepted,
+            "points_earned": points_earned,
+            "potential_points_lost": potential_points_lost,
+            "reaction_time_ms": reaction_time,
+            "wait_duration_ms": wait_duration,
+            "decision_screen_shown_at": data.decision_screen_shown_at,
+            "responded_at": responded_at,
+            "client_metadata_resolve": data.client_metadata,
+            "server_resolved_at": completed_at,
+        })
+        connection.execute(
+            "UPDATE ultimatum_trials SET status='completed',participant_share=" + marker
+            + ",opponent_share=" + marker + ",participant_decision=" + marker + ",opponent_decision=" + marker
+            + ",accepted=" + marker + ",points_earned=" + marker + ",potential_points_lost=" + marker
+            + ",reaction_time_ms=" + marker + ",wait_duration_ms=" + marker + ",decision_screen_shown_at=" + marker
+            + ",responded_at=" + marker + ",received_at=" + marker + ",completed_at=" + marker + ",payload=" + marker
+            + " WHERE round_id=" + marker + " AND status='prepared'",
+            (
+                participant_share, opponent_share, participant_decision, opponent_decision, int(accepted),
+                points_earned, potential_points_lost, reaction_time, wait_duration, data.decision_screen_shown_at,
+                responded_at, received_at, completed_at, _json_param(payload), data.round_id,
+            ),
+        )
+        connection.execute(
+            "UPDATE instrument_runs SET trial_count=trial_count+1 WHERE run_id=" + marker,
+            (data.run_id,),
+        )
+        total = connection.execute(
+            "SELECT COALESCE(SUM(points_earned),0) AS score,"
+            "COALESCE(SUM(potential_points_lost),0) AS lost "
+            "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
+            (data.run_id,),
+        ).fetchone()
+        block_total = connection.execute(
+            "SELECT COALESCE(SUM(points_earned),0) AS score,"
+            "COALESCE(SUM(potential_points_lost),0) AS lost "
+            "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed' "
+            "AND block_code=" + marker,
+            (data.run_id, record["block_code"]),
+        ).fetchone()
+        result = {
+            "round_id": data.round_id,
+            "phase": record["phase"],
+            "block_code": record["block_code"],
+            "block_order": record["block_order"],
+            "trial_in_block": record["trial_in_block"],
+            "role": record["role"],
+            "opponent_condition": record["opponent_condition"],
+            "participant_share": participant_share,
+            "opponent_share": opponent_share,
+            "participant_decision": participant_decision,
+            "opponent_decision": opponent_decision,
+            "accepted": accepted,
+            "points_earned": points_earned,
+            "potential_points_lost": potential_points_lost,
+            "total_score": int(total["score"] or 0),
+            "total_potential_lost": int(total["lost"] or 0),
+            "block_score": int(block_total["score"] or 0),
+            "block_potential_lost": int(block_total["lost"] or 0),
+            "resolved_at": completed_at,
+        }
+        payload["resolve_result"] = result
+        connection.execute(
+            "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker,
+            (_json_param(payload), data.round_id),
+        )
+        return result
+
+
 @app.post("/api/experiment/stages/complete")
 def complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
@@ -1059,6 +1474,50 @@ def complete_experiment_stage(data: StageCompleteIn):
             ).fetchone()
             if int(count_row["n"]) != len(QUESTIONNAIRE_QUESTION_CODES):
                 raise HTTPException(422, "پاسخ همهٔ سؤال‌ها هنوز در سرور ذخیره نشده است.")
+            payload_param = _json_param(data.final_payload)
+            connection.execute(
+                "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
+                + ",completed_at=" + marker + ",updated_at=" + marker
+                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+                (payload_param, timestamp, timestamp, assignment["participation_id"], data.stage_code),
+            )
+        elif data.stage_code == "ultimatum":
+            if data.final_payload is None:
+                raise HTTPException(422, "خلاصهٔ نهایی اولتیماتوم باید ارسال شود.")
+            round_rows = connection.execute(
+                "SELECT phase,block_code,block_order,trial_in_block,trial_sequence,role,opponent_condition,status "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " ORDER BY phase,block_order,trial_sequence",
+                (data.run_id,),
+            ).fetchall()
+            practice = [dict(row) for row in round_rows if row["phase"] == "practice"]
+            main = [dict(row) for row in round_rows if row["phase"] == "main"]
+            expected_practice = {
+                "practice_proposer_agent": ("proposer", "agent"),
+                "practice_responder_coworker": ("responder", "coworker"),
+            }
+            if len(practice) != 2 or any(
+                row["status"] != "completed"
+                or row["trial_in_block"] != 1
+                or row["block_code"] not in expected_practice
+                or (row["role"], row["opponent_condition"]) != expected_practice[row["block_code"]]
+                for row in practice
+            ) or {row["block_code"] for row in practice} != set(expected_practice):
+                raise HTTPException(422, "دو دور تمرینی اولتیماتوم هنوز کامل ثبت نشده‌اند.")
+            if len(main) != ULTIMATUM_MAIN_TRIALS:
+                raise HTTPException(422, "همهٔ ۲۰ دور اصلی اولتیماتوم هنوز ثبت نشده‌اند.")
+            if {row["block_order"] for row in main} != {1, 2, 3, 4}:
+                raise HTTPException(422, "ترتیب چهار بلوک اولتیماتوم کامل نیست.")
+            for block_code, expected in ULTIMATUM_BLOCKS.items():
+                block_rows = [row for row in main if row["block_code"] == block_code]
+                if (
+                    len(block_rows) != ULTIMATUM_MAIN_BLOCK_TRIALS
+                    or {row["trial_in_block"] for row in block_rows} != {1, 2, 3, 4, 5}
+                    or len({row["block_order"] for row in block_rows}) != 1
+                    or any(row["status"] != "completed" for row in block_rows)
+                    or any((row["role"], row["opponent_condition"]) != (expected["role"], expected["opponent_condition"]) for row in block_rows)
+                    or any(row["trial_sequence"] != (row["block_order"] - 1) * 5 + row["trial_in_block"] for row in block_rows)
+                ):
+                    raise HTTPException(422, "یکی از بلوک‌های اولتیماتوم ناقص یا نامعتبر است.")
             payload_param = _json_param(data.final_payload)
             connection.execute(
                 "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
@@ -1258,6 +1717,76 @@ def experiment_progress(x_admin_token: str | None = Header(default=None)):
     return [dict(row) for row in rows]
 
 
+@app.get("/api/admin/ultimatum/export.csv")
+def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
+    """Export all ultimatum attempts, including practice and superseded attempts for audit."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    query = (
+        "SELECT p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
+        "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
+        "usp.attempt_number,iv.version AS instrument_version,"
+        "u.round_id,u.phase,u.block_code,u.block_order,u.trial_in_block,u.trial_sequence,"
+        "u.role,u.opponent_condition,u.opponent_actual_type,u.status AS round_status,"
+        "u.participant_share,u.opponent_share,u.participant_decision,u.opponent_decision,u.accepted,"
+        "u.points_earned,u.potential_points_lost,u.reaction_time_ms,u.wait_duration_ms,"
+        "u.started_at,u.decision_screen_shown_at,u.responded_at,u.received_at,u.completed_at,u.payload "
+        "FROM ultimatum_trials u "
+        "JOIN instrument_runs ir ON ir.run_id=u.run_id "
+        "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+        "JOIN participants p ON p.participant_id=sp.participant_id "
+        "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+        "LEFT JOIN experiment_assignments a ON a.participant_id=p.participant_id "
+        "AND a.study_code=sp.study_code "
+        "LEFT JOIN experiment_stage_progress usp ON usp.participation_id=sp.participation_id "
+        "AND usp.stage_code='ultimatum' "
+        "WHERE sp.study_code=" + marker + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
+    )
+    with conn() as connection:
+        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
+
+    fields = [
+        "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
+        "run_completed_at", "attempt_number", "instrument_version", "round_id", "phase",
+        "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
+        "opponent_condition", "opponent_actual_type", "round_status", "participant_share",
+        "opponent_share", "participant_decision", "opponent_decision", "accepted",
+        "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
+        "started_at", "decision_screen_shown_at", "responded_at", "received_at",
+        "completed_at", "payload_json",
+    ]
+
+    def generate_csv():
+        buffer = io.StringIO(newline="")
+        buffer.write("\ufeff")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        for raw in rows:
+            item = dict(raw)
+            payload = item.pop("payload", {})
+            item["payload_json"] = (
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                if not isinstance(payload, str)
+                else payload
+            )
+            writer.writerow(item)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="barsan_ultimatum_trials.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.get("/api/admin/questionnaire/export.csv")
 def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
     """Export completed questionnaire answers in long format, one row per question response."""
@@ -1417,6 +1946,7 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
     )
 
 
+app.mount("/assets", StaticFiles(directory=os.path.join(ROOT, "app")), name="assets")
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
 
