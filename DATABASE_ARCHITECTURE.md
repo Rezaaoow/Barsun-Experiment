@@ -16,6 +16,7 @@ The existing `/lifetrade` deployment URL is retained while the new participant-f
 - `participants`: one row per participant code.
 - `study_participations`: joins a participant to the study.
 - `experiment_assignments`: one preassigned condition and a hashed, per-person invitation token for a participant in the study. The raw token is returned only when the assignment/link is created.
+- `experiment_consents`: consent version and timestamp for an affirmative response; no IP address or device fingerprint is recorded by this consent table.
 - `instruments`: registry of modules.
 - `instrument_versions`: version and settings metadata for a module.
 - `instrument_runs`: one attempt to complete a module, including status, timestamps, attempt-specific metadata and trial count.
@@ -62,7 +63,7 @@ Do not distribute the generated links until the participant-facing HTML flow has
 - `GET /api/admin/questionnaire/export.csv`: protected CSV export in long format, one row per completed questionnaire answer.
 - `GET /api/health`: checks service/database connectivity.
 
-The questionnaire landing pages, per-question UI and API storage are being connected in stages. The module UI and protocol-specific validation are intentionally being added in stages. Before production use, connect the HTML to these endpoints, implement the actual consent/transparency and questionnaire screens, define the Ultimatum round data model, and test interruption/re-entry using the production deployment.
+The common welcome and ethics/consent pages, 25-question one-item-per-page questionnaire, per-question autosave, and current DD/Life-Trade module are connected in the participant interface. The Ultimatum protocol, its result table and UI remain intentionally unimplemented pending a complete specification. Before production use, the current code still needs end-to-end testing on the actual cPanel/PostgreSQL deployment, and the Ultimatum module must be finished.
 
 ## PostgreSQL and deployment
 
