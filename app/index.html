@@ -1994,7 +1994,7 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  let mainText, detailText;
  if(role==="proposer") {
   mainText=result.accepted?"بازیکن مقابل پیشنهاد شما را قبول کرد.":"بازیکن مقابل پیشنهاد شما را رد کرد.";
-  detailText=result.accepted?"سهم شما در این دور: "+utFa(result.points_earned)+" امتیاز":"امتیازی دریافت نکردید.";
+  detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید."
  } else {
   mainText=result.accepted?"شما پیشنهاد بازیکن مقابل را قبول کردید.":"شما پیشنهاد بازیکن مقابل را رد کردید.";
   detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید.";
@@ -2008,7 +2008,7 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  let label="دور بعدی",advance;
  if(isPractice&&blockCode==="practice_proposer_agent") {label="دور تمرینی بعدی";advance=utStartPracticeResponder;}
  else if(isPractice&&blockCode==="practice_responder_coworker") {label="ادامه";advance=utRenderPracticeComplete;}
- else if(trial<5) {label="دور بعدی";advance=utStartMainTrial;}
+ else if(trial<5) {label="دور بعدی";advance=function(){utStartMainTrial(trial+1);};}
  else {label="پایان این بلوک";advance=utRenderBlockSummary;}
  utButton(actions,label,advance,"");
 }
@@ -2106,10 +2106,8 @@ async function utFinishUltimatum() {
   ultimatumState.completed=true;
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
-  utAddText(end.body,"div","ut-final-score",utFa(ultimatumState.score));
   const scoreBox=utNode("div","ut-summary-box");
-  utAddText(scoreBox,"div","ut-summary-label","امتیاز نهایی");
-  utAddText(scoreBox,"div","ut-summary-score",utFa(ultimatumState.score));
+  utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
   utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
