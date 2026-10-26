@@ -855,5 +855,14 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     assert all(row["feedback_group"] == "Frame" for row in csv_rows)
     assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
     assert all(row["final_score"] == str(final_score) for row in csv_rows)
+    headers = exported.text.lstrip("\\ufeff").splitlines()[0].split(",")
+    assert len(headers) == len(set(headers))
+    assert {
+        "normal_mean", "normal_sd", "normal_ai_self_share", "binomial_n",
+        "binomial_p", "binomial_draw", "client_metadata_json",
+        "client_metadata_resolve_json", "final_stage_payload_json", "payload_json",
+    }.issubset(set(headers))
+    assert any(row["normal_mean"] == "5.0" for row in csv_rows if row["role"] == "responder")
+    assert any(row["binomial_n"] == "10" for row in csv_rows if row["role"] == "proposer")
     assert any("offer_model" in row["payload_json"] for row in csv_rows if row["role"] == "responder")
     assert any("decision_model" in row["payload_json"] for row in csv_rows if row["role"] == "proposer")
