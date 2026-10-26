@@ -51,6 +51,21 @@ ULTIMATUM_PRACTICE_BLOCKS = {
     "practice_proposer_agent": {"role": "proposer", "opponent_condition": "agent"},
     "practice_responder_coworker": {"role": "responder", "opponent_condition": "coworker"},
 }
+ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS = frozenset({
+    "proposer_screen_shown_at",
+    "slider_first_changed_at",
+    "slider_last_changed_at",
+    "offer_submitted_at",
+    "waiting_started_at",
+    "waiting_ended_at",
+    "responder_offer_shown_at",
+    "participant_choice_at",
+})
+ULTIMATUM_POST_RESOLVE_EVENT_FIELDS = frozenset({
+    "result_screen_shown_at",
+    "next_trial_clicked_at",
+    "advance_clicked_at",
+})
 QUESTIONNAIRE_QUESTION_CODES = tuple(
     [f"B{i}" for i in range(1, 6)]
     + [f"PJ{i}" for i in range(1, 8)]
@@ -570,6 +585,13 @@ class UltimatumResolveIn(ExperimentIdentityIn):
     reaction_time_ms: float | None = Field(default=None, ge=0, le=3600000)
     wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
     client_metadata: dict[str, Any] = Field(default_factory=dict)
+    client_event_timestamps: dict[str, str] = Field(default_factory=dict)
+
+
+class UltimatumEventsIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    round_id: str = Field(min_length=1, max_length=100)
+    event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -1188,6 +1210,19 @@ def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -
         raise HTTPException(409, "شناسهٔ اجرای اولتیماتوم معتبر نیست.")
 
 
+def _validate_event_timestamps(events: dict[str, str], allowed: frozenset[str]) -> None:
+    unknown = set(events) - allowed
+    if unknown:
+        raise HTTPException(422, "نام یکی از رخدادهای زمانی اولتیماتوم مجاز نیست.")
+    for event_name, value in events.items():
+        if not value or len(value) > 80:
+            raise HTTPException(422, "زمان یکی از رخدادهای اولتیماتوم معتبر نیست.")
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, "زمان رخدادهای اولتیماتوم باید ISO 8601 باشد.") from exc
+
+
 def _sample_ai_offer_to_participant() -> tuple[int, dict[str, Any]]:
     # A discretized normal distribution on integers 0..10, centered at 5 points.
     values = list(range(ULTIMATUM_TOTAL_POINTS + 1))
@@ -1357,6 +1392,7 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
             participant_share, offer_model = _sample_ai_offer_to_participant()
             opponent_share = ULTIMATUM_TOTAL_POINTS - participant_share
             payload["offer_model"] = offer_model
+            payload["opponent_offer_generated_at"] = now()
         try:
             connection.execute(
                 "INSERT INTO ultimatum_trials(round_id,run_id,phase,block_code,block_order,trial_in_block,"
@@ -1387,6 +1423,7 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
 @app.post("/api/experiment/ultimatum/resolve")
 def resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
+    _validate_event_timestamps(data.client_event_timestamps, ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS)
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
@@ -1413,6 +1450,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             participant_decision = None
             payload = _json_value(record["payload"])
             payload["decision_model"] = ai_response
+            payload["opponent_response_generated_at"] = now()
             payload["participant_offer_to_opponent"] = opponent_share
             payload["participant_offer_to_self"] = participant_share
         else:
@@ -1448,6 +1486,9 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "client_metadata_resolve": data.client_metadata,
             "server_resolved_at": completed_at,
         })
+        existing_event_timestamps = payload.get("client_event_timestamps") or {}
+        existing_event_timestamps.update(data.client_event_timestamps)
+        payload["client_event_timestamps"] = existing_event_timestamps
         update_cursor = connection.execute(
             "UPDATE ultimatum_trials SET status='completed',participant_share=" + marker
             + ",opponent_share=" + marker + ",participant_decision=" + marker + ",opponent_decision=" + marker
@@ -1518,6 +1559,37 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             (_json_param(payload), data.round_id),
         )
         return result
+
+
+@app.post("/api/experiment/ultimatum/events")
+def record_ultimatum_events(data: UltimatumEventsIn):
+    """Append post-decision client event times to a completed, active-attempt trial."""
+    _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        _require_consent(connection, assignment["assignment_id"])
+        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        row = connection.execute(
+            "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+            (data.round_id, data.run_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
+        if row["status"] != "completed":
+            raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
+        payload = _json_value(row["payload"])
+        timestamps = payload.get("client_event_timestamps") or {}
+        # Keep first-write timestamps so retries remain idempotent and auditable.
+        for event_name, event_time in data.event_timestamps.items():
+            timestamps.setdefault(event_name, event_time)
+        payload["client_event_timestamps"] = timestamps
+        payload["client_event_server_received_at"] = now()
+        connection.execute(
+            "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker + " AND run_id=" + marker,
+            (_json_param(payload), data.round_id, data.run_id),
+        )
+    return {"round_id": data.round_id, "saved": True, "event_timestamps": timestamps}
 
 
 @app.post("/api/experiment/stages/complete")
@@ -1864,6 +1936,7 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "completed_at", "server_resolved_at", "feedback_group", "final_score",
         "final_potential_points_lost", "block_order_json", "final_stage_payload_json",
         "run_metadata_json", "client_metadata_json", "client_metadata_resolve_json",
+        "client_event_timestamps_json", "opponent_offer_generated_at", "opponent_response_generated_at",
         "opponent_model", "offer_model_json", "decision_model_json", "normal_mean",
         "normal_sd", "normal_ai_self_share", "normal_participant_share",
         "binomial_n", "binomial_p", "binomial_draw", "binomial_accept_threshold",
@@ -1906,6 +1979,11 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
             )
 
             payload = _json_value(item.pop("payload", {}))
+            item["client_event_timestamps_json"] = json.dumps(
+                payload.get("client_event_timestamps") or {}, ensure_ascii=False, separators=(",", ":")
+            )
+            item["opponent_offer_generated_at"] = payload.get("opponent_offer_generated_at")
+            item["opponent_response_generated_at"] = payload.get("opponent_response_generated_at")
             offer_model = _json_value(payload.get("offer_model"))
             decision_model = _json_value(payload.get("decision_model"))
             item["opponent_model"] = (
