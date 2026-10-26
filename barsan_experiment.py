@@ -1034,10 +1034,17 @@ def start_experiment_stage(data: StageStartIn):
             ).fetchone()
 
         run_id = str(uuid.uuid4())
+        stage_draft: dict[str, Any] = {}
+        if data.stage_code == "ultimatum":
+            # Randomize block order server-side and persist it with this attempt.
+            stage_draft["block_order"] = random.sample(
+                list(ULTIMATUM_BLOCKS.keys()), k=ULTIMATUM_MAIN_BLOCK_COUNT
+            )
         metadata = {
             "stage_code": data.stage_code,
             "condition_code": assignment["condition_code"],
             "attempt_number": attempt_number,
+            "block_order": stage_draft.get("block_order"),
         }
         if DATABASE_URL:
             connection.execute(
@@ -1054,7 +1061,7 @@ def start_experiment_stage(data: StageStartIn):
                 "draft_payload=EXCLUDED.draft_payload,started_at=EXCLUDED.started_at,completed_at=NULL,"
                 "updated_at=EXCLUDED.updated_at",
                 (assignment["participation_id"], data.stage_code, attempt_number, run_id,
-                 Jsonb({}), timestamp, timestamp),
+                 Jsonb(stage_draft), timestamp, timestamp),
             )
         else:
             connection.execute(
@@ -1071,7 +1078,7 @@ def start_experiment_stage(data: StageStartIn):
                 "draft_payload=excluded.draft_payload,started_at=excluded.started_at,completed_at=NULL,"
                 "updated_at=excluded.updated_at",
                 (assignment["participation_id"], data.stage_code, attempt_number, run_id,
-                 "{}", timestamp, timestamp),
+                 json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
             )
     return {
         "stage_code": data.stage_code,
@@ -1080,7 +1087,7 @@ def start_experiment_stage(data: StageStartIn):
         "already_completed": False,
         "run_id": run_id,
         "attempt_number": attempt_number,
-        "draft_payload": {},
+        "draft_payload": stage_draft,
         "condition_code": assignment["condition_code"],
     }
 
@@ -1236,6 +1243,63 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
         _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        marker = "%s" if DATABASE_URL else "?"
+        stage_state = connection.execute(
+            "SELECT draft_payload FROM experiment_stage_progress "
+            "WHERE participation_id=" + marker + " AND stage_code='ultimatum' "
+            "AND current_run_id=" + marker + " AND status='in_progress'",
+            (assignment["participation_id"], data.run_id),
+        ).fetchone()
+        if not stage_state:
+            raise HTTPException(409, "اجرای فعال اولتیماتوم پیدا نشد.")
+        run_draft = _json_value(stage_state["draft_payload"])
+        server_block_order = run_draft.get("block_order")
+
+        practice_rows = connection.execute(
+            "SELECT block_code,status FROM ultimatum_trials "
+            "WHERE run_id=" + marker + " AND phase='practice' "
+            "ORDER BY started_at,round_id",
+            (data.run_id,),
+        ).fetchall()
+        if data.phase == "practice":
+            if data.block_code == "practice_proposer_agent":
+                if any(row["block_code"] != data.block_code for row in practice_rows) or any(
+                    row["status"] == "completed" for row in practice_rows
+                ):
+                    raise HTTPException(409, "دور تمرینی پیشنهاددهنده قبلاً آغاز یا تکمیل شده است.")
+            else:
+                proposer = next(
+                    (row for row in practice_rows if row["block_code"] == "practice_proposer_agent"),
+                    None,
+                )
+                if not proposer or proposer["status"] != "completed" or any(
+                    row["block_code"] not in {"practice_proposer_agent", "practice_responder_coworker"}
+                    for row in practice_rows
+                ):
+                    raise HTTPException(409, "ابتدا باید دور تمرینی پیشنهاددهنده را کامل کنید.")
+        else:
+            if (
+                not isinstance(server_block_order, list)
+                or len(server_block_order) != ULTIMATUM_MAIN_BLOCK_COUNT
+                or set(server_block_order) != set(ULTIMATUM_BLOCKS)
+                or server_block_order[data.block_order - 1] != data.block_code
+            ):
+                raise HTTPException(409, "ترتیب بلوک با تخصیص ثبت‌شده در سرور مطابقت ندارد.")
+            expected_practice = set(ULTIMATUM_PRACTICE_BLOCKS)
+            if (
+                len(practice_rows) != 2
+                or {row["block_code"] for row in practice_rows} != expected_practice
+                or any(row["status"] != "completed" for row in practice_rows)
+            ):
+                raise HTTPException(409, "برای شروع بازی اصلی باید هر دو دور تمرینی تکمیل شوند.")
+            completed_main = connection.execute(
+                "SELECT COUNT(*) AS n FROM ultimatum_trials "
+                "WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
+                (data.run_id,),
+            ).fetchone()
+            if data.trial_sequence != int(completed_main["n"]) + 1:
+                raise HTTPException(409, "دورهای اصلی باید به‌ترتیب و بدون پرش اجرا شوند.")
+
         if data.phase == "main":
             same_order = connection.execute(
                 "SELECT DISTINCT block_code FROM ultimatum_trials "
