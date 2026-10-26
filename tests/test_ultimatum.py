@@ -302,7 +302,10 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     monkeypatch.setattr(main, "ADMIN_TOKEN", "test-admin-token")
     exported = client.get("/api/admin/ultimatum/export.csv", headers={"x-admin-token": "test-admin-token"})
     assert exported.status_code == 200, exported.text
-    csv_rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff"))))
+    csv_text = exported.text.lstrip("\ufeff")
+    csv_headers = next(csv.reader(io.StringIO(csv_text)))
+    assert len(csv_headers) == len(set(csv_headers)), csv_headers
+    csv_rows = list(csv.DictReader(io.StringIO(csv_text)))
     assert len(csv_rows) == 22
     assert sum(row["phase"] == "main" for row in csv_rows) == 20
     assert {row["block_code"] for row in csv_rows if row["phase"] == "main"} == set(main.ULTIMATUM_BLOCKS)
