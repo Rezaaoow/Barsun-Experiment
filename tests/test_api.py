@@ -214,7 +214,39 @@ def _create_assignment(client, monkeypatch, code="BS-0001", condition="A"):
     assert payload["created_count"] == 1
     assert payload["assignments"][0]["condition_code"] == condition
     token = parse_qs(urlparse(payload["assignments"][0]["invitation_url"]).query)["invite"][0]
+    consent = client.post(
+        "/api/experiment/consent",
+        json={"invitation_token": token, "participant_code": code, "accepted": True},
+    )
+    assert consent.status_code == 200, consent.text
     return token
+
+
+def test_identity_requires_persisted_consent(client, monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "test-admin-token")
+    response = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"assignments": [{"participant_code": "BS-CONSENT-01", "condition_code": "A"}]},
+    )
+    assert response.status_code == 200, response.text
+    invitation = response.json()["assignments"][0]["invitation_url"]
+    token = parse_qs(urlparse(invitation).query)["invite"][0]
+    identity = {"invitation_token": token, "participant_code": "BS-CONSENT-01"}
+
+    not_yet_consented = client.post("/api/experiment/identify", json=identity)
+    assert not_yet_consented.status_code == 403
+
+    rejected = client.post("/api/experiment/consent", json={**identity, "accepted": False})
+    assert rejected.status_code == 403
+    still_not_consented = client.post("/api/experiment/identify", json=identity)
+    assert still_not_consented.status_code == 403
+
+    accepted = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    assert accepted.status_code == 200, accepted.text
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    assert accepted.json()["consent_version"] == "barsan-consent-v1"
 
 
 def test_assignment_identity_and_wrong_code_rejected(client, monkeypatch):
