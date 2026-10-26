@@ -855,7 +855,7 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     assert all(row["feedback_group"] == "Frame" for row in csv_rows)
     assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
     assert all(row["final_score"] == str(final_score) for row in csv_rows)
-    headers = exported.text.lstrip("\\ufeff").splitlines()[0].split(",")
+    headers = exported.text.lstrip("\ufeff").splitlines()[0].split(",")
     assert len(headers) == len(set(headers))
     assert {
         "normal_mean", "normal_sd", "normal_ai_self_share", "binomial_n",
