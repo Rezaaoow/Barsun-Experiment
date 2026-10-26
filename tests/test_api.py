@@ -398,6 +398,51 @@ def test_questionnaire_answer_is_upserted_by_hidden_question_code(client, monkey
     assert draft_payload["answers"]["PJ1"] == "4"
 
 
+def test_admin_progress_and_questionnaire_csv(client, monkeypatch):
+    token = _create_assignment(client, monkeypatch, code="BS-PROGRESS-01", condition="B")
+    identity = {"invitation_token": token, "participant_code": "BS-PROGRESS-01"}
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire"},
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["run_id"]
+
+    answers = {}
+    for question_code in main.QUESTIONNAIRE_QUESTION_CODES:
+        response = client.post(
+            "/api/experiment/questionnaire/answer",
+            json={**identity, "run_id": run_id, "question_code": question_code,
+                  "response_value": "5", "current_question_index": 24},
+        )
+        assert response.status_code == 200, response.text
+        answers[question_code] = "5"
+    completed = client.post(
+        "/api/experiment/stages/complete",
+        json={**identity, "stage_code": "questionnaire", "run_id": run_id,
+              "final_payload": {"answers": answers}},
+    )
+    assert completed.status_code == 200, completed.text
+
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "admin-export-token")
+    headers = {"x-admin-token": "admin-export-token"}
+    progress = client.get("/api/admin/progress", headers=headers)
+    assert progress.status_code == 200, progress.text
+    participant = next(row for row in progress.json() if row["participant_code"] == "BS-PROGRESS-01")
+    assert participant["condition_code"] == "B"
+    assert participant["questionnaire_status"] == "completed"
+    assert participant["dd_lifetrade_status"] == "not_started"
+    assert participant["ultimatum_status"] == "not_started"
+
+    exported = client.get("/api/admin/questionnaire/export.csv", headers=headers)
+    assert exported.status_code == 200, exported.text
+    rows = list(csv.DictReader(io.StringIO(exported.text.lstrip("\\ufeff"))))
+    assert len(rows) == len(main.QUESTIONNAIRE_QUESTION_CODES)
+    assert {row["question_code"] for row in rows} == set(main.QUESTIONNAIRE_QUESTION_CODES)
+    assert all(row["participant_code"] == "BS-PROGRESS-01" for row in rows)
+    assert all(row["condition_code"] == "B" and row["response_value"] == "5" for row in rows)
+
+
 def test_assignment_creation_requires_admin_and_does_not_allow_reassignment(client, monkeypatch):
     denied = client.post(
         "/api/admin/assignments",
