@@ -1546,7 +1546,7 @@ async function beginParticipantFlow(){
   }else if(identity.current_stage==='dd_lifetrade'){
    await startAssignedDDStage();
   }else if(identity.current_stage==='ultimatum'){
-   workflowMessage('مرحلهٔ بعدی هنوز آماده نیست','پرسشنامه و تکلیف تصمیم‌گیری قبلی شما ثبت شده‌اند؛ بازی اولتیماتوم هنوز برای اجرا آماده نشده است. لطفاً تا آماده‌شدن این بخش، لینک را دوباره اجرا نکنید.','بازگشت');
+   await startUltimatumInstructions();
   }else{
    workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
   }
@@ -1598,7 +1598,7 @@ async function startAssignedDDStage(){
     run_id:sessionId
    });
    workflow.currentStage='ultimatum';
-   workflowMessage('تکلیف تصمیم‌گیری ثبت شد','پرسشنامه و تکلیف DD در برابر Life-Trade ثبت شده‌اند. بازی اولتیماتوم هنوز برای اجرا آماده نشده است؛ تا تکمیل این بخش لینک را برای جمع‌آوری نهایی داده توزیع نکنید.','بازگشت');
+   await startUltimatumInstructions();
   }else{
    await flushPending();
    await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
@@ -1618,4 +1618,504 @@ $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
 $('start').addEventListener('click',beginParticipantFlow);
 $('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
+</script><script>
+/* BarSan Ultimatum Game. All opponent decisions and offers are sampled on the server. */
+const utCss = [
+".ut-card{width:min(780px,100%);height:calc(100dvh - 20px);max-height:100%;min-height:0;padding:clamp(14px,2.5vw,26px);background:#fff;border:1px solid #dedede;border-radius:22px;box-shadow:0 12px 38px rgba(0,0,0,.055);display:flex;flex-direction:column;overflow:hidden;color:#171717;font-family:Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif;line-height:1.8;direction:rtl}",
+".ut-card *{box-sizing:border-box;font-family:Vazirmatn,Tahoma,'Segoe UI',Arial,sans-serif}",
+".ut-topbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;direction:rtl;margin-bottom:clamp(10px,1.8vh,18px)}",
+".ut-score{font-size:clamp(.9rem,1.8vw,1.05rem);font-weight:800;white-space:nowrap}",
+".ut-opponent{display:flex;align-items:center;gap:7px;color:#555;font-size:1.3rem}",
+".ut-opponent-label{font-size:.78rem;font-weight:650}",
+".ut-progress{flex:none;color:#777;font-size:.8rem;margin-bottom:8px;text-align:center}",
+".ut-title{flex:none;text-align:center;font-size:clamp(1.35rem,3.2vw,1.85rem);font-weight:800;line-height:1.5;margin:0 0 clamp(10px,2vh,18px);letter-spacing:-.02em}",
+".ut-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:clamp(10px,1.8vh,17px);overflow:auto}",
+".ut-copy{margin:0;text-align:center;font-size:clamp(.98rem,2vw,1.12rem);line-height:1.85;font-weight:550;color:#303030}",
+".ut-copy.small{font-size:.87rem;font-weight:450;color:#666}",
+".ut-rolebox{flex:none;border:1px solid #dedede;border-radius:14px;background:#fafafa;padding:clamp(10px,2vh,17px);text-align:center}",
+".ut-rolebox strong{display:block;font-size:clamp(1.05rem,2.2vw,1.25rem);font-weight:800;margin-bottom:3px}",
+".ut-rolebox span{display:block;font-size:.95rem;color:#555;line-height:1.7}",
+".ut-total{margin:0;text-align:center;font-size:1rem;font-weight:700}",
+".ut-question{margin:0;text-align:center;font-size:clamp(1.08rem,2.2vw,1.28rem);font-weight:750}",
+".ut-slider-wrap{position:relative;padding-top:36px;padding-inline:12px;flex:none}",
+".ut-bubble{position:absolute;top:0;left:50%;transform:translateX(-50%);min-width:36px;height:30px;display:flex;align-items:center;justify-content:center;background:#171717;color:#fff;border-radius:9px;font-weight:800;font-size:.92rem}",
+".ut-slider{display:block;width:100%;height:30px;margin:0;accent-color:#171717;direction:ltr;cursor:pointer}",
+".ut-slider::-webkit-slider-runnable-track{height:7px;border-radius:99px;background:repeating-linear-gradient(to right,#d9d9d9 0,#d9d9d9 1px,transparent 1px,transparent 10%),#eee}",
+".ut-slider::-moz-range-track{height:7px;border-radius:99px;background:#eee}",
+".ut-ticks{display:flex;justify-content:space-between;direction:ltr;color:#666;font-size:.76rem;margin-top:1px}",
+".ut-shares{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:10px}",
+".ut-share{background:#f8f8f8;border:1px solid #e6e6e6;border-radius:12px;padding:10px 8px;text-align:center;font-weight:750;font-size:clamp(.88rem,1.7vw,1rem)}",
+".ut-actions{flex:none;display:flex;align-items:stretch;justify-content:space-between;gap:10px;margin-top:auto;padding-top:8px}",
+".ut-btn{min-height:46px;flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #171717;border-radius:12px;padding:10px 16px;background:#171717;color:#fff;font-size:1rem;font-weight:750;cursor:pointer;touch-action:manipulation}",
+".ut-btn:disabled{opacity:.5;cursor:default}",
+".ut-btn.secondary{background:#fff;color:#222;border-color:#ccc}",
+".ut-btn.accept{background:#198754;border-color:#198754;color:#fff}",
+".ut-btn.reject{background:#c62828;border-color:#c62828;color:#fff}",
+".ut-result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;flex:1;min-height:0}",
+".ut-result-icon{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#f0f0f0;color:#171717;font-size:1.6rem;font-weight:900}",
+".ut-result-main{margin:0;font-size:clamp(1.35rem,3vw,1.75rem);font-weight:800;line-height:1.7}",
+".ut-result-detail{margin:0;font-size:clamp(1.02rem,2vw,1.2rem);font-weight:650;line-height:1.8}",
+".ut-result-note{margin:0;color:#666;font-size:.88rem;line-height:1.7}",
+".ut-summary-box{width:100%;max-width:540px;margin-inline:auto;border:1px solid #e5e5e5;border-radius:16px;background:#fafafa;padding:clamp(17px,3vh,28px);text-align:center}",
+".ut-summary-score{font-size:clamp(2rem,5.5vw,3.2rem);font-weight:900;line-height:1.3;direction:rtl}",
+".ut-summary-label{font-size:.9rem;color:#666;font-weight:650;margin-bottom:6px}",
+".ut-final-score{font-size:clamp(2.5rem,7vw,4rem);font-weight:900;line-height:1.15;direction:rtl}",
+".ut-error{color:#9e1f1f;background:#fff5f5;border:1px solid #f0cccc;border-radius:12px;padding:12px;text-align:center}",
+"@media(max-width:640px){.ut-card{height:calc(100dvh - 12px);padding:12px 11px;border-radius:17px}.ut-topbar{margin-bottom:8px}.ut-score{font-size:.86rem}.ut-opponent{font-size:1.15rem}.ut-opponent-label{font-size:.7rem}.ut-title{font-size:1.28rem;margin-bottom:8px}.ut-body{gap:10px}.ut-copy{font-size:.94rem;line-height:1.72}.ut-rolebox{padding:10px}.ut-rolebox strong{font-size:1.06rem}.ut-rolebox span{font-size:.86rem}.ut-total{font-size:.92rem}.ut-question{font-size:1.03rem}.ut-slider-wrap{padding-top:32px;padding-inline:8px}.ut-shares{gap:7px}.ut-share{padding:8px 4px;font-size:.82rem}.ut-btn{min-height:43px;padding:9px 8px;font-size:.9rem}.ut-result-main{font-size:1.28rem}.ut-result-detail{font-size:1rem}.ut-summary-box{padding:15px 12px}}",
+"@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}}"
+].join("\n");
+if (!document.getElementById("ut-styles")) {
+ const style=document.createElement("style");
+ style.id="ut-styles";style.textContent=utCss;document.head.appendChild(style);
+}
+
+let ultimatumState = null;
+const UT_BLOCKS = [
+ "proposer_agent",
+ "responder_agent",
+ "proposer_coworker",
+ "responder_coworker"
+];
+
+function utFa(value) {
+ return String(value).replace(/[0-9]/g, function(d){return "۰۱۲۳۴۵۶۷۸۹"[Number(d)];});
+}
+function utIsFrameGroup() {
+ const c=String(workflow.conditionCode||"").trim().toUpperCase();
+ return c==="A" || c==="FRAME" || c==="FRAMING";
+}
+function utGroupName(){return utIsFrameGroup()?"Frame":"Control";}
+function utCondition(code){return String(code||"").indexOf("coworker")>=0?"coworker":"agent";}
+function utRole(code){return String(code||"").indexOf("responder")>=0?"responder":"proposer";}
+function utOpponentText(condition) {
+ return condition==="coworker"
+  ? "بازیکن مقابل شما یکی از همکاران شما در همین سالن است."
+  : "بازیکن مقابل شما هوش‌مصنوعی بارسان است.";
+}
+function utMetadata() {
+ return {
+  user_agent:navigator.userAgent,
+  language:navigator.language||null,
+  screen_width:screen.width,
+  screen_height:screen.height,
+  viewport_width:window.innerWidth,
+  viewport_height:window.innerHeight,
+  device_pixel_ratio:window.devicePixelRatio||1
+ };
+}
+function utNode(tag, className, value) {
+ const el=document.createElement(tag);
+ if(className)el.className=className;
+ if(value!==undefined&&value!==null)el.textContent=String(value);
+ return el;
+}
+function utAddText(parent,tag,className,value) {
+ const el=utNode(tag,className,value);parent.appendChild(el);return el;
+}
+function utButton(parent,label,handler,kind) {
+ const b=utNode("button","ut-btn"+(kind?" "+kind:""),label);
+ b.type="button";b.addEventListener("click",handler);parent.appendChild(b);return b;
+}
+function utMakeScreen(options) {
+ show();
+ const card=utNode("section","ut-card");
+ card.dir="rtl";
+ if(options.header!==false) {
+  const top=utNode("div","ut-topbar");
+  const score=utNode("div","ut-score","جمع امتیاز شما: "+utFa(ultimatumState?ultimatumState.score:0));
+  top.appendChild(score);
+  if(options.condition) {
+   const opponent=utNode("div","ut-opponent");
+   const isCoworker=options.condition==="coworker";
+   const icon=utNode("span","ut-opponent-icon",isCoworker?"👤":"🤖");
+   icon.setAttribute("aria-hidden","true");
+   opponent.appendChild(icon);
+   const text=utNode("span","ut-opponent-label",isCoworker?"همکار":"هوش مصنوعی");
+   opponent.appendChild(text);top.appendChild(opponent);
+  }
+  card.appendChild(top);
+ }
+ if(options.progress)utAddText(card,"div","ut-progress",options.progress);
+ if(options.title)utAddText(card,"h1","ut-title",options.title);
+ const body=utNode("div","ut-body"+(options.bodyClass?" "+options.bodyClass:""));
+ card.appendChild(body);
+ stimulus.replaceChildren(card);
+ return {card:card,body:body};
+}
+function utAddRoleBox(body,role,condition) {
+ const box=utNode("div","ut-rolebox");
+ utAddText(box,"strong","",role==="proposer"?"شما پیشنهاددهنده هستید":"شما پاسخ‌دهنده هستید");
+ utAddText(box,"span","",utOpponentText(condition));
+ body.appendChild(box);
+}
+function utProgress(phase,blockOrder,trial) {
+ if(phase==="practice")return "دور تمرینی";
+ return "بلوک "+utFa(blockOrder)+" از ۴ · دور "+utFa(trial)+" از ۵";
+}
+function utWaitMs(condition) {
+ return condition==="agent"?2000:3000+randomInt(3001);
+}
+async function utPrepare(phase,blockCode,blockOrder,trial,sequence) {
+ return api("/api/experiment/ultimatum/prepare",{
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  run_id:ultimatumState.runId,
+  phase:phase,
+  block_code:blockCode,
+  block_order:blockOrder,
+  trial_in_block:trial,
+  trial_sequence:sequence,
+  client_metadata:utMetadata()
+ });
+}
+function utShowError(message,retry) {
+ const s=utMakeScreen({header:true,title:"مشکل در اجرای بازی"});
+ utAddText(s.body,"p","ut-error",message);
+ utAddText(s.body,"p","ut-copy","پاسخ این دور تا زمانی که سرور تأیید نکند، ثبت‌شده محسوب نمی‌شود.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"تلاش دوباره",retry,"");
+}
+async function startUltimatumInstructions() {
+ try {
+  show();
+  setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
+  const started=await api("/api/experiment/stages/start",{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   stage_code:"ultimatum"
+  });
+  if(started.already_completed) {
+   workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، مراحل آزمایش برای این کد کامل شده‌اند.","بازگشت");
+   return;
+  }
+  ultimatumState={
+   runId:started.run_id,
+   score:0,
+   totalPotentialLost:0,
+   practiceScore:0,
+   practiceIndex:0,
+   blockOrder:[],
+   blockIndex:0,
+   trialInBlock:1,
+   currentRound:null,
+   currentBlockCode:null,
+   currentPhase:"practice",
+   lastResult:null,
+   blockSummaries:{},
+   responseStartPerf:0,
+   decisionScreenShownAt:null,
+   waitDurationMs:0,
+   results:[]
+  };
+  utRenderWelcome();
+ } catch(error) {
+  console.error(error);
+  workflowMessage("بازی اولتیماتوم آماده نشد","شروع مرحلهٔ اولتیماتوم موفق نبود. اتصال را بررسی کنید و دوباره وارد لینک اختصاصی شوید.","بازگشت");
+ }
+}
+function utRenderWelcome() {
+ const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان"});
+ const paras=[
+  "شما در این بازی برای امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید. در حین بازی بازیکن مقابل شما ممکن است هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در همین سالن باشد که به شما اطلاع داده خواهد شد.",
+  "در هر دور ۱۰ امتیاز وجود دارد که باید بین شما و بازیکن مقابل تقسیم شود. دو نقش در بازی وجود دارد: پیشنهاددهنده و پاسخ‌دهنده.",
+  "اگر شما در نقش پیشنهاددهنده باشید، باید به بازیکن مقابل پیشنهاد بدهید که چه مقدار از امتیاز را به او بدهید و چه مقدار را برای خود نگه دارید. بازیکن مقابل می‌تواند پیشنهاد شما را قبول یا رد کند. اگر پیشنهاد قبول شود، امتیاز طبق پیشنهاد تقسیم می‌شود؛ اگر رد شود، هیچ‌کس امتیازی دریافت نمی‌کند.",
+  "اگر در نقش پاسخ‌دهنده باشید، باید منتظر پیشنهاد بازیکن مقابل بمانید. پس از دریافت پیشنهاد، می‌توانید آن را قبول یا رد کنید. در صورت قبول، امتیاز طبق پیشنهاد تقسیم می‌شود و در صورت رد، هیچ‌کس امتیازی دریافت نمی‌کند."
+ ];
+ paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
+ const note=utAddText(s.body,"p","ut-copy small","در رابط بازی، قبول با رنگ سبز و رد با رنگ قرمز نمایش داده می‌شود.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"فهمیدم، شروع کنیم",utRenderPracticeIntro,"");
+}
+function utRenderPracticeIntro() {
+ const s=utMakeScreen({header:false,title:"قبل از شروع"});
+ utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی یک دور تمرینی اجرا می‌شود تا قوانین بازی را کامل متوجه شوید. امتیازها و داده‌های این دور در امتیاز نهایی لحاظ نمی‌شوند.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"شروع کنیم",function(){utStartPracticeProposer();},"");
+}
+async function utStartPracticeProposer() {
+ try {
+  const round=await utPrepare("practice","practice_proposer_agent",0,1,0);
+  ultimatumState.currentRound=round;
+  ultimatumState.currentBlockCode="practice_proposer_agent";
+  ultimatumState.currentPhase="practice";
+  utRenderProposerOffer(true,"practice_proposer_agent",0,1,round);
+ } catch(error) {
+  console.error(error);utShowError("آماده‌سازی دور تمرینی موفق نبود.",utStartPracticeProposer);
+ }
+}
+function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
+ const condition=utCondition(blockCode);
+ const phase=isPractice?"practice":"main";
+ const s=utMakeScreen({condition:condition,progress:utProgress(phase,blockOrder,trial)});
+ utAddRoleBox(s.body,"proposer",condition);
+ utAddText(s.body,"p","ut-total","کل امتیاز این دور: ۱۰");
+ utAddText(s.body,"p","ut-question","می‌خواهید چند امتیاز به بازیکن مقابل بدهید؟");
+ const wrap=utNode("div","ut-slider-wrap");
+ const bubble=utNode("output","ut-bubble","۵");bubble.style.left="clamp(18px, 50%, calc(100% - 18px))";
+ const slider=document.createElement("input");
+ slider.type="range";slider.className="ut-slider";slider.min="0";slider.max="10";slider.step="1";slider.value="5";slider.dir="ltr";
+ slider.setAttribute("aria-label","تعداد امتیاز پیشنهادی به بازیکن مقابل");
+ const ticks=utNode("div","ut-ticks");
+ for(let i=0;i<=10;i++)utAddText(ticks,"span","",utFa(i));
+ wrap.append(bubble,slider,ticks);s.body.appendChild(wrap);
+ const shares=utNode("div","ut-shares");
+ const your=utNode("div","ut-share","سهم شما: ۵");const other=utNode("div","ut-share","سهم بازیکن مقابل: ۵");
+ shares.append(your,other);s.body.appendChild(shares);
+ function update() {
+  const toOther=Number(slider.value);
+  const mine=10-toOther;
+  bubble.textContent=utFa(toOther);
+  bubble.style.left="clamp(18px, "+(toOther*10)+"%, calc(100% - 18px))";
+  your.textContent="سهم شما: "+utFa(mine);
+  other.textContent="سهم بازیکن مقابل: "+utFa(toOther);
+ }
+ slider.addEventListener("input",update);
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"ارسال پیشنهاد",function(){
+  const offer=Number(slider.value);
+  const responseTime=Math.max(0,performance.now()-ultimatumState.responseStartPerf);
+  utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime);
+ },"");
+ ultimatumState.responseStartPerf=performance.now();
+ ultimatumState.decisionScreenShownAt=nowISO();
+}
+async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime) {
+ const condition=utCondition(blockCode);
+ const delay=utWaitMs(condition);
+ utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+ const waitStart=performance.now();
+ await new Promise(function(resolve){setTimeout(resolve,delay);});
+ const waited=Math.max(0,Math.round(performance.now()-waitStart));
+ const payload={
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  run_id:ultimatumState.runId,
+  round_id:ultimatumState.currentRound.round_id,
+  participant_offer_to_opponent:offer,
+  decision_screen_shown_at:ultimatumState.decisionScreenShownAt,
+  responded_at:nowISO(),
+  reaction_time_ms:Number(responseTime.toFixed(2)),
+  wait_duration_ms:waited,
+  client_metadata:utMetadata()
+ };
+ await utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
+}
+async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
+ try {
+  const result=await api("/api/experiment/ultimatum/resolve",payload);
+  ultimatumState.lastResult=result;
+  ultimatumState.results.push(result);
+  ultimatumState.score=result.total_score||0;
+  ultimatumState.totalPotentialLost=result.total_potential_lost||0;
+  utRenderResult(isPractice,blockCode,blockOrder,trial,result);
+ } catch(error) {
+  console.error(error);
+  utShowError("ثبت این دور موفق نشد؛ پاسخ قبلی را دوباره ارسال کنید.",function(){
+   utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
+  });
+ }
+}
+function utRenderWaiting(condition,message,progress) {
+ const s=utMakeScreen({condition:condition,progress:progress});
+ const center=utNode("div","ut-result");
+ utAddText(center,"p","ut-result-main",message);
+ utAddText(center,"p","ut-copy small","لطفاً تا نمایش مرحلهٔ بعد صبر کنید.");
+ s.body.appendChild(center);
+}
+async function utStartPracticeResponder() {
+ try {
+  const s=utMakeScreen({condition:"coworker",progress:"دور تمرینی"});
+  utAddRoleBox(s.body,"responder","coworker");
+  utAddText(s.body,"p","ut-copy","شما باید پیشنهاد بازیکن مقابل را قبول یا رد کنید.");
+  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+  utButton(actions,"آماده‌ام",async function(){
+   try {
+    const round=await utPrepare("practice","practice_responder_coworker",0,1,0);
+    ultimatumState.currentRound=round;
+    ultimatumState.currentBlockCode="practice_responder_coworker";
+    ultimatumState.currentPhase="practice";
+    await utWaitThenResponder(true,"practice_responder_coworker",0,1,round);
+   } catch(error) {
+    console.error(error);utShowError("دریافت پیشنهاد تمرینی موفق نبود.",utStartPracticeResponder);
+   }
+  },"");
+ } catch(error) {
+  console.error(error);utShowError("صفحهٔ تمرین آماده نشد.",utStartPracticeResponder);
+ }
+}
+async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) {
+ const condition=utCondition(blockCode);
+ const delay=utWaitMs(condition);
+ utRenderWaiting(condition,"لطفاً منتظر پیشنهاد بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+ const waitStart=performance.now();
+ await new Promise(function(resolve){setTimeout(resolve,delay);});
+ ultimatumState.waitDurationMs=Math.max(0,Math.round(performance.now()-waitStart));
+ utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round);
+}
+function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) {
+ const condition=utCondition(blockCode);
+ const s=utMakeScreen({condition:condition,progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
+ utAddRoleBox(s.body,"responder",condition);
+ utAddText(s.body,"p","ut-total","کل امتیاز این دور: ۱۰");
+ utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
+ const shares=utNode("div","ut-shares");
+ shares.append(
+  utNode("div","ut-share","سهمی که شما دریافت خواهید کرد: "+utFa(round.participant_share)),
+  utNode("div","ut-share","سهمی که بازیکن مقابل دریافت خواهد کرد: "+utFa(round.opponent_share))
+ );
+ s.body.appendChild(shares);
+ utAddText(s.body,"p","ut-copy small","اگر رد کنید، هیچ‌کس امتیازی دریافت نخواهد کرد.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"قبول",function(){utSubmitResponderDecision("accept",isPractice,blockCode,blockOrder,trial);},"accept");
+ utButton(actions,"رد",function(){utSubmitResponderDecision("reject",isPractice,blockCode,blockOrder,trial);},"reject");
+ ultimatumState.responseStartPerf=performance.now();
+ ultimatumState.decisionScreenShownAt=nowISO();
+}
+function utSubmitResponderDecision(decision,isPractice,blockCode,blockOrder,trial) {
+ const responseTime=Math.max(0,performance.now()-ultimatumState.responseStartPerf);
+ const payload={
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  run_id:ultimatumState.runId,
+  round_id:ultimatumState.currentRound.round_id,
+  participant_decision:decision,
+  decision_screen_shown_at:ultimatumState.decisionScreenShownAt,
+  responded_at:nowISO(),
+  reaction_time_ms:Number(responseTime.toFixed(2)),
+  wait_duration_ms:ultimatumState.waitDurationMs,
+  client_metadata:utMetadata()
+ };
+ utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
+}
+function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
+ const role=utRole(blockCode);
+ const s=utMakeScreen({condition:utCondition(blockCode),progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
+ const center=utNode("div","ut-result");
+ let mainText, detailText;
+ if(role==="proposer") {
+  mainText=result.accepted?"بازیکن مقابل پیشنهاد شما را قبول کرد.":"بازیکن مقابل پیشنهاد شما را رد کرد.";
+  detailText=result.accepted?"سهم شما در این دور: "+utFa(result.points_earned)+" امتیاز":"امتیازی دریافت نکردید.";
+ } else {
+  mainText=result.accepted?"شما پیشنهاد بازیکن مقابل را قبول کردید.":"شما پیشنهاد بازیکن مقابل را رد کردید.";
+  detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید.";
+ }
+ utAddText(center,"div","ut-result-icon",result.accepted?"✓":"×");
+ utAddText(center,"p","ut-result-main",mainText);
+ utAddText(center,"p","ut-result-detail",detailText);
+ if(isPractice)utAddText(center,"p","ut-result-note","این دور تمرینی است و امتیاز آن در نتیجهٔ نهایی حساب نمی‌شود.");
+ s.body.appendChild(center);
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ let label="دور بعدی",advance;
+ if(isPractice&&blockCode==="practice_proposer_agent") {label="دور تمرینی بعدی";advance=utStartPracticeResponder;}
+ else if(isPractice&&blockCode==="practice_responder_coworker") {label="ادامه";advance=utRenderPracticeComplete;}
+ else if(trial<5) {label="دور بعدی";advance=utStartMainTrial;}
+ else {label="پایان این بلوک";advance=utRenderBlockSummary;}
+ utButton(actions,label,advance,"");
+}
+function utRenderPracticeComplete() {
+ const s=utMakeScreen({header:false,title:"عالی!"});
+ utAddText(s.body,"p","ut-copy","حالا که دور تمرینی را پشت سر گذاشتید، بازی اصلی شروع می‌شود.");
+ utAddText(s.body,"p","ut-copy small","در بازی اصلی چهار بلوک پنج‌دوری انجام می‌دهید. ترتیب بلوک‌ها به‌صورت تصادفی تعیین می‌شود.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"شروع بازی",function(){
+  ultimatumState.blockOrder=shuffle(UT_BLOCKS.slice());
+  ultimatumState.blockIndex=0;
+  ultimatumState.score=0;
+  ultimatumState.totalPotentialLost=0;
+  ultimatumState.blockSummaries={};
+  utRenderBlockIntro();
+ },"");
+}
+function utRenderBlockIntro() {
+ const blockCode=ultimatumState.blockOrder[ultimatumState.blockIndex];
+ const blockOrder=ultimatumState.blockIndex+1;
+ ultimatumState.currentBlockCode=blockCode;
+ ultimatumState.trialInBlock=1;
+ const role=utRole(blockCode),condition=utCondition(blockCode);
+ const s=utMakeScreen({condition:condition,progress:"بلوک "+utFa(blockOrder)+" از ۴"});
+ utAddText(s.body,"p","ut-copy","در ۵ دور بعدی شما "+(role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده")+" هستید و "+(condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان":"بازیکن مقابل شما یکی از همکاران داخل سالن")+" خواهد بود.");
+ const box=utNode("div","ut-rolebox");
+ utAddText(box,"strong","",role==="proposer"?"شما پیشنهاددهنده هستید":"شما پاسخ‌دهنده هستید");
+ utAddText(box,"span","",utOpponentText(condition));
+ s.body.appendChild(box);
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"شروع",function(){utStartMainTrial(1);},"");
+}
+async function utStartMainTrial(trial) {
+ const blockCode=ultimatumState.blockOrder[ultimatumState.blockIndex];
+ const blockOrder=ultimatumState.blockIndex+1;
+ const condition=utCondition(blockCode);
+ const sequence=(blockOrder-1)*5+trial;
+ ultimatumState.trialInBlock=trial;
+ try {
+  const round=await utPrepare("main",blockCode,blockOrder,trial,sequence);
+  ultimatumState.currentRound=round;
+  ultimatumState.currentBlockCode=blockCode;
+  ultimatumState.currentPhase="main";
+  if(utRole(blockCode)==="proposer") {
+   utRenderProposerOffer(false,blockCode,blockOrder,trial,round);
+  } else {
+   await utWaitThenResponder(false,blockCode,blockOrder,trial,round);
+  }
+ } catch(error) {
+  console.error(error);utShowError("آماده‌سازی این دور موفق نبود.",function(){utStartMainTrial(trial);});
+ }
+}
+function utRenderBlockSummary() {
+ const blockCode=ultimatumState.blockOrder[ultimatumState.blockIndex];
+ const blockOrder=ultimatumState.blockIndex+1;
+ const result=ultimatumState.lastResult||{};
+ const earned=Number(result.block_score||0);
+ const lost=Number(result.block_potential_lost||0);
+ ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
+ const s=utMakeScreen({header:true,progress:"پایان بلوک "+utFa(blockOrder)+" از ۴",title:"خلاصهٔ بلوک"});
+ const box=utNode("div","ut-summary-box");
+ utAddText(box,"div","ut-summary-label","در ۵ دور قبلی");
+ utAddText(box,"div","ut-summary-score",utFa(earned)+" امتیاز");
+ utAddText(box,"p","ut-copy","به دست آوردید.");
+ if(utIsFrameGroup())utAddText(box,"p","ut-copy","و "+utFa(lost)+" امتیاز از دست دادید.");
+ s.body.appendChild(box);
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ const isLast=ultimatumState.blockIndex===3;
+ utButton(actions,isLast?"پایان بازی":"ادامه",function(){
+  if(isLast)utFinishUltimatum();
+  else {ultimatumState.blockIndex+=1;utRenderBlockIntro();}
+ },"");
+}
+async function utFinishUltimatum() {
+ const s=utMakeScreen({header:false,title:"در حال ثبت نتیجه"});
+ utAddText(s.body,"p","ut-copy","در حال ثبت نهایی امتیازها و پاسخ‌های شما…");
+ try {
+  const completed=await api("/api/experiment/stages/complete",{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   stage_code:"ultimatum",
+   run_id:ultimatumState.runId,
+   final_payload:{
+    schema_version:1,
+    condition_code:workflow.conditionCode,
+    feedback_group:utGroupName(),
+    block_order:ultimatumState.blockOrder.slice(),
+    final_score:ultimatumState.score,
+    total_potential_points_lost:ultimatumState.totalPotentialLost,
+    block_summaries:ultimatumState.blockSummaries,
+    practice_excluded_from_score:true,
+    client_completed_at:nowISO()
+   }
+  });
+  ultimatumState.completed=true;
+  const end=utMakeScreen({header:false});
+  utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
+  utAddText(end.body,"div","ut-final-score",utFa(ultimatumState.score));
+  const scoreBox=utNode("div","ut-summary-box");
+  utAddText(scoreBox,"div","ut-summary-label","امتیاز نهایی");
+  utAddText(scoreBox,"div","ut-summary-score",utFa(ultimatumState.score));
+  end.body.appendChild(scoreBox);
+  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
+  utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+ } catch(error) {
+  console.error(error);
+  utShowError("ثبت نهایی موفق نشد. داده‌های دورها در سرور نگه داشته شده‌اند؛ برای تکمیل ثبت، دوباره تلاش کنید.",utFinishUltimatum);
+ }
+}
 </script></body></html>
