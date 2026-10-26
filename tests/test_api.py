@@ -18,7 +18,7 @@ os.environ["SQLITE_PATH"] = _TEST_DB
 import pytest
 from fastapi.testclient import TestClient
 
-import main
+import barsan_experiment as main
 
 
 @pytest.fixture
