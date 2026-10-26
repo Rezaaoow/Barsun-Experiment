@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import json
 import os
@@ -8,7 +9,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -19,9 +20,16 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
-STUDY_NAME = os.getenv("STUDY_NAME", "Main behavioral study").strip() or "Main behavioral study"
+STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
+PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "https://my-experiment.ir/lifetrade").rstrip("?&")
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
+STAGE_TO_INSTRUMENT = {
+    "questionnaire": ("questionnaire", "barsan-questionnaire-v1", "Questionnaire"),
+    "dd_lifetrade": ("lifetrade", "online-mvp-0.4-randomization-visibility-fa", "DD vs Life-Trade"),
+    "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
+}
+STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
 
 # Bounded PostgreSQL connections: total possible connections are pool size times
 # the number of Passenger processes. Keep this conservative on shared hosting.
@@ -31,7 +39,7 @@ DB_POOL_TIMEOUT = max(0.5, float(os.getenv("DB_POOL_TIMEOUT", "5")))
 DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
-app = FastAPI(title="LifeTrade Research API", version="0.3.0")
+app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
 
 
 def now() -> str:
@@ -121,6 +129,26 @@ if DATABASE_URL:
                 "received_at TEXT NOT NULL, task_code TEXT, task_order INTEGER, block_name TEXT, "
                 "magnitude TEXT, trial_in_block INTEGER, stimulus_index INTEGER, choice_type TEXT, "
                 "response_time_ms DOUBLE PRECISION, payload JSONB NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_assignments ("
+                "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
+                "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
+                "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "UNIQUE(study_code, participant_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' "
+                "CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, "
+                "current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload JSONB NOT NULL DEFAULT '{}'::jsonb, "
+                "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id, stage_code))"
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
@@ -218,6 +246,26 @@ else:
                 "response_time_ms REAL, payload TEXT NOT NULL)"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_assignments ("
+                "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
+                "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
+                "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "UNIQUE(study_code, participant_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' "
+                "CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, "
+                "current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload TEXT NOT NULL DEFAULT '{}', "
+                "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id, stage_code))"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_study_participations_participant "
                 "ON study_participations(participant_id)"
             )
@@ -245,26 +293,34 @@ else:
 
 
 def _seed_registry(connection: Any) -> None:
-    """Idempotently register the study and LifeTrade instrument."""
+    """Idempotently register the study and all three planned experiment modules."""
+    instrument_rows = [
+        ("lifetrade", INSTRUMENT_NAME),
+        ("questionnaire", "BarSan questionnaire"),
+        ("ultimatum", "Ultimatum Game"),
+    ]
+    for instrument_code, instrument_name in instrument_rows:
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO instruments(instrument_code,instrument_name,created_at) VALUES(%s,%s,%s) "
+                "ON CONFLICT(instrument_code) DO NOTHING",
+                (instrument_code, instrument_name, now()),
+            )
+        else:
+            connection.execute(
+                "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
+                (instrument_code, instrument_name, now()),
+            )
     if DATABASE_URL:
         connection.execute(
             "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
             "ON CONFLICT(study_code) DO NOTHING",
             (STUDY_CODE, STUDY_NAME, now()),
         )
-        connection.execute(
-            "INSERT INTO instruments(instrument_code,instrument_name,created_at) VALUES(%s,%s,%s) "
-            "ON CONFLICT(instrument_code) DO NOTHING",
-            (INSTRUMENT_CODE, INSTRUMENT_NAME, now()),
-        )
     else:
         connection.execute(
             "INSERT OR IGNORE INTO studies(study_code,study_name,created_at) VALUES(?,?,?)",
             (STUDY_CODE, STUDY_NAME, now()),
-        )
-        connection.execute(
-            "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
-            (INSTRUMENT_CODE, INSTRUMENT_NAME, now()),
         )
 
 
@@ -299,6 +355,38 @@ class CompleteIn(BaseModel):
     session_id: str = Field(min_length=1, max_length=100)
     status: str = "completed"
     trial_count: int = Field(default=0, ge=0)
+
+StageCode = Literal["questionnaire", "dd_lifetrade", "ultimatum"]
+
+
+class AssignmentItemIn(BaseModel):
+    participant_code: str = Field(min_length=1, max_length=100)
+    condition_code: str = Field(min_length=1, max_length=64)
+
+
+class AssignmentBatchIn(BaseModel):
+    assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
+
+
+class ExperimentIdentityIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+    participant_code: str = Field(min_length=1, max_length=100)
+
+
+class StageStartIn(ExperimentIdentityIn):
+    stage_code: StageCode
+
+
+class StageDraftIn(ExperimentIdentityIn):
+    stage_code: Literal["questionnaire"] = "questionnaire"
+    run_id: str = Field(min_length=1, max_length=100)
+    draft_payload: dict[str, Any]
+
+
+class StageCompleteIn(ExperimentIdentityIn):
+    stage_code: StageCode
+    run_id: str = Field(min_length=1, max_length=100)
+    final_payload: dict[str, Any] | None = None
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -454,6 +542,384 @@ def create_session(data: SessionIn):
         "participant_code": participant_code,
         "instrument_code": INSTRUMENT_CODE,
     }
+
+
+
+def _json_value(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except (TypeError, json.JSONDecodeError):
+            return {}
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _json_param(value: dict[str, Any]) -> Any:
+    return Jsonb(value) if DATABASE_URL else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, str]:
+    """Create/reuse a participant and study participation without making a new code."""
+    participant_id = str(uuid.uuid4())
+    participation_id = str(uuid.uuid4())
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO participants(participant_id,participant_code,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(participant_code) DO NOTHING",
+            (participant_id, participant_code, now()),
+        )
+        participant = connection.execute(
+            "SELECT participant_id FROM participants WHERE participant_code=%s",
+            (participant_code,),
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO study_participations(participation_id,study_code,participant_id,joined_at) "
+            "VALUES(%s,%s,%s,%s) ON CONFLICT(study_code,participant_id) DO NOTHING",
+            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+        )
+        participation = connection.execute(
+            "SELECT participation_id FROM study_participations WHERE study_code=%s AND participant_id=%s",
+            (STUDY_CODE, participant["participant_id"]),
+        ).fetchone()
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO participants(participant_id,participant_code,created_at) VALUES(?,?,?)",
+            (participant_id, participant_code, now()),
+        )
+        participant = connection.execute(
+            "SELECT participant_id FROM participants WHERE participant_code=?",
+            (participant_code,),
+        ).fetchone()
+        connection.execute(
+            "INSERT OR IGNORE INTO study_participations(participation_id,study_code,participant_id,joined_at) "
+            "VALUES(?,?,?,?)",
+            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+        )
+        participation = connection.execute(
+            "SELECT participation_id FROM study_participations WHERE study_code=? AND participant_id=?",
+            (STUDY_CODE, participant["participant_id"]),
+        ).fetchone()
+    return participant["participant_id"], participation["participation_id"]
+
+
+def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
+    token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,"
+        "sp.participation_id,p.participant_code "
+        "FROM experiment_assignments a "
+        "JOIN participants p ON p.participant_id=a.participant_id "
+        "JOIN study_participations sp ON sp.participant_id=a.participant_id "
+        "AND sp.study_code=a.study_code "
+        "WHERE a.study_code=" + marker + " AND p.participant_code=" + marker
+        + " AND a.invitation_token_hash=" + marker + " AND a.active=1",
+        (STUDY_CODE, normalize_participant_code(participant_code), token_hash),
+    ).fetchone()
+    if not row:
+        # A generic error avoids distinguishing a bad code from a bad invitation link.
+        raise HTTPException(403, "کد شرکت‌کننده یا لینک اختصاصی معتبر نیست.")
+    return dict(row)
+
+
+def _get_stage_rows(connection: Any, participation_id: str) -> dict[str, dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    rows = connection.execute(
+        "SELECT stage_code,status,attempt_number,current_run_id,draft_payload,started_at,completed_at,updated_at "
+        "FROM experiment_stage_progress WHERE participation_id=" + marker,
+        (participation_id,),
+    ).fetchall()
+    return {row["stage_code"]: dict(row) for row in rows}
+
+
+def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str, Any]:
+    if not row:
+        return {
+            "stage_code": stage_code,
+            "status": "not_started",
+            "attempt_number": 0,
+            "current_run_id": None,
+            "draft_payload": {},
+            "started_at": None,
+            "completed_at": None,
+        }
+    state = {
+        "stage_code": stage_code,
+        "status": row["status"],
+        "attempt_number": row["attempt_number"],
+        "current_run_id": row["current_run_id"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+    }
+    # Only questionnaire drafts are meant to be restored into the interface.
+    if stage_code == "questionnaire":
+        state["draft_payload"] = _json_value(row.get("draft_payload"))
+    return state
+
+
+@app.post("/api/admin/assignments")
+def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Header(default=None)):
+    """Create fixed per-participant assignments and one-time-displayed invite links."""
+    authorize(x_admin_token)
+    created = []
+    seen_codes = set()
+    base_url = PUBLIC_EXPERIMENT_URL
+    joiner = "&" if "?" in base_url else "?"
+    with conn() as connection:
+        for item in data.assignments:
+            code = normalize_participant_code(item.participant_code)
+            condition = item.condition_code.strip().upper()
+            if not condition:
+                raise HTTPException(422, "Condition code is required")
+            if code in seen_codes:
+                raise HTTPException(422, "Each participant code may appear only once in a batch")
+            seen_codes.add(code)
+            participant_id, _participation_id = _ensure_participation(connection, code)
+            marker = "%s" if DATABASE_URL else "?"
+            existing = connection.execute(
+                "SELECT assignment_id FROM experiment_assignments "
+                "WHERE study_code=" + marker + " AND participant_id=" + marker,
+                (STUDY_CODE, participant_id),
+            ).fetchone()
+            if existing:
+                raise HTTPException(409, "An assignment already exists for one of the supplied participant codes")
+            invitation_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            values = (
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, 1, now()
+            )
+            if DATABASE_URL:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    values,
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(?,?,?,?,?,?,?)",
+                    values,
+                )
+            created.append({
+                "participant_code": code,
+                "condition_code": condition,
+                "invitation_url": base_url + joiner + "invite=" + invitation_token,
+            })
+    return {"created_count": len(created), "assignments": created}
+
+
+@app.post("/api/experiment/identify")
+def identify_experiment_participant(data: ExperimentIdentityIn):
+    """Resolve the preassigned link/code and return authoritative saved stage progress."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        rows = _get_stage_rows(connection, assignment["participation_id"])
+    states = [_public_stage_state(stage, rows.get(stage)) for stage in STAGE_ORDER]
+    current_stage = next((state["stage_code"] for state in states if state["status"] != "completed"), None)
+    return {
+        "participant_code": assignment["participant_code"],
+        "condition_code": assignment["condition_code"],
+        "current_stage": current_stage,
+        "stages": states,
+    }
+
+
+@app.post("/api/experiment/stages/start")
+def start_experiment_stage(data: StageStartIn):
+    """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        rows = _get_stage_rows(connection, assignment["participation_id"])
+        existing = rows.get(data.stage_code)
+
+        if existing and existing["status"] == "completed":
+            return {
+                "stage_code": data.stage_code,
+                "status": "completed",
+                "already_completed": True,
+                "run_id": existing["current_run_id"],
+                "attempt_number": existing["attempt_number"],
+            }
+
+        stage_index = STAGE_ORDER.index(data.stage_code)
+        if stage_index > 0:
+            previous = STAGE_ORDER[stage_index - 1]
+            previous_state = rows.get(previous)
+            if not previous_state or previous_state["status"] != "completed":
+                raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
+
+        # For the questionnaire, keep the same run and its saved draft after refresh.
+        if (
+            data.stage_code == "questionnaire"
+            and existing
+            and existing["status"] == "in_progress"
+            and existing["current_run_id"]
+        ):
+            return {
+                "stage_code": data.stage_code,
+                "status": "in_progress",
+                "resumed": True,
+                "already_completed": False,
+                "run_id": existing["current_run_id"],
+                "attempt_number": existing["attempt_number"],
+                "draft_payload": _json_value(existing.get("draft_payload")),
+                "condition_code": assignment["condition_code"],
+            }
+
+        instrument_code, version, instrument_name = STAGE_TO_INSTRUMENT[data.stage_code]
+        attempt_number = int(existing["attempt_number"]) + 1 if existing else 1
+        timestamp = now()
+        old_run_id = existing["current_run_id"] if existing else None
+
+        if old_run_id:
+            marker = "%s" if DATABASE_URL else "?"
+            connection.execute(
+                "UPDATE instrument_runs SET status='superseded',completed_at=COALESCE(completed_at,"
+                + marker + ") WHERE run_id=" + marker,
+                (timestamp, old_run_id),
+            )
+
+        settings = {"module": data.stage_code, "study_code": STUDY_CODE, "schema_version": 1}
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
+                (str(uuid.uuid4()), instrument_code, version, Jsonb(settings), timestamp),
+            )
+            instrument_version = connection.execute(
+                "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=%s AND version=%s",
+                (instrument_code, version),
+            ).fetchone()
+        else:
+            connection.execute(
+                "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (str(uuid.uuid4()), instrument_code, version, json.dumps(settings, ensure_ascii=False), timestamp),
+            )
+            instrument_version = connection.execute(
+                "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=? AND version=?",
+                (instrument_code, version),
+            ).fetchone()
+
+        run_id = str(uuid.uuid4())
+        metadata = {
+            "stage_code": data.stage_code,
+            "condition_code": assignment["condition_code"],
+            "attempt_number": attempt_number,
+        }
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
+                "VALUES(%s,%s,%s,%s,'in_progress',%s)",
+                (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
+                 timestamp, Jsonb(metadata)),
+            )
+            connection.execute(
+                "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+                "draft_payload,started_at,completed_at,updated_at) VALUES(%s,%s,'in_progress',%s,%s,%s,%s,NULL,%s) "
+                "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
+                "attempt_number=EXCLUDED.attempt_number,current_run_id=EXCLUDED.current_run_id,"
+                "draft_payload=EXCLUDED.draft_payload,started_at=EXCLUDED.started_at,completed_at=NULL,"
+                "updated_at=EXCLUDED.updated_at",
+                (assignment["participation_id"], data.stage_code, attempt_number, run_id,
+                 Jsonb({}), timestamp, timestamp),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
+                "VALUES(?,?,?,?,?,?)",
+                (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
+                 timestamp, "in_progress", json.dumps(metadata, ensure_ascii=False)),
+            )
+            connection.execute(
+                "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+                "draft_payload,started_at,completed_at,updated_at) VALUES(?,?,'in_progress',?,?,?, ?,NULL,?) "
+                "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
+                "attempt_number=excluded.attempt_number,current_run_id=excluded.current_run_id,"
+                "draft_payload=excluded.draft_payload,started_at=excluded.started_at,completed_at=NULL,"
+                "updated_at=excluded.updated_at",
+                (assignment["participation_id"], data.stage_code, attempt_number, run_id,
+                 "{}", timestamp, timestamp),
+            )
+    return {
+        "stage_code": data.stage_code,
+        "status": "in_progress",
+        "resumed": False,
+        "already_completed": False,
+        "run_id": run_id,
+        "attempt_number": attempt_number,
+        "draft_payload": {},
+        "condition_code": assignment["condition_code"],
+    }
+
+
+@app.post("/api/experiment/stages/draft")
+def save_questionnaire_draft(data: StageDraftIn):
+    """Persist questionnaire answers continuously so a refresh restores the same draft."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        marker = "%s" if DATABASE_URL else "?"
+        state = connection.execute(
+            "SELECT status,current_run_id FROM experiment_stage_progress "
+            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
+            (assignment["participation_id"], data.stage_code),
+        ).fetchone()
+        if not state or state["current_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if state["status"] == "completed":
+            raise HTTPException(409, "پرسشنامه قبلاً تکمیل شده است.")
+        connection.execute(
+            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+            (_json_param(data.draft_payload), now(), assignment["participation_id"], data.stage_code),
+        )
+    return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id}
+
+
+@app.post("/api/experiment/stages/complete")
+def complete_experiment_stage(data: StageCompleteIn):
+    """Mark a module complete only for its currently active attempt."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        marker = "%s" if DATABASE_URL else "?"
+        state = connection.execute(
+            "SELECT status,current_run_id,attempt_number,draft_payload FROM experiment_stage_progress "
+            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
+            (assignment["participation_id"], data.stage_code),
+        ).fetchone()
+        if not state:
+            raise HTTPException(409, "این مرحله هنوز شروع نشده است.")
+        if state["current_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای مرحله دیگر فعال نیست.")
+        if state["status"] == "completed":
+            return {"completed": True, "already_completed": True, "stage_code": data.stage_code}
+        timestamp = now()
+        if data.stage_code == "questionnaire":
+            if data.final_payload is None:
+                raise HTTPException(422, "پاسخ نهایی پرسشنامه باید ارسال شود.")
+            payload_param = _json_param(data.final_payload)
+            connection.execute(
+                "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
+                + ",completed_at=" + marker + ",updated_at=" + marker
+                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+                (payload_param, timestamp, timestamp, assignment["participation_id"], data.stage_code),
+            )
+        else:
+            connection.execute(
+                "UPDATE experiment_stage_progress SET status='completed',completed_at=" + marker
+                + ",updated_at=" + marker
+                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+                (timestamp, timestamp, assignment["participation_id"], data.stage_code),
+            )
+        connection.execute(
+            "UPDATE instrument_runs SET status='completed',completed_at=" + marker + " WHERE run_id=" + marker,
+            (timestamp, data.run_id),
+        )
+    return {"completed": True, "already_completed": False, "stage_code": data.stage_code}
+
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -625,13 +1091,16 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
     with conn() as connection:
         if DATABASE_URL:
             key_rows = connection.execute(
-                "SELECT DISTINCT json_key FROM lifetrade_trials "
-                "CROSS JOIN LATERAL jsonb_object_keys(payload) AS x(json_key)"
+                "SELECT DISTINCT x.json_key FROM lifetrade_trials t "
+                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+                "CROSS JOIN LATERAL jsonb_object_keys(t.payload) AS x(json_key) "
+                "WHERE ir.status <> 'superseded'"
             ).fetchall()
         else:
             key_rows = connection.execute(
                 "SELECT DISTINCT json_each.key AS json_key "
-                "FROM lifetrade_trials, json_each(lifetrade_trials.payload)"
+                "FROM lifetrade_trials t JOIN instrument_runs ir ON ir.run_id=t.run_id, "
+                "json_each(t.payload) WHERE ir.status <> 'superseded'"
             ).fetchall()
     fields = sorted(
         {row["json_key"] for row in key_rows}
@@ -661,13 +1130,13 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
             )
             if last_received_at is None:
                 query = base_query + ("%s" if DATABASE_URL else "?")
-                query += " ORDER BY t.received_at,t.client_event_id LIMIT 500"
+                query += " AND ir.status <> 'superseded' ORDER BY t.received_at,t.client_event_id LIMIT 500"
                 params = (INSTRUMENT_CODE,)
             else:
                 marker = "%s" if DATABASE_URL else "?"
                 query = base_query + marker
                 query += (
-                    " AND (t.received_at,t.client_event_id) > ("
+                    " AND ir.status <> 'superseded' AND (t.received_at,t.client_event_id) > ("
                     + marker
                     + ","
                     + marker
