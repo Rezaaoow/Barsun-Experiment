@@ -1309,13 +1309,18 @@ async function beginParticipantFlow(){
   codeError.classList.remove('hidden');return;
  }
  if(!workflow.invitationToken){
-  // Legacy access stays available for internal/pilot testing, but new study participants must use assigned links.
-  await startLegacyExperiment();
+  codeError.textContent='این نشانی لینک اختصاصی ندارد. برای شرکت در پژوهش، از لینک اختصاصی ارسال‌شده برای خودتان استفاده کنید.';
+  codeError.classList.remove('hidden');
   return;
  }
  const original=startButton.textContent;
- startButton.disabled=true;startButton.textContent='در حال بررسی کد و وضعیت مراحل…';
+ startButton.disabled=true;startButton.textContent='در حال ثبت رضایت و بررسی وضعیت مراحل…';
  try{
+  await api('/api/experiment/consent',{
+   invitation_token:workflow.invitationToken,
+   participant_code:enteredCode,
+   accepted:true
+  });
   const identity=await api('/api/experiment/identify',{
    invitation_token:workflow.invitationToken,
    participant_code:enteredCode
