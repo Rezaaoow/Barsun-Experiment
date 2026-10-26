@@ -921,7 +921,7 @@ function waitForChoice(start){
  });
 }
 async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
-async function startExperiment(){
+async function startLegacyExperiment(){
  const codeInput=$('participant-code-input');
  const codeError=$('participant-code-error');
  const startButton=$('start');
@@ -1002,5 +1002,407 @@ async function startExperiment(){
   startButton.textContent=originalButtonText;
  }
 }
-$('start').addEventListener('click',startExperiment);$('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
+
+function workflowMessage(title, paragraphs, buttonLabel='بازگشت به پایان'){
+ showPanel('finish');
+ const h=$('finish').querySelector('h1');
+ const p=$('finish').querySelector('p');
+ h.textContent=title;
+ p.textContent=paragraphs;
+ renderParticipantCode(workflow.participantCode||participantCode||'');
+ const close=$('close');
+ close.textContent=buttonLabel;
+ close.onclick=()=>{showPanel('welcome');close.onclick=()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})};};
+}
+
+function countAnswered(answers){
+ return QUESTIONNAIRE_ITEMS.reduce((n,item)=>n+(answers&&answers[item.code]!==undefined?1:0),0);
+}
+
+function showQuestionnaireIntro(pageIndex=0){
+ show();
+ const box=document.createElement('div');
+ box.className='interstitial-screen questionnaire-intro';
+ box.dir='rtl';
+ const progress=document.createElement('div');
+ progress.className='instruction-progress';
+ const label=document.createElement('div');
+ label.style.flex='1';
+ const kicker=document.createElement('div');
+ kicker.textContent='پرسشنامهٔ تجربهٔ همکاری';
+ const track=document.createElement('div');
+ track.className='progress-track';
+ const fill=document.createElement('div');
+ fill.className='progress-fill';
+ fill.style.width=((pageIndex+1)/2*100)+'%';
+ track.appendChild(fill);label.append(kicker,track);
+ const count=document.createElement('div');
+ count.className='step-count';
+ count.textContent='راهنمای '+(pageIndex+1)+' از ۲';
+ progress.append(label,count);box.appendChild(progress);
+
+ const heading=document.createElement('h2');
+ heading.className='instruction-heading';
+ heading.textContent=pageIndex===0?'معرفی پرسشنامه':'راهنمای پاسخ‌گویی';
+ box.appendChild(heading);
+
+ const content=document.createElement('div');
+ content.className='instruction-content';
+ if(pageIndex===0){
+  const paras=[
+   'راننده گرامی،',
+   'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
+   'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
+   'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
+  ];
+  for(const text of paras){const p=document.createElement('p');p.textContent=text;content.appendChild(p);}
+ }else{
+  const intro=document.createElement('p');
+  intro.textContent='برای هر عبارت در صفحه‌های بعد، فقط یک گزینه را انتخاب کنید. اگر عبارت دربارهٔ وضعیت شما صدق نمی‌کند یا نمی‌توانید پاسخ دهید، گزینهٔ «قابل‌اعمال نیست / نمی‌دانم» را انتخاب کنید.';
+  content.appendChild(intro);
+  const scale=document.createElement('div');scale.className='intro-scale';
+  const title=document.createElement('div');title.className='intro-scale-title';title.textContent='مقیاس پاسخ‌گویی';
+  const list=document.createElement('div');list.className='intro-scale-list';
+  for(const option of LIKERT_OPTIONS.slice(0,5)){
+   const item=document.createElement('div');item.className='intro-scale-item';
+   const n=document.createElement('strong');n.textContent=option.value;
+   const label=document.createElement('span');label.textContent=option.label;
+   item.append(n,label);list.appendChild(item);
+  }
+  const na=document.createElement('div');na.className='intro-scale-na';na.textContent='گزینهٔ جداگانه: قابل‌اعمال نیست / نمی‌دانم';
+  scale.append(title,list,na);content.appendChild(scale);
+  if(countAnswered(workflow.questionnaireAnswers)>0){
+   const saved=document.createElement('p');saved.className='hintline';
+   saved.textContent='پاسخ‌های قبلی شما ذخیره شده‌اند؛ می‌توانید از محل ذخیره‌شده ادامه دهید.';
+   content.appendChild(saved);
+  }
+ }
+ box.appendChild(content);
+
+ const actions=document.createElement('div');actions.className='page-actions';
+ const back=document.createElement('button');back.type='button';back.className='btn btn-secondary next-page';
+ const next=document.createElement('button');next.type='button';next.className='btn next-page';
+ if(pageIndex===0){
+  back.textContent='بازگشت به توضیحات';
+  next.textContent='ادامه';
+  back.addEventListener('click',()=>showPanel('ethics'));
+  next.addEventListener('click',()=>showQuestionnaireIntro(1));
+ }else{
+  back.textContent='قبلی';
+  next.textContent=countAnswered(workflow.questionnaireAnswers)>0?'ادامهٔ پرسشنامه':'شروع پرسشنامه';
+  back.addEventListener('click',()=>showQuestionnaireIntro(0));
+  next.addEventListener('click',()=>startQuestionnaireRun(next));
+ }
+ actions.append(back,next);box.appendChild(actions);
+ stimulus.replaceChildren(box);
+}
+
+async function startQuestionnaireRun(button){
+ if(button){button.disabled=true;button.textContent='در حال آماده‌سازی…';}
+ try{
+  const started=await api('/api/experiment/stages/start',{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   stage_code:'questionnaire'
+  });
+  workflow.stageRunId=started.run_id;
+  const serverDraft=started.draft_payload||{};
+  if(serverDraft.answers&&typeof serverDraft.answers==='object'){
+   workflow.questionnaireAnswers={...serverDraft.answers};
+   workflow.questionnaireSavedAnswers={...serverDraft.answers};
+  }
+  const savedIndex=Number.isInteger(serverDraft.current_question_index)?serverDraft.current_question_index:0;
+  workflow.questionIndex=Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,savedIndex));
+  showQuestionnaireQuestion(workflow.questionIndex);
+ }catch(error){
+  if(button){button.disabled=false;button.textContent='تلاش دوباره';}
+  const message=document.createElement('p');
+  message.className='hintline';
+  message.textContent='شروع پرسشنامه موفق نبود. اتصال را بررسی کنید و دوباره تلاش کنید.';
+  if(stimulus.firstElementChild){
+   const content=stimulus.firstElementChild.querySelector('.instruction-content');
+   if(content)content.appendChild(message);
+  }
+  console.error(error);
+ }
+}
+
+function updateQuestionnaireSelection(){
+ const current=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
+ const selected=workflow.questionnaireAnswers[current.code];
+ stimulus.querySelectorAll('[data-scale-value]').forEach(button=>{
+  button.setAttribute('aria-pressed',button.dataset.scaleValue===selected?'true':'false');
+ });
+ const next=stimulus.querySelector('[data-q-next]');
+ if(next){
+  next.disabled=!selected||workflow.questionnaireSavedAnswers[current.code]!==selected;
+  next.textContent=workflow.questionIndex===QUESTIONNAIRE_ITEMS.length-1?'ثبت پرسشنامه و ادامه':'سؤال بعد';
+ }
+}
+
+async function chooseQuestionnaireAnswer(item,index,value){
+ if(stimulus.dataset.answerSaving==='1')return;
+ stimulus.dataset.answerSaving='1';
+ workflow.questionnaireAnswers[item.code]=value;
+ const status=stimulus.querySelector('.questionnaire-save-status');
+ const next=stimulus.querySelector('[data-q-next]');
+ stimulus.querySelectorAll('[data-scale-value]').forEach(button=>{button.disabled=true;});
+ if(next)next.disabled=true;
+ if(status){status.classList.remove('error');status.textContent='در حال ذخیرهٔ پاسخ…';}
+ updateQuestionnaireSelection();
+ try{
+  await api('/api/experiment/questionnaire/answer',{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   run_id:workflow.stageRunId,
+   question_code:item.code,
+   response_value:value,
+   current_question_index:index
+  });
+  workflow.questionnaireSavedAnswers[item.code]=value;
+  workflow.questionIndex=index;
+  if(status){status.classList.remove('error');status.textContent='پاسخ ذخیره شد';}
+ }catch(error){
+  if(status){status.classList.add('error');status.textContent='ذخیرهٔ پاسخ موفق نبود. اتصال را بررسی کنید و دوباره گزینه را انتخاب کنید.';}
+  console.error(error);
+ }finally{
+  stimulus.dataset.answerSaving='0';
+  stimulus.querySelectorAll('[data-scale-value]').forEach(button=>{button.disabled=false;});
+  updateQuestionnaireSelection();
+ }
+}
+
+async function saveQuestionnairePosition(index){
+ await api('/api/experiment/stages/draft',{
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  stage_code:'questionnaire',
+  run_id:workflow.stageRunId,
+  draft_payload:{
+   answers:{...workflow.questionnaireAnswers},
+   current_question_index:index,
+   schema_version:1
+  }
+ });
+ workflow.questionIndex=index;
+}
+
+async function moveQuestionnaire(direction){
+ const item=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
+ const selected=workflow.questionnaireAnswers[item.code];
+ if(direction>0 && (!selected||workflow.questionnaireSavedAnswers[item.code]!==selected))return;
+ const target=workflow.questionIndex+direction;
+ if(target<0){
+  showQuestionnaireIntro(1);
+  return;
+ }
+ if(target>=QUESTIONNAIRE_ITEMS.length){
+  await completeQuestionnaire();
+  return;
+ }
+ const next=stimulus.querySelector('[data-q-next]');
+ const prev=stimulus.querySelector('[data-q-prev]');
+ if(next)next.disabled=true;
+ if(prev)prev.disabled=true;
+ const status=stimulus.querySelector('.questionnaire-save-status');
+ if(status){status.classList.remove('error');status.textContent='در حال ذخیرهٔ پیشرفت…';}
+ try{
+  await saveQuestionnairePosition(target);
+  showQuestionnaireQuestion(target);
+ }catch(error){
+  if(status){status.classList.add('error');status.textContent='ذخیرهٔ پیشرفت موفق نبود. اتصال را بررسی کنید و دوباره تلاش کنید.';}
+  if(prev)prev.disabled=false;
+  updateQuestionnaireSelection();
+  console.error(error);
+ }
+}
+
+function showQuestionnaireQuestion(index){
+ workflow.questionIndex=Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,index));
+ const item=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
+ show();
+ const box=document.createElement('section');box.className='questionnaire-screen';box.dir='rtl';
+ const meta=document.createElement('div');meta.className='questionnaire-meta';
+ const metaLeft=document.createElement('div');
+ const label=document.createElement('strong');label.textContent='پرسشنامهٔ تجربهٔ همکاری';
+ const track=document.createElement('div');track.className='progress-track';
+ const fill=document.createElement('div');fill.className='progress-fill';
+ fill.style.width=((workflow.questionIndex+1)/QUESTIONNAIRE_ITEMS.length*100)+'%';
+ track.appendChild(fill);metaLeft.append(label,track);
+ const count=document.createElement('div');count.textContent='سؤال '+(workflow.questionIndex+1)+' از '+QUESTIONNAIRE_ITEMS.length;
+ meta.append(metaLeft,count);box.appendChild(meta);
+
+ const heading=document.createElement('h2');heading.textContent='لطفاً عبارت زیر را با توجه به تجربهٔ خود ارزیابی کنید.';
+ box.appendChild(heading);
+ const question=document.createElement('div');question.className='questionnaire-question';
+ const statement=document.createElement('p');statement.className='questionnaire-statement';statement.textContent=item.text;
+ const scale=document.createElement('div');scale.className='questionnaire-scale';
+ for(const option of LIKERT_OPTIONS.slice(0,5)){
+  const button=document.createElement('button');button.type='button';button.className='scale-option';
+  button.dataset.scaleValue=option.value;button.setAttribute('aria-pressed',workflow.questionnaireAnswers[item.code]===option.value?'true':'false');
+  const number=document.createElement('span');number.className='scale-number';number.textContent=option.value;
+  const label=document.createElement('span');label.className='scale-label';label.textContent=option.label;
+  button.append(number,label);button.addEventListener('click',()=>chooseQuestionnaireAnswer(item,workflow.questionIndex,option.value));scale.appendChild(button);
+ }
+ const na=LIKERT_OPTIONS[5];
+ const naButton=document.createElement('button');naButton.type='button';naButton.className='scale-na';
+ naButton.dataset.scaleValue=na.value;naButton.setAttribute('aria-pressed',workflow.questionnaireAnswers[item.code]===na.value?'true':'false');
+ naButton.textContent=na.label;naButton.addEventListener('click',()=>chooseQuestionnaireAnswer(item,workflow.questionIndex,na.value));
+ const status=document.createElement('div');status.className='questionnaire-save-status';status.setAttribute('aria-live','polite');status.textContent=workflow.questionnaireSavedAnswers[item.code]===workflow.questionnaireAnswers[item.code]&&workflow.questionnaireAnswers[item.code]?'پاسخ ذخیره شده است':'برای ادامه، یک گزینه را انتخاب کنید.';
+ question.append(statement,scale,naButton,status);box.appendChild(question);
+
+ const actions=document.createElement('div');actions.className='questionnaire-actions';
+ const prev=document.createElement('button');prev.type='button';prev.className='btn btn-secondary';prev.dataset.qPrev='1';prev.textContent='سؤال قبل';
+ prev.addEventListener('click',()=>moveQuestionnaire(-1));
+ const next=document.createElement('button');next.type='button';next.className='btn';next.dataset.qNext='1';
+ next.textContent=workflow.questionIndex===QUESTIONNAIRE_ITEMS.length-1?'ثبت پرسشنامه و ادامه':'سؤال بعد';
+ next.disabled=!workflow.questionnaireAnswers[item.code]||workflow.questionnaireSavedAnswers[item.code]!==workflow.questionnaireAnswers[item.code];
+ next.addEventListener('click',()=>moveQuestionnaire(1));
+ actions.append(prev,next);box.appendChild(actions);
+ stimulus.replaceChildren(box);
+}
+
+async function completeQuestionnaire(){
+ const missing=QUESTIONNAIRE_ITEMS.findIndex(item=>!workflow.questionnaireAnswers[item.code]||workflow.questionnaireSavedAnswers[item.code]!==workflow.questionnaireAnswers[item.code]);
+ if(missing>=0){showQuestionnaireQuestion(missing);return;}
+ const next=stimulus.querySelector('[data-q-next]');
+ const prev=stimulus.querySelector('[data-q-prev]');
+ if(next){next.disabled=true;next.textContent='در حال ثبت…';}
+ if(prev)prev.disabled=true;
+ try{
+  await saveQuestionnairePosition(QUESTIONNAIRE_ITEMS.length-1);
+  await api('/api/experiment/stages/complete',{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   stage_code:'questionnaire',
+   run_id:workflow.stageRunId,
+   final_payload:{
+    schema_version:1,
+    answers:{...workflow.questionnaireAnswers},
+    question_order:QUESTIONNAIRE_ITEMS.map(question=>question.code)
+   }
+  });
+  workflow.currentStage='dd_lifetrade';
+  await startAssignedDDStage();
+ }catch(error){
+  if(next){next.disabled=false;next.textContent='تلاش دوباره برای ثبت';}
+  if(prev)prev.disabled=false;
+  const status=stimulus.querySelector('.questionnaire-save-status');
+  if(status){status.classList.add('error');status.textContent='ثبت نهایی موفق نبود. اتصال را بررسی کنید و دوباره تلاش کنید.';}
+  console.error(error);
+ }
+}
+
+async function beginParticipantFlow(){
+ const codeInput=$('participant-code-input');
+ const codeError=$('participant-code-error');
+ const startButton=$('start');
+ const enteredCode=codeInput.value.trim();
+ codeError.classList.add('hidden');
+ if(!enteredCode){
+  codeError.textContent='لطفاً کد شرکت‌کننده را وارد کنید.';
+  codeError.classList.remove('hidden');codeInput.focus();return;
+ }
+ if(!$('consent-checkbox').checked){
+  codeError.textContent='برای ادامه، لطفاً موافقت خود با شرکت در پژوهش را ثبت کنید.';
+  codeError.classList.remove('hidden');return;
+ }
+ if(!workflow.invitationToken){
+  // Legacy access stays available for internal/pilot testing, but new study participants must use assigned links.
+  await startLegacyExperiment();
+  return;
+ }
+ const original=startButton.textContent;
+ startButton.disabled=true;startButton.textContent='در حال بررسی کد و وضعیت مراحل…';
+ try{
+  const identity=await api('/api/experiment/identify',{
+   invitation_token:workflow.invitationToken,
+   participant_code:enteredCode
+  });
+  workflow.participantCode=identity.participant_code;
+  workflow.conditionCode=identity.condition_code;
+  workflow.currentStage=identity.current_stage;
+  const stages=identity.stages||[];
+  const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
+  workflow.questionnaireStageState=qstate||null;
+  workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
+  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+  workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
+  if(identity.current_stage==='questionnaire'){
+   showQuestionnaireIntro(0);
+  }else if(identity.current_stage==='dd_lifetrade'){
+   await startAssignedDDStage();
+  }else if(identity.current_stage==='ultimatum'){
+   workflowMessage('مرحلهٔ بعدی هنوز آماده نیست','پرسشنامه و تکلیف تصمیم‌گیری قبلی شما ثبت شده‌اند؛ بازی اولتیماتوم هنوز برای اجرا آماده نشده است. لطفاً تا آماده‌شدن این بخش، لینک را دوباره اجرا نکنید.','بازگشت');
+  }else{
+   workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+  }
+ }catch(error){
+  console.error(error);
+  codeError.textContent='کد شرکت‌کننده یا لینک اختصاصی معتبر نیست، یا اتصال به سرور برقرار نشد. کد و لینک دریافت‌شده را بررسی کنید.';
+  codeError.classList.remove('hidden');
+ }finally{
+  startButton.disabled=false;startButton.textContent=original;
+ }
+}
+
+async function startAssignedDDStage(){
+ const started=await api('/api/experiment/stages/start',{
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  stage_code:'dd_lifetrade'
+ });
+ workflow.stagedRunId=started.run_id;
+ sessionId=started.run_id;
+ participantCode=workflow.participantCode;
+ participant={participant:participantCode,session:sessionId,date:nowISO()};
+ rows=[];trialCount=0;stopped=false;
+ try{
+  try{await recoverOrphanedPendingQueues()}catch(error){error.pendingRecovery=true;throw error}
+  show();
+  if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});
+  const taskOrder=shuffle(['LT','KT']);
+  for(let i=0;i<taskOrder.length;i++){
+   if(stopped)break;
+   await runTask(taskOrder[i],i+1);
+   if(stopped)break;
+   if(i===0){
+    showRest();setStatus('استراحت · برای ادامه دکمهٔ ادامه را بزنید');
+    await spaceToContinue();await wait(1500);
+   }
+  }
+  if(!stopped){
+   const unsent=await flushPending();
+   await api('/api/complete',{session_id:sessionId,status:unsent?'error':'completed',trial_count:trialCount});
+   if(unsent){
+    workflowMessage('ارسال پاسخ‌ها کامل نشد','تعدادی از پاسخ‌ها هنوز به سرور نرسیده‌اند؛ به همین دلیل این مرحله تکمیل‌شده علامت نخورد. اتصال را بررسی کنید و با تیم پژوهش هماهنگ کنید.','بازگشت');
+    return;
+   }
+   await api('/api/experiment/stages/complete',{
+    invitation_token:workflow.invitationToken,
+    participant_code:workflow.participantCode,
+    stage_code:'dd_lifetrade',
+    run_id:sessionId
+   });
+   workflow.currentStage='ultimatum';
+   workflowMessage('تکلیف تصمیم‌گیری ثبت شد','پرسشنامه و تکلیف DD در برابر Life-Trade ثبت شده‌اند. بازی اولتیماتوم هنوز برای اجرا آماده نشده است؛ تا تکمیل این بخش لینک را برای جمع‌آوری نهایی داده توزیع نکنید.','بازگشت');
+  }else{
+   await flushPending();
+   await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
+   workflowMessage('تکلیف تصمیم‌گیری متوقف شد','این مرحله کامل نشده است. با ورود دوباره از لینک اختصاصی، این مرحله از ابتدا اجرا می‌شود و مراحل تکمیل‌شدهٔ قبلی تکرار نمی‌شوند.','بازگشت');
+  }
+ }catch(error){
+  console.error(error);
+  if(sessionId){
+   await flushPending().catch(()=>{});
+   await api('/api/complete',{session_id:sessionId,status:'error',trial_count:trialCount}).catch(()=>{});
+  }
+  workflowMessage('مشکل در اجرای مرحله','اتصال یا ثبت پاسخ‌ها با خطا روبه‌رو شد. مرحله تکمیل‌شده ثبت نشده است؛ اتصال را بررسی کنید و در صورت تکرار خطا با تیم پژوهش هماهنگ کنید.','بازگشت');
+ }
+}
+
+$('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
+$('ethics-back').addEventListener('click',()=>showPanel('welcome'));
+$('start').addEventListener('click',beginParticipantFlow);
+$('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
 </script></body></html>
