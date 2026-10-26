@@ -1859,6 +1859,7 @@ async function utStartPracticeProposer() {
  }
 }
 function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
+ ultimatumState.currentEventTimestamps={proposer_screen_shown_at:nowISO()};
  const condition=utCondition(blockCode);
  const phase=isPractice?"practice":"main";
  const s=utMakeScreen({condition:condition,progress:utProgress(phase,blockOrder,trial)});
@@ -1884,16 +1885,24 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
   your.textContent="سهم شما: "+utFa(mine);
   other.textContent="سهم بازیکن مقابل: "+utFa(toOther);
  }
- slider.addEventListener("input",update);
+ slider.addEventListener("input",function(){
+  const changedAt=nowISO();
+  if(!ultimatumState.currentEventTimestamps.slider_first_changed_at){
+   ultimatumState.currentEventTimestamps.slider_first_changed_at=changedAt;
+  }
+  ultimatumState.currentEventTimestamps.slider_last_changed_at=changedAt;
+  update();
+ });
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"ارسال پیشنهاد",function(){
   const offer=Number(slider.value);
   const responseTime=Math.max(0,performance.now()-ultimatumState.responseStartPerf);
   const respondedAt=nowISO();
+  ultimatumState.currentEventTimestamps.offer_submitted_at=respondedAt;
   utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime,respondedAt);
  },"");
  ultimatumState.responseStartPerf=performance.now();
- ultimatumState.decisionScreenShownAt=nowISO();
+ ultimatumState.decisionScreenShownAt=ultimatumState.currentEventTimestamps.proposer_screen_shown_at;
 }
 async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime,respondedAt) {
  if(ultimatumState.proposalSubmitting)return;
@@ -1902,9 +1911,11 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
   const condition=utCondition(blockCode);
   const delay=utWaitMs(condition);
   utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+  ultimatumState.currentEventTimestamps.waiting_started_at=nowISO();
   const waitStart=performance.now();
   await new Promise(function(resolve){setTimeout(resolve,delay);});
   const waited=Math.max(0,Math.round(performance.now()-waitStart));
+  ultimatumState.currentEventTimestamps.waiting_ended_at=nowISO();
   const payload={
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
@@ -1915,13 +1926,15 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
    responded_at:respondedAt,
    reaction_time_ms:Number(responseTime.toFixed(2)),
    wait_duration_ms:waited,
-   client_metadata:utMetadata()
+   client_metadata:utMetadata(),
+   client_event_timestamps:Object.assign({},ultimatumState.currentEventTimestamps||{})
   };
   await utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
  } finally {
   ultimatumState.proposalSubmitting=false;
  }
 }
+
 async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
  if(ultimatumState.resolveInFlight)return;
  ultimatumState.resolveInFlight=true;
@@ -1979,12 +1992,16 @@ async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) 
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
  utRenderWaiting(condition,"لطفاً منتظر پیشنهاد بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+ ultimatumState.currentEventTimestamps={waiting_started_at:nowISO()};
  const waitStart=performance.now();
  await new Promise(function(resolve){setTimeout(resolve,delay);});
  ultimatumState.waitDurationMs=Math.max(0,Math.round(performance.now()-waitStart));
+ ultimatumState.currentEventTimestamps.waiting_ended_at=nowISO();
  utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round);
 }
 function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) {
+ const shownAt=nowISO();
+ ultimatumState.currentEventTimestamps.responder_offer_shown_at=shownAt;
  const condition=utCondition(blockCode);
  const s=utMakeScreen({condition:condition,progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
  utAddRoleBox(s.body,"responder",condition);
@@ -2001,10 +2018,12 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  utButton(actions,"قبول",function(){utSubmitResponderDecision("accept",isPractice,blockCode,blockOrder,trial);},"accept");
  utButton(actions,"رد",function(){utSubmitResponderDecision("reject",isPractice,blockCode,blockOrder,trial);},"reject");
  ultimatumState.responseStartPerf=performance.now();
- ultimatumState.decisionScreenShownAt=nowISO();
+ ultimatumState.decisionScreenShownAt=shownAt;
 }
 function utSubmitResponderDecision(decision,isPractice,blockCode,blockOrder,trial) {
  const responseTime=Math.max(0,performance.now()-ultimatumState.responseStartPerf);
+ const respondedAt=nowISO();
+ ultimatumState.currentEventTimestamps.participant_choice_at=respondedAt;
  const payload={
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
@@ -2012,14 +2031,26 @@ function utSubmitResponderDecision(decision,isPractice,blockCode,blockOrder,tria
   round_id:ultimatumState.currentRound.round_id,
   participant_decision:decision,
   decision_screen_shown_at:ultimatumState.decisionScreenShownAt,
-  responded_at:nowISO(),
+  responded_at:respondedAt,
   reaction_time_ms:Number(responseTime.toFixed(2)),
   wait_duration_ms:ultimatumState.waitDurationMs,
-  client_metadata:utMetadata()
+  client_metadata:utMetadata(),
+  client_event_timestamps:Object.assign({},ultimatumState.currentEventTimestamps||{})
  };
  utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
 }
+
+function utRecordRoundEvents(roundId,eventTimestamps) {
+ return api("/api/experiment/ultimatum/events",{
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  run_id:ultimatumState.runId,
+  round_id:roundId,
+  event_timestamps:eventTimestamps
+ });
+}
 function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
+ const resultScreenShownAt=nowISO();
  const role=utRole(blockCode);
  const s=utMakeScreen({condition:utCondition(blockCode),progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
  const center=utNode("div","ut-result");
@@ -2042,8 +2073,28 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  else if(isPractice&&blockCode==="practice_responder_coworker") {label="ادامه";advance=utRenderPracticeComplete;}
  else if(trial<5) {label="دور بعدی";advance=function(){utStartMainTrial(trial+1);};}
  else {label="پایان این بلوک";advance=utRenderBlockSummary;}
- utButton(actions,label,advance,"");
+ let advanceInFlight=false;
+ async function continueAfterRecordingEvents() {
+  if(advanceInFlight)return;
+  advanceInFlight=true;
+  const clickedAt=nowISO();
+  const eventTimestamps={
+   result_screen_shown_at:resultScreenShownAt,
+   advance_clicked_at:clickedAt
+  };
+  if(!isPractice&&trial<5)eventTimestamps.next_trial_clicked_at=clickedAt;
+  try {
+   await utRecordRoundEvents(result.round_id,eventTimestamps);
+   await advance();
+  } catch(error) {
+   console.error(error);
+   advanceInFlight=false;
+   utShowError("ثبت زمان رخدادهای این دور موفق نشد؛ دوباره تلاش کنید.",continueAfterRecordingEvents);
+  }
+ }
+ utButton(actions,label,continueAfterRecordingEvents,"");
 }
+
 function utRenderPracticeComplete() {
  const s=utMakeScreen({header:false,title:"عالی!"});
  utAddText(s.body,"p","ut-copy","حالا که دور تمرینی را پشت سر گذاشتید، بازی اصلی شروع می‌شود.");
