@@ -1,14 +1,14 @@
 # BarSan Experiment — workflow architecture
 
-## Scope of this phase
+## Scope and current implementation status
 
-Prepare the shared participant, assignment, stage-status and resume foundation without implementing the questionnaire items or the Ultimatum Game protocol yet. The currently deployed participant-facing HTML remains the legacy Life-Trade flow until the end-to-end new flow is connected and tested.
+The repo now contains the shared participant, assignment, consent, stage-status and resume foundation; the welcome/ethics pages, 25-item questionnaire UI and current DD/Life-Trade module are connected in code. The Ultimatum Game protocol and UI remain unimplemented pending the research specification. Deployment to cPanel has not been verified, so this document describes GitHub code, not a claim that the hosted site has already changed.
 
 ## Participant journey
 
 1. Participant opens their unique invitation URL and enters their colleague/participant code.
 2. The server validates both values together and retrieves the preassigned experimental condition. The condition is immutable during the study.
-3. Participant reads the study explanation/transparency and consent information.
+3. Participant reads the study explanation/transparency and records affirmative consent (currently version `barsan-consent-v1`).
 4. Module 1: questionnaire.
 5. Module 2: existing DD vs Life-Trade task.
 6. Module 3: Ultimatum Game.
@@ -44,7 +44,7 @@ Questionnaire draft answers are saved to `experiment_stage_progress.draft_payloa
 - Re-entry through the same link retains the original condition.
 - Assignment creation requires `X-Admin-Token`; never put this token in the browser or distribute it to participants.
 
-Do not distribute invitation URLs yet. The UI now includes the shared welcome/ethics screens and 25 one-question-per-page questionnaire flow, and can route assigned links through the questionnaire and current DD/Life-Trade module. The Ultimatum UI/protocol is still pending, so do not distribute these links for final data collection yet. The new backend foundation is prepared, but the old frontend has not yet been switched to this workflow.
+Do not distribute invitation URLs for final data collection yet. The UI now includes the shared welcome/ethics pages, records consent on the server, shows the 25-question questionnaire one item per page, and routes assigned links through the questionnaire and current DD/Life-Trade module. The Ultimatum UI/protocol remains pending and the cPanel deployment has not yet been verified.
 
 ## Backend foundation implemented
 
@@ -54,6 +54,7 @@ Do not distribute invitation URLs yet. The UI now includes the shared welcome/et
 - `questionnaire_responses`: one answer per hidden question code and questionnaire attempt, with answer replacement/upsert when a participant changes a response.
 - Identity/progress endpoint.
 - Module start endpoint with fixed order enforcement and distinct resume/restart behavior.
+- Server-enforced consent recording, versioned by `barsan-consent-v1`.
 - Questionnaire draft save, per-question answer upsert and validated stage completion endpoints.
 - Protected module-progress monitoring and questionnaire CSV export endpoints.
 - Protected assignment creation endpoint.
@@ -77,9 +78,13 @@ Body:
 
 The response includes each generated invitation URL once. Keep the response private and securely distribute each participant's own URL.
 
+`POST /api/experiment/consent`
+
+Body: `invitation_token`, `participant_code`, `accepted: true`. Stores the current consent version and acceptance timestamp; the API refuses access when consent has not been accepted.
+
 `POST /api/experiment/identify`
 
-Body: `invitation_token`, `participant_code`. Returns the server-side condition and status of questionnaire, DD/Life-Trade and Ultimatum.
+Body: `invitation_token`, `participant_code`. Returns the server-side condition and stage status, and requires recorded consent.
 
 `POST /api/experiment/stages/start`
 
