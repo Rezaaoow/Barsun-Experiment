@@ -1806,7 +1806,8 @@ async function startUltimatumInstructions() {
    totalPotentialLost:0,
    practiceScore:0,
    practiceIndex:0,
-   blockOrder:[],
+   blockOrder:Array.isArray(started.draft_payload&&started.draft_payload.block_order)
+    ?started.draft_payload.block_order.slice():[],
    blockIndex:0,
    trialInBlock:1,
    currentRound:null,
@@ -1841,7 +1842,7 @@ function utRenderWelcome() {
  utButton(actions,"فهمیدم، شروع کنیم",utRenderPracticeIntro,"");
 }
 function utRenderPracticeIntro() {
- const s=utMakeScreen({header:false,title:"قبل از شروع"});
+ const s=utMakeScreen({header:false});
  utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود تا قوانین بازی را کامل متوجه شوید. امتیازها و داده‌های این دو دور در امتیاز نهایی لحاظ نمی‌شوند.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",function(){utStartPracticeProposer();},"");
@@ -2049,7 +2050,13 @@ function utRenderPracticeComplete() {
  utAddText(s.body,"p","ut-copy small","در بازی اصلی چهار بلوک پنج‌دوری انجام می‌دهید. ترتیب بلوک‌ها به‌صورت تصادفی تعیین می‌شود.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع بازی",function(){
-  ultimatumState.blockOrder=shuffle(UT_BLOCKS.slice());
+  if(!Array.isArray(ultimatumState.blockOrder)
+     ||ultimatumState.blockOrder.length!==4
+     ||new Set(ultimatumState.blockOrder).size!==4
+     ||ultimatumState.blockOrder.some(function(code){return UT_BLOCKS.indexOf(code)<0;})){
+   utShowError("ترتیب بلوک‌ها از سرور دریافت نشد. لطفاً دوباره تلاش کنید.",utRenderPracticeComplete);
+   return;
+  }
   ultimatumState.blockIndex=0;
   ultimatumState.score=0;
   ultimatumState.totalPotentialLost=0;
@@ -2099,7 +2106,7 @@ function utRenderBlockSummary() {
  const earned=Number(result.block_score||0);
  const lost=Number(result.block_potential_lost||0);
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
- const s=utMakeScreen({header:true,progress:"پایان بلوک "+utFa(blockOrder)+" از ۴",title:"خلاصهٔ بلوک"});
+ const s=utMakeScreen({header:true,progress:"پایان بلوک "+utFa(blockOrder)+" از ۴"});
  const box=utNode("div","ut-summary-box");
  utAddText(box,"div","ut-summary-label","در ۵ دور قبلی");
  utAddText(box,"div","ut-summary-score",utFa(earned)+" امتیاز");
