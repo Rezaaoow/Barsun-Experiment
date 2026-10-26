@@ -1768,7 +1768,8 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
     query = (
         "SELECT p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
         "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
-        "usp.attempt_number,iv.version AS instrument_version,"
+        "ir.metadata AS run_metadata,usp.current_run_id AS current_stage_run_id,"
+        "usp.draft_payload AS final_stage_payload,iv.version AS instrument_version,"
         "u.round_id,u.phase,u.block_code,u.block_order,u.trial_in_block,u.trial_sequence,"
         "u.role,u.opponent_condition,u.opponent_actual_type,u.status AS round_status,"
         "u.participant_share,u.opponent_share,u.participant_decision,u.opponent_decision,u.accepted,"
@@ -1796,7 +1797,8 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "opponent_share", "participant_decision", "opponent_decision", "accepted",
         "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
         "started_at", "decision_screen_shown_at", "responded_at", "received_at",
-        "completed_at", "payload_json",
+        "completed_at", "attempt_number", "feedback_group", "final_score",
+        "final_potential_points_lost", "payload_json",
     ]
 
     def generate_csv():
@@ -1809,6 +1811,22 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         buffer.truncate(0)
         for raw in rows:
             item = dict(raw)
+            run_metadata = _json_value(item.pop("run_metadata", {}))
+            current_run_id = item.pop("current_stage_run_id", None)
+            final_stage_payload = _json_value(item.pop("final_stage_payload", {}))
+            condition_code = str(item.get("condition_code") or "").strip().upper()
+            item["attempt_number"] = _int_or_none(run_metadata.get("attempt_number"))
+            item["feedback_group"] = (
+                "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
+            )
+            if current_run_id == item.get("run_id") and item.get("run_status") == "completed":
+                item["final_score"] = final_stage_payload.get("final_score")
+                item["final_potential_points_lost"] = final_stage_payload.get(
+                    "total_potential_points_lost"
+                )
+            else:
+                item["final_score"] = None
+                item["final_potential_points_lost"] = None
             payload = item.pop("payload", {})
             item["payload_json"] = (
                 json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
