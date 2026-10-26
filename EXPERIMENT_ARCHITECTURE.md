@@ -44,16 +44,18 @@ Questionnaire draft answers are saved to `experiment_stage_progress.draft_payloa
 - Re-entry through the same link retains the original condition.
 - Assignment creation requires `X-Admin-Token`; never put this token in the browser or distribute it to participants.
 
-Do not distribute invitation URLs yet. The UI still needs to read the invite token, call the identity/progress endpoint, and route participants through all modules. The new backend foundation is prepared, but the old frontend has not yet been switched to this workflow.
+Do not distribute invitation URLs yet. The UI now includes the shared welcome/ethics screens and 25 one-question-per-page questionnaire flow, and can route assigned links through the questionnaire and current DD/Life-Trade module. The Ultimatum UI/protocol is still pending, so do not distribute these links for final data collection yet. The new backend foundation is prepared, but the old frontend has not yet been switched to this workflow.
 
 ## Backend foundation implemented
 
 - Three instrument registry entries: `questionnaire`, `lifetrade`, `ultimatum`.
 - `experiment_assignments`: immutable participant-to-condition mapping plus hashed token.
 - `experiment_stage_progress`: current module status, attempt number, active run ID and questionnaire draft.
+- `questionnaire_responses`: one answer per hidden question code and questionnaire attempt, with answer replacement/upsert when a participant changes a response.
 - Identity/progress endpoint.
 - Module start endpoint with fixed order enforcement and distinct resume/restart behavior.
-- Questionnaire draft save and stage completion endpoints.
+- Questionnaire draft save, per-question answer upsert and validated stage completion endpoints.
+- Protected module-progress monitoring and questionnaire CSV export endpoints.
 - Protected assignment creation endpoint.
 - Primary Life-Trade CSV export excludes runs marked `superseded`.
 
