@@ -105,6 +105,19 @@ def create_active_ultimatum(client, monkeypatch, participant_code="UT-TEST-01", 
     return identity, started.json()["run_id"]
 
 
+def persisted_block_order(run_id):
+    with main.conn() as connection:
+        row = connection.execute(
+            "SELECT metadata FROM instrument_runs WHERE run_id=?",
+            (run_id,),
+        ).fetchone()
+    assert row is not None
+    metadata = row["metadata"]
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    return metadata["block_order"]
+
+
 def prepare_round(client, identity, run_id, *, phase, block_code, block_order, trial, sequence):
     response = client.post(
         "/api/experiment/ultimatum/prepare",
@@ -212,12 +225,7 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     assert incomplete.status_code == 422, incomplete.text
 
     # Every participant completes all four block types; only the order differs.
-    block_order = [
-        "responder_agent",
-        "proposer_coworker",
-        "proposer_agent",
-        "responder_coworker",
-    ]
+    block_order = persisted_block_order(run_id)
     final_results = []
     for order, block_code in enumerate(block_order, start=1):
         for trial in range(1, 6):
@@ -315,17 +323,33 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
 
 def test_ultimatum_rejects_wrong_block_order_and_old_attempt(client, monkeypatch):
     identity, run_id = create_active_ultimatum(client, monkeypatch, participant_code="UT-TEST-02")
+
+    # Main trials are not allowed until both practice rounds have been completed.
+    practice_offer = prepare_round(
+        client, identity, run_id, phase="practice", block_code="practice_proposer_agent",
+        block_order=0, trial=1, sequence=0,
+    )
+    resolve_proposer(client, identity, run_id, practice_offer["round_id"], 4)
+    practice_response = prepare_round(
+        client, identity, run_id, phase="practice", block_code="practice_responder_coworker",
+        block_order=0, trial=1, sequence=0,
+    )
+    resolve_responder(client, identity, run_id, practice_response["round_id"], "accept")
+
+    block_order = persisted_block_order(run_id)
+    first_block_code = block_order[0]
     first = prepare_round(
-        client, identity, run_id, phase="main", block_code="proposer_agent",
+        client, identity, run_id, phase="main", block_code=first_block_code,
         block_order=1, trial=1, sequence=1,
     )
+    wrong_block_code = next(code for code in main.ULTIMATUM_BLOCKS if code != first_block_code)
     other_block_same_position = client.post(
         "/api/experiment/ultimatum/prepare",
         json={
             **identity,
             "run_id": run_id,
             "phase": "main",
-            "block_code": "responder_agent",
+            "block_code": wrong_block_code,
             "block_order": 1,
             "trial_in_block": 1,
             "trial_sequence": 1,
