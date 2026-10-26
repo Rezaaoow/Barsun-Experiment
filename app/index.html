@@ -1653,6 +1653,8 @@ const utCss = [
 ".ut-btn.reject{background:#c62828;border-color:#c62828;color:#fff}",
 ".ut-result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;flex:1;min-height:0}",
 ".ut-result-icon{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#f0f0f0;color:#171717;font-size:1.6rem;font-weight:900}",
+".ut-result-icon.accepted{background:#e4f5e9;color:#198754}",
+".ut-result-icon.rejected{background:#fde8e7;color:#c62828}",
 ".ut-result-main{margin:0;font-size:clamp(1.35rem,3vw,1.75rem);font-weight:800;line-height:1.7}",
 ".ut-result-detail{margin:0;font-size:clamp(1.02rem,2vw,1.2rem);font-weight:650;line-height:1.8}",
 ".ut-result-note{margin:0;color:#666;font-size:.88rem;line-height:1.7}",
@@ -2005,7 +2007,7 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
   mainText=result.accepted?"شما پیشنهاد بازیکن مقابل را قبول کردید.":"شما پیشنهاد بازیکن مقابل را رد کردید.";
   detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید.";
  }
- utAddText(center,"div","ut-result-icon",result.accepted?"✓":"×");
+ utAddText(center,"div","ut-result-icon "+(result.accepted?"accepted":"rejected"),result.accepted?"✓":"×");
  utAddText(center,"p","ut-result-main",mainText);
  utAddText(center,"p","ut-result-detail",detailText);
  if(isPractice)utAddText(center,"p","ut-result-note","این دور تمرینی است و امتیاز آن در نتیجهٔ نهایی حساب نمی‌شود.");
