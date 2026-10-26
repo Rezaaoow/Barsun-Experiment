@@ -2,7 +2,7 @@
 
 ## Scope and current implementation status
 
-The repo now contains the shared participant, assignment, consent, stage-status and resume foundation; the welcome/ethics pages, 25-item questionnaire UI and current DD/Life-Trade module are connected in code. The Ultimatum Game protocol and UI remain unimplemented pending the research specification. Deployment to cPanel has not been verified, so this document describes GitHub code, not a claim that the hosted site has already changed.
+The repo contains the shared participant, assignment, consent and stage-resume foundation; the welcome/ethics pages, 25-item questionnaire, DD/Life-Trade task, and an initial Ultimatum UI/API/data model are implemented in GitHub. The AI response parameters remain provisional, and the code has not been deployed to or end-to-end tested on cPanel. This document describes the repository state, not the hosted site.
 
 ## Participant journey
 
@@ -44,7 +44,7 @@ Questionnaire draft answers are saved to `experiment_stage_progress.draft_payloa
 - Re-entry through the same link retains the original condition.
 - Assignment creation requires `X-Admin-Token`; never put this token in the browser or distribute it to participants.
 
-Do not distribute invitation URLs for final data collection yet. The UI now includes the shared welcome/ethics pages, records consent on the server, shows the 25-question questionnaire one item per page, and routes assigned links through the questionnaire and current DD/Life-Trade module. The Ultimatum UI/protocol remains pending and the cPanel deployment has not yet been verified.
+Do not distribute invitation URLs for final data collection yet. The UI includes the welcome/ethics pages, one-question-per-page questionnaire, DD/Life-Trade task and initial Ultimatum flow. Its cPanel deployment and full hosted database path have not been verified; the AI decision model still needs researcher confirmation.
 
 ## Backend foundation implemented
 
@@ -57,6 +57,7 @@ Do not distribute invitation URLs for final data collection yet. The UI now incl
 - Server-enforced consent recording, versioned by `barsan-consent-v1`.
 - Questionnaire draft save, per-question answer upsert and validated stage completion endpoints.
 - Protected module-progress monitoring and questionnaire CSV export endpoints.
+- Ultimatum table `ultimatum_trials`, server-side offer/decision generation, scoring, attempt-level audit metadata and protected trial CSV export.
 - Protected assignment creation endpoint.
 - Primary Life-Trade CSV export excludes runs marked `superseded`.
 
@@ -94,16 +95,35 @@ Body: `invitation_token`, `participant_code`, `stage_code`. Enforces order. An i
 
 Body: `invitation_token`, `participant_code`, `run_id`, `draft_payload`. Saves an in-progress questionnaire draft only for the active questionnaire run.
 
+`POST /api/experiment/ultimatum/prepare`
+
+Body: `invitation_token`, `participant_code`, `run_id`, `phase`, `block_code`, `block_order`, `trial_in_block`, `trial_sequence`. Creates or resumes a prepared trial row and returns the server-generated opponent offer when the participant is in the responder role.
+
+`POST /api/experiment/ultimatum/resolve`
+
+Body: invitation/code/run/round IDs, either the participant's offer to the opponent (proposer role) or `accept`/`reject` (responder role), plus timing and client metadata. The server resolves the opponent decision for proposer trials and persists points earned/lost and timing.
+
+`GET /api/admin/ultimatum/export.csv`
+
+Protected by `X-Admin-Token`. Exports each Ultimatum trial, practice rows, attempt metadata, timing fields and model/debug payload for analysis and audit.
+
 `POST /api/experiment/stages/complete`
 
-Body: `invitation_token`, `participant_code`, `stage_code`, `run_id`; questionnaire also requires `final_payload`. Rejects completion from stale/superseded run IDs.
+Body: `invitation_token`, `participant_code`, `stage_code`, `run_id`; questionnaire also requires `final_payload`, Ultimatum requires the final score, block order and potential-points-lost total. Rejects completion from stale/superseded run IDs and checks all 20 main trials are stored.
+
+## Ultimatum implementation assumptions (not yet approved for live collection)
+
+- Four main blocks: proposer/agent, responder/agent, proposer/coworker, responder/coworker. Every participant completes all four blocks, five trials per block, with shuffled block order (20 main trials total).
+- The UI currently conducts two separate practice trials, one per role, and excludes them from scoring. The brief initially says one practice round but later describes a practice flow for both roles; confirm this before final lock.
+- Condition codes `A` and `FRAME`/`FRAMING` are currently treated as Frame, with other values shown as Control. Confirm `A=Frame`, `B=Control` before use.
+- The AI proposer uses a discrete normal distribution over integer self-shares 0–10, mean 5 and SD 2. The AI responder currently uses a provisional binomial model (`n=10`, `p=offered share to AI/10`, accept when the draw is at least 5). This is an operational placeholder, not a validated decision rule; obtain the investigator's final parameters.
+- In coworker blocks the interface displays a coworker opponent, while the actual choices are still generated by the computer. This is experimental deception and needs appropriate ethics approval and a planned debrief consistent with the approved protocol.
 
 ## Pre-launch checklist
 
-- Connect the invitation landing screen to the new APIs.
 - Finalize explanation/transparency and consent text.
-- Finalize questionnaire items, answer types, required fields, autosave behavior and completion condition.
-- Preserve current Life-Trade task logic while moving it into module 2.
-- Specify Ultimatum roles, rounds, condition difference, opponent behavior, scoring and restart behavior.
-- Add module-specific response tables and exports where appropriate.
-- Test refresh at every stage, browser close/reopen, dropped network, duplicate submission, wrong code/link combination, fixed condition, and complete-vs-incomplete stage routing on the hosted PostgreSQL database.
+- Confirm group mapping and whether the practice phase needs one or two trials.
+- Confirm AI responder probability rule, binomial parameters and thresholds, and normal distribution mean/SD/truncation.
+- Ensure the opponent-display manipulation and debrief are covered by the approved ethics protocol.
+- Test refresh at every stage, browser close/reopen, dropped network, duplicate submission, wrong code/link combination, fixed condition, all 22 Ultimatum rows, and complete-vs-incomplete stage routing on the hosted PostgreSQL database.
+- Deploy only after automated tests, a pilot on the actual cPanel/PostgreSQL database, and review of data exports.
