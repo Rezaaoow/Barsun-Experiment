@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css"><title>آزمایش آنلاین لایف‌ترید</title>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css"><title>آزمایش بارسان | سامانهٔ پژوهشی</title>
 <style>
 :root{
   color-scheme:light;
@@ -387,17 +387,122 @@ button{-webkit-tap-highlight-color:transparent}
  .instruction-example-page .example-choice strong{font-size:.78rem;}
 }
 
+
+/* BarSan shared workflow and questionnaire UI */
+.brand-mark{display:flex;align-items:center;justify-content:center;width:50px;height:50px;margin:0 auto 12px;border-radius:16px;background:#171717;color:#fff;font-size:1.4rem;font-weight:850;letter-spacing:-.04em;}
+.eyebrow{margin:0 auto 8px!important;text-align:center!important;color:#666!important;font-size:.84rem!important;font-weight:750!important;letter-spacing:.01em;}
+.welcome-panel,.ethics-panel{text-align:center;}
+.welcome-panel h1,.ethics-panel h1{text-align:center;}
+.welcome-panel>p,.ethics-panel>p{text-align:center;max-width:58ch;margin-inline:auto;}
+.welcome-steps{display:grid;gap:9px;width:100%;margin:20px 0 16px;text-align:right;}
+.welcome-step{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e4e4e4;border-radius:13px;background:#fafafa;}
+.welcome-step>span{display:flex;align-items:center;justify-content:center;flex:0 0 32px;height:32px;border-radius:10px;background:#ededed;color:#222;font-size:.9rem;font-weight:800;}
+.welcome-step strong,.welcome-step small{display:block;}
+.welcome-step strong{font-size:.96rem;font-weight:750;}
+.welcome-step small{font-size:.84rem;color:#666;margin-top:2px;}
+.welcome-panel .welcome-note{font-size:.91rem!important;color:#626262!important;font-weight:500!important;}
+.ethics-panel .participant-code-field{text-align:right;}
+.consent-row{display:flex;align-items:flex-start;gap:10px;text-align:right;width:100%;margin:18px 0;padding:13px 14px;border:1px solid #dedede;border-radius:12px;background:#fafafa;font-size:.94rem;line-height:1.8;cursor:pointer;}
+.consent-row input{flex:0 0 18px;width:18px;height:18px;margin-top:5px;accent-color:#171717;}
+.ethics-panel #start,.ethics-panel #ethics-back{width:100%;margin-top:8px;}
+.btn-secondary{background:#fff;color:#222;border-color:#ccc;}
+.btn-secondary:hover{background:#f3f3f3;}
+.questionnaire-intro .instruction-content{overflow-y:auto;justify-content:flex-start;text-align:right;align-items:stretch;padding:2px 1px;}
+.questionnaire-intro .instruction-content p{text-align:right;font-size:clamp(.94rem,1.8vw,1.04rem);font-weight:500;line-height:1.9;}
+.questionnaire-intro .instruction-heading{text-align:right;}
+.questionnaire-intro .intro-scale{width:100%;border:1px solid #e0e0e0;border-radius:14px;padding:14px;background:#fafafa;}
+.questionnaire-intro .intro-scale-title{font-size:.93rem;font-weight:750;text-align:right;margin-bottom:10px;}
+.intro-scale-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;}
+.intro-scale-item{min-width:0;border:1px solid #e1e1e1;border-radius:10px;padding:9px 4px;background:#fff;text-align:center;}
+.intro-scale-item strong{display:block;font-size:1rem;line-height:1.5;}
+.intro-scale-item span{display:block;margin-top:5px;font-size:.72rem;line-height:1.55;color:#555;}
+.intro-scale-na{margin-top:8px;padding:9px 10px;border:1px dashed #ccc;border-radius:10px;background:#fff;font-size:.82rem;color:#444;text-align:center;}
+.questionnaire-screen{width:min(760px,100%);height:min(680px,calc(100dvh - 36px));max-height:100%;min-height:0;padding:clamp(20px,3.5vw,36px);background:#fff;border:1px solid #dedede;border-radius:22px;box-shadow:0 14px 42px rgba(0,0,0,.055);display:flex;flex-direction:column;overflow:hidden;}
+.questionnaire-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;color:#666;font-size:.83rem;}
+.questionnaire-meta strong{color:#171717;font-weight:750;white-space:nowrap;}
+.questionnaire-screen .progress-track{margin-top:7px;}
+.questionnaire-screen h2{font-size:clamp(1.2rem,2.8vw,1.55rem);line-height:1.65;margin:0 0 22px;text-align:right;font-weight:800;}
+.questionnaire-question{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;overflow-y:auto;}
+.questionnaire-statement{font-size:clamp(1.05rem,2.1vw,1.24rem);font-weight:650;text-align:right;line-height:2;margin:0 0 24px;}
+.questionnaire-scale{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;direction:rtl;}
+.scale-option{min-width:0;min-height:105px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding:12px 5px;border:1.5px solid #dedede;border-radius:14px;background:#fff;color:#171717;cursor:pointer;text-align:center;transition:border-color .12s,background .12s,box-shadow .12s;}
+.scale-option .scale-number{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:#f1f1f1;font-size:1rem;font-weight:850;}
+.scale-option .scale-label{font-size:clamp(.72rem,1.25vw,.88rem);line-height:1.6;font-weight:600;}
+.scale-option:hover{border-color:#929292;background:#fafafa;}
+.scale-option[aria-pressed="true"]{border-color:#171717;background:#f1f1f1;box-shadow:inset 0 0 0 1px #171717;}
+.scale-option[aria-pressed="true"] .scale-number{background:#171717;color:#fff;}
+.scale-option:focus-visible,.scale-na:focus-visible{outline:3px solid #888;outline-offset:3px;}
+.scale-na{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:10px;min-height:46px;padding:9px 12px;border:1px dashed #c9c9c9;border-radius:12px;background:#fafafa;color:#333;font-size:.9rem;font-weight:600;cursor:pointer;}
+.scale-na[aria-pressed="true"]{border:1.5px solid #171717;background:#efefef;box-shadow:inset 0 0 0 1px #171717;}
+.questionnaire-save-status{min-height:23px;margin-top:10px;color:#666;font-size:.82rem;text-align:right;}
+.questionnaire-save-status.error{color:#9c2525;}
+.questionnaire-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:16px;margin-top:14px;border-top:1px solid #ededed;}
+.questionnaire-actions .btn{min-width:140px;}
+.questionnaire-actions .btn:disabled{opacity:.4;}
+.questionnaire-actions .btn-secondary{background:#fff;color:#222;}
+@media(max-width:640px){
+ .welcome-panel,.ethics-panel{padding:22px 18px;}
+ .brand-mark{width:44px;height:44px;border-radius:14px;}
+ .welcome-steps{margin:15px 0 12px;gap:7px;}
+ .welcome-step{padding:10px 11px;}
+ .welcome-step small{font-size:.8rem;}
+ .ethics-panel>p{font-size:.94rem;line-height:1.85;}
+ .consent-row{font-size:.9rem;padding:11px;}
+ .questionnaire-intro .instruction-content p{font-size:.92rem;}
+ .questionnaire-intro .intro-scale{padding:9px;}
+ .intro-scale-list{gap:4px;}
+ .intro-scale-item{padding:7px 2px;}
+ .intro-scale-item span{font-size:.65rem;line-height:1.45;}
+ .questionnaire-screen{height:calc(100dvh - 20px);padding:17px 15px 13px;border-radius:18px;}
+ .questionnaire-meta{font-size:.77rem;margin-bottom:14px;}
+ .questionnaire-screen h2{font-size:1.22rem;margin-bottom:14px;}
+ .questionnaire-statement{font-size:1.03rem;line-height:1.85;margin-bottom:18px;}
+ .questionnaire-scale{gap:5px;}
+ .scale-option{min-height:100px;padding:8px 2px;border-radius:11px;gap:7px;}
+ .scale-option .scale-number{width:28px;height:28px;border-radius:8px;font-size:.92rem;}
+ .scale-option .scale-label{font-size:clamp(.61rem,2.4vw,.75rem);line-height:1.5;}
+ .scale-na{font-size:.82rem;min-height:43px;}
+ .questionnaire-actions{gap:8px;padding-top:12px;margin-top:10px;}
+ .questionnaire-actions .btn{min-width:0;flex:1;padding:10px 8px;font-size:.9rem;}
+}
+@media(max-width:360px){
+ .questionnaire-screen{padding-inline:11px;}
+ .questionnaire-scale{gap:3px;}
+ .scale-option{min-height:94px;}
+ .scale-option .scale-label{font-size:.59rem;}
+}
 </style></head><body><main class="screen" id="screen">
-<section class="panel" id="welcome" dir="rtl">
-<h1>آزمون تنزیل تعویقی</h1>
-<p>کد یکتای خود را وارد کنید و از صحت آن اطمینان حاصل کنید.</p>
-<div class="field participant-code-field">
-<label for="participant-code-input">کد شرکت‌کننده</label>
-<input id="participant-code-input" type="text" name="participant_code" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="کد خود را وارد کنید" dir="ltr" required>
-<p class="hint hidden" id="participant-code-error" role="alert"></p>
-</div>
-<p class="hint">لطفاً آزمون را در یک نوبت کامل کنید. پاسخ‌ها هنگام انجام آزمون برای سرور ارسال می‌شوند.</p>
-<button class="btn" id="start">شروع آزمون</button>
+<section class="panel welcome-panel" id="welcome" dir="rtl">
+  <div class="brand-mark" aria-hidden="true">B</div>
+  <p class="eyebrow">پژوهش میدانی بارسان</p>
+  <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
+  <p>در این برنامه، ابتدا به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری پاسخ می‌دهید. سپس دو تکلیف تصمیم‌گیری و در ادامه یک بازی کوتاه تعاملی انجام خواهید داد.</p>
+  <div class="welcome-steps" aria-label="مراحل برنامه">
+    <div class="welcome-step"><span>۱</span><div><strong>پرسشنامه</strong><small>تجربه و دیدگاه‌های شما</small></div></div>
+    <div class="welcome-step"><span>۲</span><div><strong>تکلیف تصمیم‌گیری</strong><small>انتخاب بین دو گزینه</small></div></div>
+    <div class="welcome-step"><span>۳</span><div><strong>بازی تعاملی</strong><small>تصمیم‌گیری در یک موقعیت ساده</small></div></div>
+  </div>
+  <p class="welcome-note">لطفاً مراحل را به‌ترتیب انجام دهید و در صورت امکان برنامه را در یک نوبت کامل کنید.</p>
+  <button class="btn" id="welcome-continue" type="button">مطالعهٔ توضیحات و ادامه</button>
+</section>
+<section class="panel ethics-panel hidden" id="ethics" dir="rtl">
+  <p class="eyebrow">پیش از شروع</p>
+  <h1>توضیحات پژوهش و رضایت برای مشارکت</h1>
+  <p>این برنامه در چارچوب یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری، شرایط کاری و تصمیم‌گیری انجام می‌شود.</p>
+  <p>داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد.</p>
+  <p>برای حفظ حریم خصوصی، لطفاً نام، نام خانوادگی، شمارهٔ ملی، شمارهٔ تلفن یا اطلاعات هویتی دیگری را در پاسخ‌های خود وارد نکنید. فقط از کد پژوهشی اختصاص‌یافته به خودتان استفاده کنید.</p>
+  <p>شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
+  <div class="field participant-code-field">
+    <label for="participant-code-input">کد شرکت‌کننده</label>
+    <input id="participant-code-input" type="text" name="participant_code" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="کد خود را وارد کنید" dir="ltr" required>
+    <p class="hint hidden" id="participant-code-error" role="alert"></p>
+  </div>
+  <label class="consent-row" for="consent-checkbox">
+    <input type="checkbox" id="consent-checkbox" name="consent">
+    <span>توضیحات را خوانده‌ام و با شرکت در این پژوهش موافقم.</span>
+  </label>
+  <button class="btn" id="start" type="button">تأیید و ادامه</button>
+  <button class="btn btn-secondary" id="ethics-back" type="button">بازگشت</button>
 </section>
 <div id="stimulus" class="hidden" aria-live="off"></div>
 <section class="panel hidden" id="finish" dir="rtl">
