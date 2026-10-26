@@ -1159,6 +1159,89 @@ def authorize(token: str | None) -> None:
         raise HTTPException(401, "Unauthorized")
 
 
+@app.get("/api/admin/progress")
+def experiment_progress(x_admin_token: str | None = Header(default=None)):
+    """One row per preassigned participant, with authoritative status for all three stages."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    query = (
+        "SELECT p.participant_code,a.condition_code,a.assigned_at,"
+        "COALESCE(q.status,'not_started') AS questionnaire_status,"
+        "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
+        "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
+        "COALESCE(d.status,'not_started') AS dd_lifetrade_status,"
+        "COALESCE(d.attempt_number,0) AS dd_lifetrade_attempts,"
+        "d.started_at AS dd_lifetrade_started_at,d.completed_at AS dd_lifetrade_completed_at,"
+        "COALESCE(u.status,'not_started') AS ultimatum_status,"
+        "COALESCE(u.attempt_number,0) AS ultimatum_attempts,"
+        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at "
+        "FROM experiment_assignments a "
+        "JOIN participants p ON p.participant_id=a.participant_id "
+        "LEFT JOIN experiment_stage_progress q ON q.participation_id=("
+        "SELECT sp.participation_id FROM study_participations sp "
+        "WHERE sp.participant_id=a.participant_id AND sp.study_code=a.study_code) "
+        "AND q.stage_code='questionnaire' "
+        "LEFT JOIN experiment_stage_progress d ON d.participation_id=q.participation_id "
+        "AND d.stage_code='dd_lifetrade' "
+        "LEFT JOIN experiment_stage_progress u ON u.participation_id=q.participation_id "
+        "AND u.stage_code='ultimatum' "
+        "WHERE a.study_code=" + marker + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
+    )
+    with conn() as connection:
+        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.get("/api/admin/questionnaire/export.csv")
+def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
+    """Export completed questionnaire answers in long format, one row per question response."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    query = (
+        "SELECT p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
+        "qr.updated_at,qr.run_id,iv.version AS instrument_version "
+        "FROM questionnaire_responses qr "
+        "JOIN instrument_runs ir ON ir.run_id=qr.run_id "
+        "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+        "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+        "JOIN participants p ON p.participant_id=sp.participant_id "
+        "LEFT JOIN experiment_assignments a ON a.participant_id=p.participant_id "
+        "AND a.study_code=sp.study_code "
+        "WHERE iv.instrument_code=" + marker + " AND sp.study_code=" + marker
+        + " AND ir.status='completed' "
+        "ORDER BY p.participant_code,qr.question_code"
+    )
+    with conn() as connection:
+        rows = connection.execute(query, ("questionnaire", STUDY_CODE)).fetchall()
+
+    def generate_csv():
+        buffer = io.StringIO(newline="")
+        buffer.write("\ufeff")
+        fields = [
+            "participant_code", "condition_code", "question_code", "response_value",
+            "updated_at", "run_id", "instrument_version",
+        ]
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        for row in rows:
+            writer.writerow(dict(row))
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    return StreamingResponse(
+        generate_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="barsan_questionnaire_responses.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.get("/api/admin/sessions")
 def sessions(x_admin_token: str | None = Header(default=None)):
     authorize(x_admin_token)
