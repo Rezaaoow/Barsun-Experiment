@@ -58,7 +58,7 @@ Do not distribute invitation URLs for final data collection yet. The UI includes
 - Questionnaire draft save, per-question answer upsert and validated stage completion endpoints.
 - Protected module-progress monitoring and questionnaire CSV export endpoints.
 - Ultimatum table `ultimatum_trials`, server-side offer/decision generation, server-randomized block order, strict practice/block/trial sequencing, scoring, attempt-level audit metadata and protected trial CSV export.
-- Structured Ultimatum client interaction timestamps and server-side opponent-generation timestamps are persisted in the existing trial JSON payload (no destructive schema migration); CSV export exposes them for analysis and audit.
+- Structured Ultimatum client interaction timestamps and server-side opponent-generation timestamps are persisted in the existing trial JSON payload (no destructive schema migration); the protected CSV export includes both a complete JSON column and one flat column per timestamp for analysis.
 - Protected assignment creation endpoint.
 - Primary Life-Trade CSV export excludes runs marked `superseded`.
 
