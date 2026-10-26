@@ -774,10 +774,11 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
             )
             assert prepared.status_code == 200, prepared.text
             round_data = prepared.json()
-            assert round_data["participant_share"] is None if round_data["role"] == "proposer" else (
-                0 <= round_data["participant_share"] <= 10
-                and round_data["participant_share"] + round_data["opponent_share"] == 10
-            )
+            if round_data["role"] == "proposer":
+                assert round_data["participant_share"] is None
+            else:
+                assert 0 <= round_data["participant_share"] <= 10
+                assert round_data["participant_share"] + round_data["opponent_share"] == 10
             if round_data["role"] == "proposer":
                 # Offer 1..5 in subsequent proposer trials; offer 0 was tested above.
                 response_data = _resolve_ultimatum_round(
