@@ -207,6 +207,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ موارد نمایش‌داده‌شده</label>
  <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
  <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
+ <button id="reissueMissingSelectedLinks" class="tertiary" type="button">صدور مجدد URLهای غیرقابل‌بازیابی</button>
  <button id="deleteInactiveLinks" class="danger" type="button">حذف همهٔ لینک‌های غیرفعال</button>
 </div>
 <div class="link-manager-note">غیرفعال‌کردن لینک دسترسی با URL فعلی را مسدود می‌کند و با فعال‌کردن دوباره، همان URL قابل استفاده می‌شود. حذف لینک غیرفعال فقط تخصیص لینک را حذف می‌کند و پاسخ‌ها/داده‌های پژوهشی قبلی را پاک نمی‌کند. برای لینک‌های قدیمی که توکن قابل بازیابی ندارند، «صدور URL جدید» لینک قبلی را باطل می‌کند.</div>
@@ -575,6 +576,20 @@ $("linkStatusFilter").addEventListener("change",refreshAssignments);
 $("downloadActiveLinks").addEventListener("click",downloadActiveAssignmentsCsv);
 $("activateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),true));
 $("deactivateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),false));
+$("reissueMissingSelectedLinks").addEventListener("click",async()=>{
+ const ids=selectedAssignmentIds();
+ if(!ids.length){setStatus("linkManagementStatus","ابتدا لینک‌های موردنظر را انتخاب کن.","error");return;}
+ if(!window.confirm("از میان "+ids.length+" لینک انتخاب‌شده فقط مواردی که URL آن‌ها قابل بازیابی نیست دوباره صادر می‌شوند. لینک قبلی همین موارد باطل می‌شود؛ وضعیت فعال/غیرفعال تغییر نمی‌کند. ادامه می‌دهی؟"))return;
+ const button=$("reissueMissingSelectedLinks");button.disabled=true;
+ try{
+  const response=await adminFetch("/api/admin/assignments/reissue-missing-links",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_ids:ids})});
+  const data=await response.json();
+  setStatus("linkManagementStatus",data.reissued_count+" URL جدید صادر شد؛ "+data.skipped_count+" لینک از قبل URL قابل بازیابی داشت و تغییر نکرد.","success");
+  await refreshAssignments();
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+ finally{button.disabled=false;}
+});
+
 $("selectVisibleLinks").addEventListener("change",()=>{
  document.querySelectorAll(".assignment-select").forEach(check=>{check.checked=$("selectVisibleLinks").checked;});
 });
