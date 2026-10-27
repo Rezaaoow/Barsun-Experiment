@@ -613,6 +613,11 @@ class AssignmentStatusBatchIn(BaseModel):
     active: bool
 
 
+class AssignmentIdBatchIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    assignment_ids: list[str] = Field(min_length=1, max_length=5000)
+
+
 class AssignmentReissueIn(BaseModel):
     scope: Literal["main", "test"] = "main"
     assignment_id: str = Field(min_length=1, max_length=100)
