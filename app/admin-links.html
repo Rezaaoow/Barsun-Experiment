@@ -397,6 +397,112 @@ function makeLinkTable(target,rows,options){
  const csv=document.createElement("button");csv.type="button";csv.className="secondary";csv.textContent="دانلود فهرست لینک‌ها CSV";csv.addEventListener("click",()=>downloadCsv(rows,"barsan_invitation_links.csv"));buttons.appendChild(csv);
  root.appendChild(buttons);
 }
+let assignmentRows=[];
+function renderAssignmentManagement(data){
+ const counts=data.counts||{total:0,active:0,inactive:0};
+ $("linkCountTotal").textContent=counts.total;
+ $("linkCountActive").textContent=counts.active;
+ $("linkCountInactive").textContent=counts.inactive;
+ const root=$("assignmentManagementTable");root.replaceChildren();
+ $("selectVisibleLinks").checked=false;
+ const rows=data.items||[];
+ if(!rows.length){
+  const p=document.createElement("p");p.className="hint";p.style.padding="12px";
+  p.textContent=counts.total?"با این فیلتر لینکی پیدا نشد.":"در این محدوده هنوز لینکی ساخته نشده است.";
+  root.appendChild(p);root.className="table-wrap link-mgmt-table";
+  return;
+ }
+ const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
+ ["انتخاب","کد","گروه","وضعیت لینک","URL","تاریخ ساخت","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ thead.appendChild(headRow);table.appendChild(thead);
+ const tbody=document.createElement("tbody");
+ rows.forEach(item=>{
+  const tr=document.createElement("tr");
+  const selectCell=document.createElement("td"),check=document.createElement("input");
+  check.type="checkbox";check.className="assignment-select";check.dataset.id=item.assignment_id;check.setAttribute("aria-label","انتخاب لینک "+item.participant_code);selectCell.appendChild(check);tr.appendChild(selectCell);
+  const codeCell=document.createElement("td");codeCell.className="row-code";codeCell.textContent=item.participant_code;tr.appendChild(codeCell);
+  const groupCell=document.createElement("td");groupCell.textContent=item.group|| (item.condition_code==="A"?"Frame":"Control");tr.appendChild(groupCell);
+  const stateCell=document.createElement("td"),state=document.createElement("span");state.className="link-state "+(item.active?"active":"inactive");state.textContent=item.active?"فعال":"غیرفعال";stateCell.appendChild(state);tr.appendChild(stateCell);
+  const urlCell=document.createElement("td");
+  if(item.url_available){
+   const copy=document.createElement("button");copy.type="button";copy.className="secondary";copy.textContent="کپی لینک";copy.addEventListener("click",async()=>{
+    try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";setTimeout(()=>copy.textContent="کپی لینک",1200);}
+    catch(_){window.prompt("لینک اختصاصی را کپی کن:",item.invitation_url);}
+   });urlCell.appendChild(copy);
+  }else{
+   const missing=document.createElement("span");missing.className="badge warn";missing.textContent="نیازمند صدور URL";urlCell.appendChild(missing);
+  }
+  tr.appendChild(urlCell);
+  const dateCell=document.createElement("td");dateCell.textContent=item.assigned_at?new Date(item.assigned_at).toLocaleString("fa-IR"):"—";tr.appendChild(dateCell);
+  const actionCell=document.createElement("td"),actions=document.createElement("div");actions.className="link-row-actions";
+  const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=item.active?"غیرفعال کن":"فعال کن";
+  toggle.addEventListener("click",()=>changeAssignmentStatuses([item.assignment_id],!item.active));
+  actions.appendChild(toggle);
+  if(!item.url_available){
+   const reissue=document.createElement("button");reissue.type="button";reissue.className="tertiary";reissue.textContent="صدور URL جدید";
+   reissue.addEventListener("click",()=>reissueAssignmentUrl(item));actions.appendChild(reissue);
+  }
+  actionCell.appendChild(actions);tr.appendChild(actionCell);tbody.appendChild(tr);
+ });
+ table.appendChild(tbody);root.className="table-wrap link-mgmt-table";root.appendChild(table);
+ const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";
+ footer.textContent="نمایش "+rows.length+" از "+counts.total+" لینک در این محدوده.";
+ root.appendChild(footer);
+ if(data.legacy_token_count>0){
+  setStatus("linkManagementStatus",data.legacy_token_count+" لینک در فهرست فعلی URL قابل بازیابی ندارد؛ برای آن‌ها «صدور URL جدید» را انتخاب کن. لینک قبلی در زمان صدور مجدد باطل می‌شود.","info");
+ }
+}
+async function refreshAssignments(){
+ const button=$("refreshAssignments");if(button)button.disabled=true;
+ try{
+  const scope=$("monitorScope").value,status=$("linkStatusFilter").value,search=$("linkSearch").value.trim();
+  const query="?scope="+encodeURIComponent(scope)+"&status="+encodeURIComponent(status)+"&search="+encodeURIComponent(search);
+  const response=await adminFetch("/api/admin/assignments"+query,{method:"GET"});
+  const data=await response.json();assignmentRows=data.items||[];renderAssignmentManagement(data);
+  if(!data.legacy_token_count)setStatus("linkManagementStatus","فهرست لینک‌ها به‌روز شد.","success");
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+ finally{if(button)button.disabled=false;}
+}
+function selectedAssignmentIds(){
+ return Array.from(document.querySelectorAll(".assignment-select:checked")).map(el=>el.dataset.id).filter(Boolean);
+}
+async function changeAssignmentStatuses(ids,active){
+ if(!ids.length){setStatus("linkManagementStatus","ابتدا حداقل یک لینک را انتخاب کن.","error");return;}
+ const action=active?"فعال‌کردن":"غیرفعال‌کردن";
+ if(!window.confirm(action+" "+ids.length+" لینک در محدودهٔ فعلی انجام شود؟"))return;
+ try{
+  const response=await adminFetch("/api/admin/assignments/status",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_ids:ids,active})});
+  const data=await response.json();setStatus("linkManagementStatus",data.updated_count+" لینک "+(active?"فعال":"غیرفعال")+" شد. داده‌های پژوهشی پاک نشده‌اند.","success");
+  await refreshAssignments();await refreshProgress();
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+}
+async function reissueAssignmentUrl(item){
+ if(!window.confirm("برای "+item.participant_code+" لینک جدید صادر شود؟ لینک قبلی باطل می‌شود؛ وضعیت فعال/غیرفعال تغییر نمی‌کند."))return;
+ try{
+  const response=await adminFetch("/api/admin/assignments/reissue-link",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_id:item.assignment_id})});
+  const data=await response.json();
+  setStatus("linkManagementStatus","URL جدید برای "+data.participant_code+" صادر شد. لینک قبلی دیگر معتبر نیست؛ وضعیت لینک "+(data.active?"فعال است.":"همچنان غیرفعال است."),"success");
+  await refreshAssignments();
+  if(data.invitation_url)window.prompt("URL جدید؛ آن را محرمانه کپی و نگهداری کن:",data.invitation_url);
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+}
+async function downloadActiveAssignmentsCsv(){
+ const button=$("downloadActiveLinks");button.disabled=true;
+ try{
+  const scope=$("monitorScope").value;
+  const response=await adminFetch("/api/admin/assignments/export.csv?scope="+encodeURIComponent(scope),{method:"GET"});
+  const content=await response.text();
+  const parsed=csvParse(content.replace(/^\uFEFF/,""));
+  const headers=parsed.shift()||[],urlIndex=headers.indexOf("url_available");
+  const unavailable=urlIndex<0?0:parsed.filter(row=>String(row[urlIndex]).toLowerCase()==="false").length;
+  const blob=new Blob([content],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;
+  a.download=scope==="test"?"barsan_test_active_links.csv":"barsan_active_links.csv";
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  setStatus("linkManagementStatus","CSV لینک‌های فعال دانلود شد."+(unavailable?" توجه: "+unavailable+" لینک قدیمی URL قابل بازیابی نداشت؛ برای آن‌ها URL جدید صادر کن.":""),unavailable?"info":"success");
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+ finally{button.disabled=false;}
+}
 function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum"})[code]||code;}
 function progressStateLabel(state){
  return ({not_started:"شروع نکرده",in_progress:"در حال انجام",stale_incomplete:"متوقف / پیگیری",completed:"کامل"})[state]||state||"نامشخص";
@@ -442,7 +548,7 @@ async function refreshProgress(){
 }
 $("connectButton").addEventListener("click",refreshProgress);
 $("refreshButton").addEventListener("click",refreshProgress);
-$("monitorScope").addEventListener("change",refreshProgress);
+$("monitorScope").addEventListener("change",()=>{refreshProgress();refreshAssignments();});
 $("monitorSearch").addEventListener("input",renderProgress);
 $("monitorStatus").addEventListener("change",renderProgress);
 $("assignmentCsv").addEventListener("change",async event=>{
@@ -458,18 +564,40 @@ $("createAssignments").addEventListener("click",async()=>{
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
   setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. لینک‌ها فقط در این پاسخ نمایش داده می‌شوند؛ فهرست را محرمانه دانلود و نگه‌داری کن.","success");
-  refreshProgress();
+  refreshProgress();refreshAssignments();
  }catch(e){setStatus("assignmentStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
 $("downloadAssignmentTemplate").addEventListener("click",()=>downloadCsv([{participant_code:"BS-001",group:"Frame",condition_code:"A"},{participant_code:"BS-002",group:"Control",condition_code:"B"}],"barsan_codes_template.csv",["participant_code","group"]));
 $("clearAssignments").addEventListener("click",()=>{$("codes").value="";$("assignmentOutput").replaceChildren();clearStatus("assignmentStatus");});
+$("refreshAssignments").addEventListener("click",refreshAssignments);
+$("linkStatusFilter").addEventListener("change",refreshAssignments);
+$("downloadActiveLinks").addEventListener("click",downloadActiveAssignmentsCsv);
+$("activateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),true));
+$("deactivateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),false));
+$("selectVisibleLinks").addEventListener("change",()=>{
+ document.querySelectorAll(".assignment-select").forEach(check=>{check.checked=$("selectVisibleLinks").checked;});
+});
+$("deleteInactiveLinks").addEventListener("click",async()=>{
+ const scope=$("monitorScope").value;
+ const phrase=window.prompt("برای حذف تمام لینک‌های غیرفعال در "+(scope==="main"?"آزمایش اصلی":"فضای تست")+" عبارت DELETE INACTIVE LINKS را دقیق وارد کن:");
+ if(phrase!=="DELETE INACTIVE LINKS"){setStatus("linkManagementStatus","حذف لغو شد؛ عبارت تأیید دقیق وارد نشد.","info");return;}
+ if(!window.confirm("فقط تخصیص لینک‌های غیرفعال حذف می‌شوند؛ داده‌های پژوهشی قبلی نگه داشته می‌شوند. ادامه می‌دهی؟"))return;
+ const button=$("deleteInactiveLinks");button.disabled=true;
+ try{
+  const response=await adminFetch("/api/admin/assignments/delete-inactive",{method:"POST",body:JSON.stringify({scope,confirm_phrase:phrase})});
+  const data=await response.json();setStatus("linkManagementStatus",data.deleted_count+" لینک غیرفعال حذف شد. داده‌های پژوهشی قبلی دست‌نخورده‌اند.","success");
+  await refreshAssignments();await refreshProgress();
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+ finally{button.disabled=false;}
+});
+
 $("createModuleTest").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("moduleTestOutput").replaceChildren();const button=$("createModuleTest");button.disabled=true;
  try{
   const stage=$("moduleTestStage").value;
   const response=await adminFetch("/api/admin/module-test-links",{method:"POST",body:JSON.stringify({stage_code:stage,condition_code:$("moduleTestGroup").value})});
-  const item=await response.json();makeLinkTable("moduleTestOutput",[item]);
+  const item=await response.json();makeLinkTable("moduleTestOutput",[item]);if($("monitorScope").value==="test")refreshAssignments();
   setStatus("moduleTestStatus","لینک مستقل "+stageLabel(stage)+" با کد TEST ساخته شد. این لینک فقط همان ماژول را اجرا می‌کند و داده‌اش در خروجی تست می‌ماند.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
@@ -477,7 +605,7 @@ $("createModuleTest").addEventListener("click",async()=>{
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
-  const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);
+  const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
   setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
@@ -512,7 +640,7 @@ $("resetData").addEventListener("click",async()=>{
   const response=await adminFetch("/api/admin/maintenance/reset",{method:"POST",body:JSON.stringify({scope,confirm_phrase:expected})});
   const data=await response.json();$("confirmPhrase").value="";$("maintenancePreview").hidden=true;
   setStatus("maintenanceStatus","پاک‌سازی انجام شد. ردیف‌های حذف‌شده:\n"+Object.entries(data.deleted_rows).map(([k,v])=>k+": "+v).join("\n")+"\nبرای شروع دوباره لینک‌های جدید بساز.","success");
-  await refreshProgress();
+  await refreshProgress();await refreshAssignments();
  }catch(e){setStatus("maintenanceStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
