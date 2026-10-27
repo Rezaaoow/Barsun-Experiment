@@ -920,7 +920,7 @@ def _seed_completed_test_stage(connection: Any, participation_id: str, stage_cod
 
 def _scope_filter(scope: str, column: str, marker: str) -> tuple[str, tuple[Any, ...]]:
     if scope == "test":
-        return column + " LIKE 'barsan-test-%'", ()
+        return "substr(" + column + ",1,12)='barsan-test-'", ()
     return column + "=" + marker, (STUDY_CODE,)
 
 
@@ -2166,7 +2166,7 @@ def maintenance_preview(
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
     if scope == "test":
-        condition = "study_code LIKE 'barsan-test-%'"
+        condition = "substr(study_code,1,12)='barsan-test-'"
         params: tuple[Any, ...] = ()
     else:
         condition = "study_code=" + marker
@@ -2231,7 +2231,7 @@ def reset_study_data(
     if data.confirm_phrase != expected_phrase:
         raise HTTPException(422, "عبارت تأیید پاک‌سازی با محدودهٔ انتخاب‌شده مطابقت ندارد.")
     marker = "%s" if DATABASE_URL else "?"
-    condition = "study_code LIKE 'barsan-test-%'" if data.scope == "test" else "study_code=" + marker
+    condition = "substr(study_code,1,12)='barsan-test-'" if data.scope == "test" else "study_code=" + marker
     params: tuple[Any, ...] = () if data.scope == "test" else (STUDY_CODE,)
     deleted: dict[str, int] = {}
 
@@ -2272,7 +2272,7 @@ def reset_study_data(
             deleted[name] = max(0, int(cursor.rowcount or 0))
         if data.scope == "test":
             cursor = connection.execute(
-                "DELETE FROM studies WHERE study_code LIKE 'barsan-test-%'"
+                "DELETE FROM studies WHERE substr(study_code,1,12)='barsan-test-'"
             )
             deleted["test_studies"] = max(0, int(cursor.rowcount or 0))
         else:
@@ -2385,7 +2385,7 @@ def export_ultimatum_csv(
     """Export Ultimatum attempts from the main study or isolated test studies."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
-    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
     query = (
         "SELECT sp.study_code,p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
         "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
@@ -2539,7 +2539,7 @@ def export_questionnaire_csv(
     """Export completed questionnaire answers in long format for one data scope."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
-    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
     query = (
         "SELECT sp.study_code,p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
         "qr.updated_at,qr.run_id,iv.version AS instrument_version "
@@ -2593,7 +2593,7 @@ def sessions(
 ):
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
-    study_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    study_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
     params = (INSTRUMENT_CODE,) if scope == "test" else (INSTRUMENT_CODE, STUDY_CODE)
     with conn() as connection:
         rows = connection.execute(
@@ -2618,7 +2618,7 @@ def export_csv(
     """Stream Life-Trade trial rows from the main study or isolated test studies."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
-    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
 
     with conn() as connection:
         key_query = (
