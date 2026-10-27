@@ -1360,7 +1360,7 @@ def reissue_admin_assignment_link(
         "group": "Frame" if str(row["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
         "active": bool(row["active"]),
         "study_code": row["study_code"],
-        "invitation_url": _invitation_url_for_token(request, "/api/admin/assignments", new_token),
+        "invitation_url": _invitation_url_for_token(request, "/api/admin/assignments/reissue-link", new_token),
         "warning": "لینک قبلی باطل شد؛ وضعیت فعال/غیرفعال مانند قبل باقی ماند.",
     }
 
