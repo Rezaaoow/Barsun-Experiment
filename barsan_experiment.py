@@ -28,7 +28,7 @@ STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Exp
 TEST_STUDY_PREFIX = "barsan-test-"
 PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "").rstrip("?&")
 INVITATION_TOKEN_KEY_FILE = os.getenv(
-    "INVITATION_TOKEN_KEY_FILE", os.path.join(ROOT, ".private", "invitation_tokens.key")
+    "INVITATION_TOKEN_KEY_FILE", os.path.join(os.path.dirname(ROOT), ".barsan_invitation_tokens.key")
 )
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
@@ -1191,7 +1191,7 @@ def create_test_links(
         "generation": generation,
         "created_count": len(created),
         "assignments": created,
-        "note": "Each click creates a new isolated test pair; keep downloaded invitation URLs because raw tokens cannot be retrieved later; existing test data is retained.",
+        "note": "Each click creates a new isolated test pair. Invitation URLs are encrypted at rest and can be exported later; preserve the private invitation-token key file when backing up this installation. Existing test data is retained.",
     }
 
 
