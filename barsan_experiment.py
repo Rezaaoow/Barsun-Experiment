@@ -1975,12 +1975,16 @@ def experiment_progress(x_admin_token: str | None = Header(default=None)):
 
 
 @app.get("/api/admin/ultimatum/export.csv")
-def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
-    """Export all ultimatum attempts, including practice and superseded attempts for audit."""
+def export_ultimatum_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Export Ultimatum attempts from the main study or isolated test studies."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
+        "SELECT sp.study_code,p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
         "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
         "ir.metadata AS run_metadata,usp.current_run_id AS current_stage_run_id,"
         "usp.draft_payload AS final_stage_payload,iv.version AS instrument_version,"
@@ -1998,13 +2002,13 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "AND a.study_code=sp.study_code "
         "LEFT JOIN experiment_stage_progress usp ON usp.participation_id=sp.participation_id "
         "AND usp.stage_code='ultimatum' "
-        "WHERE sp.study_code=" + marker + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
+        "WHERE " + scope_filter + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
     )
     with conn() as connection:
-        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
+        rows = connection.execute(query, () if scope == "test" else (STUDY_CODE,)).fetchall()
 
     fields = [
-        "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
+        "study_code", "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
         "run_completed_at", "attempt_number", "instrument_version", "round_id", "phase",
         "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
         "opponent_condition", "opponent_actual_type", "round_status", "participant_share",
@@ -2118,19 +2122,23 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="barsan_ultimatum_trials.csv"',
+            "Content-Disposition": 'attachment; filename="' + ("barsan_test_ultimatum_trials.csv" if scope == "test" else "barsan_ultimatum_trials.csv") + '"',
             "Cache-Control": "no-store",
         },
     )
 
 
 @app.get("/api/admin/questionnaire/export.csv")
-def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
-    """Export completed questionnaire answers in long format, one row per question response."""
+def export_questionnaire_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Export completed questionnaire answers in long format for one data scope."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
+        "SELECT sp.study_code,p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
         "qr.updated_at,qr.run_id,iv.version AS instrument_version "
         "FROM questionnaire_responses qr "
         "JOIN instrument_runs ir ON ir.run_id=qr.run_id "
@@ -2139,18 +2147,19 @@ def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
         "JOIN participants p ON p.participant_id=sp.participant_id "
         "LEFT JOIN experiment_assignments a ON a.participant_id=p.participant_id "
         "AND a.study_code=sp.study_code "
-        "WHERE iv.instrument_code=" + marker + " AND sp.study_code=" + marker
+        "WHERE iv.instrument_code=" + marker + " AND " + scope_filter
         + " AND ir.status='completed' "
         "ORDER BY p.participant_code,qr.question_code"
     )
     with conn() as connection:
-        rows = connection.execute(query, ("questionnaire", STUDY_CODE)).fetchall()
+        params = ("questionnaire",) if scope == "test" else ("questionnaire", STUDY_CODE)
+        rows = connection.execute(query, params).fetchall()
 
     def generate_csv():
         buffer = io.StringIO(newline="")
         buffer.write("\ufeff")
         fields = [
-            "participant_code", "condition_code", "question_code", "response_value",
+            "study_code", "participant_code", "condition_code", "question_code", "response_value",
             "updated_at", "run_id", "instrument_version",
         ]
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
@@ -2168,7 +2177,7 @@ def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="barsan_questionnaire_responses.csv"',
+            "Content-Disposition": 'attachment; filename="' + ("barsan_test_questionnaire_responses.csv" if scope == "test" else "barsan_questionnaire_responses.csv") + '"',
             "Cache-Control": "no-store",
         },
     )
@@ -2187,36 +2196,52 @@ def sessions(x_admin_token: str | None = Header(default=None)):
             "JOIN participants p ON p.participant_id=sp.participant_id "
             "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
             "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-            "WHERE i.instrument_code=" + marker + " ORDER BY ir.started_at DESC",
-            (INSTRUMENT_CODE,),
+            "WHERE i.instrument_code=" + marker + " AND sp.study_code=" + marker + " ORDER BY ir.started_at DESC",
+            (INSTRUMENT_CODE, STUDY_CODE),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
 @app.get("/api/admin/export.csv")
-def export_csv(x_admin_token: str | None = Header(default=None)):
+def export_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Stream Life-Trade trial rows from the main study or isolated test studies."""
     authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+
     with conn() as connection:
         if DATABASE_URL:
-            key_rows = connection.execute(
+            key_query = (
                 "SELECT DISTINCT x.json_key FROM lifetrade_trials t "
                 "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+                "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
                 "CROSS JOIN LATERAL jsonb_object_keys(t.payload) AS x(json_key) "
-                "WHERE ir.status <> 'superseded'"
-            ).fetchall()
+                "WHERE ir.status <> 'superseded' AND " + scope_filter
+            )
         else:
-            key_rows = connection.execute(
+            key_query = (
                 "SELECT DISTINCT json_each.key AS json_key "
-                "FROM lifetrade_trials t JOIN instrument_runs ir ON ir.run_id=t.run_id, "
-                "json_each(t.payload) WHERE ir.status <> 'superseded'"
-            ).fetchall()
+                "FROM lifetrade_trials t "
+                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+                "JOIN study_participations sp ON sp.participation_id=ir.participation_id, "
+                "json_each(t.payload) "
+                "WHERE ir.status <> 'superseded' AND " + scope_filter
+            )
+        key_params = () if scope == "test" else (STUDY_CODE,)
+        key_rows = connection.execute(key_query, key_params).fetchall()
+
     fields = sorted(
         {row["json_key"] for row in key_rows}
-        | {"server_received_at", "server_run_id", "server_session_id", "participant_code", "instrument_code", "instrument_version"}
+        | {"server_received_at", "server_run_id", "server_session_id", "participant_code",
+           "instrument_code", "instrument_version", "study_code"}
     )
 
     def generate_csv():
         buffer = io.StringIO(newline="")
+        buffer.write("\\ufeff")
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         yield buffer.getvalue()
@@ -2226,34 +2251,30 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
         last_event_id = None
 
         while True:
-            base_query = (
-                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,iv.version "
+            query = (
+                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,"
+                "iv.version,sp.study_code "
                 "FROM lifetrade_trials t "
                 "JOIN instrument_runs ir ON ir.run_id=t.run_id "
                 "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
                 "JOIN participants p ON p.participant_id=sp.participant_id "
                 "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
                 "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-                "WHERE i.instrument_code="
+                "WHERE i.instrument_code=" + marker + " AND " + scope_filter +
+                " AND ir.status <> 'superseded'"
             )
-            if last_received_at is None:
-                query = base_query + ("%s" if DATABASE_URL else "?")
-                query += " AND ir.status <> 'superseded' ORDER BY t.received_at,t.client_event_id LIMIT 500"
-                params = (INSTRUMENT_CODE,)
-            else:
-                marker = "%s" if DATABASE_URL else "?"
-                query = base_query + marker
+            params = [INSTRUMENT_CODE]
+            if scope != "test":
+                params.append(STUDY_CODE)
+            if last_received_at is not None:
                 query += (
-                    " AND ir.status <> 'superseded' AND (t.received_at,t.client_event_id) > ("
-                    + marker
-                    + ","
-                    + marker
-                    + ") ORDER BY t.received_at,t.client_event_id LIMIT 500"
+                    " AND (t.received_at,t.client_event_id) > (" + marker + "," + marker + ")"
                 )
-                params = (INSTRUMENT_CODE, last_received_at, last_event_id)
+                params.extend([last_received_at, last_event_id])
+            query += " ORDER BY t.received_at,t.client_event_id LIMIT 500"
 
             with conn() as connection:
-                rows = connection.execute(query, params).fetchall()
+                rows = connection.execute(query, tuple(params)).fetchall()
             if not rows:
                 break
             last_received_at = rows[-1]["received_at"]
@@ -2267,17 +2288,19 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
                 item["participant_code"] = row["participant_code"]
                 item["instrument_code"] = INSTRUMENT_CODE
                 item["instrument_version"] = row["version"]
+                item["study_code"] = row["study_code"]
                 output_rows.append(item)
             writer.writerows(output_rows)
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
 
+    filename = "barsan_test_lifetrade_trials.csv" if scope == "test" else "lifetrade_trials.csv"
     return StreamingResponse(
         generate_csv(),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="lifetrade_trials.csv"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
         },
     )
