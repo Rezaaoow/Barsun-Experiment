@@ -2242,29 +2242,29 @@ def reset_study_data(
             ("questionnaire_responses",
              "DELETE FROM questionnaire_responses WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
              "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
-             + condition.replace("study_code", "sp.study_code")),
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("lifetrade_trials",
              "DELETE FROM lifetrade_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
              "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
-             + condition.replace("study_code", "sp.study_code")),
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("ultimatum_trials",
              "DELETE FROM ultimatum_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
              "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
-             + condition.replace("study_code", "sp.study_code")),
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("experiment_stage_progress",
              "DELETE FROM experiment_stage_progress WHERE participation_id IN "
              "(SELECT sp.participation_id FROM study_participations sp WHERE "
-             + condition.replace("study_code", "sp.study_code")),
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("experiment_consents",
              "DELETE FROM experiment_consents WHERE assignment_id IN "
              "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
-             + condition.replace("study_code", "a.study_code")),
+             + condition.replace("study_code", "a.study_code") + ")"),
             ("experiment_assignments",
              "DELETE FROM experiment_assignments WHERE " + condition),
             ("instrument_runs",
              "DELETE FROM instrument_runs WHERE participation_id IN "
              "(SELECT sp.participation_id FROM study_participations sp WHERE "
-             + condition.replace("study_code", "sp.study_code")),
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("study_participations",
              "DELETE FROM study_participations WHERE " + condition),
         ):
