@@ -1809,7 +1809,7 @@ function utWaitMs(condition) {
  return condition==="agent"?2000:3000+randomInt(3001);
 }
 async function utPrepare(phase,blockCode,blockOrder,trial,sequence) {
- return api("/api/experiment/ultimatum/prepare",{
+ return utApiWithRetry("/api/experiment/ultimatum/prepare",{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   run_id:ultimatumState.runId,
@@ -1980,7 +1980,7 @@ async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
  if(ultimatumState.resolveInFlight)return;
  ultimatumState.resolveInFlight=true;
  try {
-  const result=await api("/api/experiment/ultimatum/resolve",payload);
+  const result=await utApiWithRetry("/api/experiment/ultimatum/resolve",payload,4);
   const alreadyRecorded=ultimatumState.results.some(function(item){return item.round_id===result.round_id;});
   ultimatumState.lastResult=result;
   if(!alreadyRecorded){
@@ -2082,7 +2082,7 @@ function utSubmitResponderDecision(decision,isPractice,blockCode,blockOrder,tria
 }
 
 function utRecordRoundEvents(roundId,eventTimestamps) {
- return api("/api/experiment/ultimatum/events",{
+ return utApiWithRetry("/api/experiment/ultimatum/events",{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   run_id:ultimatumState.runId,
@@ -2126,20 +2126,20 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
   if(!isPractice&&trial<5)eventTimestamps.next_trial_clicked_at=clickedAt;
   try {
    await utRecordRoundEvents(result.round_id,eventTimestamps);
-   await advance();
   } catch(error) {
-   console.error(error);
-   advanceInFlight=false;
-   utShowError("ثبت زمان رخدادهای این دور موفق نشد؛ دوباره تلاش کنید.",continueAfterRecordingEvents);
+   // The outcome is already saved by /resolve. Auxiliary timing metadata must not
+   // interrupt a participant or influence their subsequent choices.
+   console.warn("Ultimatum timing metadata was not saved after retries",error);
   }
+  await advance();
  }
  utButton(actions,label,continueAfterRecordingEvents,"");
 }
 
 function utRenderPracticeComplete() {
  const s=utMakeScreen({header:false,title:"عالی!"});
- utAddText(s.body,"p","ut-copy","حالا که دور تمرینی را پشت سر گذاشتید، بازی اصلی شروع می‌شود.");
- utAddText(s.body,"p","ut-copy small","در بازی اصلی چهار بلوک پنج‌دوری انجام می‌دهید. ترتیب بلوک‌ها به‌صورت تصادفی تعیین می‌شود.");
+ utAddText(s.body,"p","ut-copy","بازی اصلی شروع می‌شود.");
+
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع بازی",function(){
   if(!Array.isArray(ultimatumState.blockOrder)
@@ -2201,17 +2201,17 @@ function utRenderBlockSummary() {
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
  const s=utMakeScreen({header:true,progress:"پایان بلوک "+utFa(blockOrder)+" از ۴"});
  const box=utNode("div","ut-summary-box");
- utAddText(box,"div","ut-summary-label","خلاصهٔ امتیازهای ۵ دور قبلی");
+ utAddText(box,"div","ut-summary-label","در ۵ دور قبل شما:");
  const showLoss=utIsFrameGroup();
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
  const earnedMetric=utNode("div","ut-summary-metric earned");
- utAddText(earnedMetric,"div","ut-summary-metric-label","امتیاز به‌دست‌آمده");
- utAddText(earnedMetric,"div","ut-summary-metric-value",utFa(earned));
+ utAddText(earnedMetric,"div","ut-summary-metric-label","به دست آوردید");
+ utAddText(earnedMetric,"div","ut-summary-metric-value",utFa(earned)+" امتیاز");
  metrics.appendChild(earnedMetric);
  if(showLoss) {
   const lostMetric=utNode("div","ut-summary-metric lost");
-  utAddText(lostMetric,"div","ut-summary-metric-label","امتیاز از دست‌رفته");
-  utAddText(lostMetric,"div","ut-summary-metric-value",utFa(lost));
+  utAddText(lostMetric,"div","ut-summary-metric-label","از دست دادید");
+  utAddText(lostMetric,"div","ut-summary-metric-value",utFa(lost)+" امتیاز");
   metrics.appendChild(lostMetric);
  }
  box.appendChild(metrics);
@@ -2227,7 +2227,7 @@ async function utFinishUltimatum() {
  const s=utMakeScreen({header:false,title:"در حال ثبت نتیجه"});
  utAddText(s.body,"p","ut-copy","در حال ثبت نهایی امتیازها و پاسخ‌های شما…");
  try {
-  const completed=await api("/api/experiment/stages/complete",{
+  await utApiWithRetry("/api/experiment/stages/complete",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    stage_code:"ultimatum",
