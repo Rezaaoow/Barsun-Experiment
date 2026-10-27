@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Iterator, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -25,7 +25,7 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
 STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
 TEST_STUDY_PREFIX = "barsan-test-"
-PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "https://my-experiment.ir/lifetrade").rstrip("?&")
+PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "").rstrip("?&")
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
 STAGE_TO_INSTRUMENT = {
@@ -99,6 +99,22 @@ def normalize_participant_code(value: str) -> str:
     if not normalized:
         raise HTTPException(422, "Participant code is required")
     return normalized
+
+
+def _invitation_base_url(request: Request, api_route: str) -> str:
+    """Use an explicit public URL when configured, otherwise derive the mounted app path."""
+    if PUBLIC_EXPERIMENT_URL:
+        return PUBLIC_EXPERIMENT_URL.rstrip("/")
+
+    request_path = str(request.url.path or "")
+    prefix = request_path[:-len(api_route)] if request_path.endswith(api_route) else ""
+    root_path = str(request.scope.get("root_path") or "").rstrip("/")
+    if not prefix:
+        prefix = root_path
+    base = str(request.base_url).rstrip("/")
+    if prefix and not base.endswith(prefix.rstrip("/")):
+        base += prefix if prefix.startswith("/") else "/" + prefix
+    return base.rstrip("/")
 
 
 if DATABASE_URL:
@@ -984,12 +1000,16 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
 
 
 @app.post("/api/admin/assignments")
-def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Header(default=None)):
+def create_assignments(
+    data: AssignmentBatchIn,
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
     """Create fixed per-participant assignments and one-time-displayed invite links."""
     authorize(x_admin_token)
     created = []
     seen_codes = set()
-    base_url = PUBLIC_EXPERIMENT_URL
+    base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
         for item in data.assignments:
@@ -1035,11 +1055,14 @@ def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Head
 
 
 @app.post("/api/admin/test-links")
-def create_test_links(x_admin_token: str | None = Header(default=None)):
+def create_test_links(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
     """Create two isolated, fresh test studies with the shared participant code TEST."""
     authorize(x_admin_token)
     generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
-    base_url = PUBLIC_EXPERIMENT_URL
+    base_url = _invitation_base_url(request, "/api/admin/test-links")
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
@@ -1098,6 +1121,7 @@ def create_test_links(x_admin_token: str | None = Header(default=None)):
 @app.post("/api/admin/module-test-links")
 def create_module_test_link(
     data: ModuleTestLinkIn,
+    request: Request,
     x_admin_token: str | None = Header(default=None),
 ):
     """Create a single-module-only test link; prerequisites are synthetic and explicitly flagged."""
@@ -1107,7 +1131,7 @@ def create_module_test_link(
     study_code = f"{TEST_STUDY_PREFIX}module-{generation}-{data.stage_code}"
     study_name = f"BarSan module test — {data.stage_code} — {generation}"
     participant_code = "TEST"
-    base_url = PUBLIC_EXPERIMENT_URL
+    base_url = _invitation_base_url(request, "/api/admin/module-test-links")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
         participant_id, participation_id = _ensure_participation(
