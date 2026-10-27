@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import uuid
+import zipfile
 from urllib.parse import parse_qs, urlparse
 from pathlib import Path
 
@@ -473,6 +474,46 @@ def test_admin_progress_and_questionnaire_csv(client, monkeypatch):
     assert {row["question_code"] for row in rows} == set(main.QUESTIONNAIRE_QUESTION_CODES)
     assert all(row["participant_code"] == "BS-PROGRESS-01" for row in rows)
     assert all(row["condition_code"] == "B" and row["response_value"] == "5" for row in rows)
+
+
+def test_admin_test_scope_monitoring_and_exports(client, monkeypatch):
+    # Create a main-study assignment and isolated test studies; each scope must stay separate.
+    _create_assignment(client, monkeypatch, code="BS-MAIN-SCOPE-01", condition="A")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "test-scope-admin-token")
+    headers = {"x-admin-token": "test-scope-admin-token"}
+
+    created = client.post("/api/admin/test-links", headers=headers)
+    assert created.status_code == 200, created.text
+
+    test_progress = client.get("/api/admin/progress?scope=test", headers=headers)
+    assert test_progress.status_code == 200, test_progress.text
+    test_rows = test_progress.json()
+    assert len(test_rows) == 2
+    assert all(row["study_code"].startswith("barsan-test-") for row in test_rows)
+    assert {row["participant_code"] for row in test_rows} == {"TEST"}
+
+    main_progress = client.get("/api/admin/progress?scope=main", headers=headers)
+    assert main_progress.status_code == 200, main_progress.text
+    assert any(row["participant_code"] == "BS-MAIN-SCOPE-01" for row in main_progress.json())
+    assert all(row["participant_code"] != "TEST" for row in main_progress.json())
+
+    preview = client.get("/api/admin/maintenance/preview?scope=test", headers=headers)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["counts"]["assignments"] == 2
+
+    for path in (
+        "/api/admin/questionnaire/export.csv?scope=test",
+        "/api/admin/export.csv?scope=test",
+        "/api/admin/ultimatum/export.csv?scope=test",
+    ):
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200, f"{path}: {response.text}"
+        assert response.headers.get("content-type", "").startswith("text/csv")
+
+    archive_response = client.get("/api/admin/export-all.zip?scope=test", headers=headers)
+    assert archive_response.status_code == 200, archive_response.text
+    with zipfile.ZipFile(io.BytesIO(archive_response.content)) as archive:
+        assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
 
 
 def test_assignment_creation_requires_admin_and_does_not_allow_reassignment(client, monkeypatch):
