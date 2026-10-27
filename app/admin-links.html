@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مدیریت لینک‌های آزمایش بارسان</title>
+<style>
+@font-face{font-family:Vazirmatn;src:local("Vazirmatn")}
+:root{font-family:Vazirmatn,Tahoma,"Segoe UI",sans-serif;color:#182235;background:#f3f6fb;font-synthesis:none}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 14px 48px;background:radial-gradient(ellipse at top right,#e8efff 0,transparent 50%),#f4f6fa}
+main{width:min(980px,100%);margin:auto}
+header{padding:10px 3px 22px}
+.eyebrow{font-size:.85rem;font-weight:750;color:#4365a4;letter-spacing:.02em}
+h1{margin:7px 0 10px;font-size:clamp(1.45rem,4vw,2rem);line-height:1.55}
+.subtitle{margin:0;color:#5f6c81;line-height:1.9}
+.card{background:#fff;border:1px solid #e1e7f0;border-radius:20px;box-shadow:0 12px 36px rgba(35,53,86,.06);padding:clamp(17px,3.5vw,28px);margin:0 0 18px}
+h2{font-size:1.15rem;margin:0 0 8px}
+.hint{color:#68758b;font-size:.9rem;line-height:1.9;margin:5px 0 17px}
+label{display:block;font-weight:700;font-size:.9rem;margin:0 0 7px}
+input,select,textarea{width:100%;border:1px solid #d3dce9;border-radius:11px;background:#fff;padding:11px 12px;font:inherit;color:inherit;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#6d91d9;box-shadow:0 0 0 3px #e7efff}
+textarea{min-height:155px;resize:vertical;line-height:1.9}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;align-items:start}
+.field{margin:0 0 15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+button{appearance:none;border:1px solid #1f3154;border-radius:11px;background:#1f3154;color:white;padding:10px 16px;font:inherit;font-weight:750;cursor:pointer;min-height:44px}
+button.secondary{background:#fff;color:#263954;border-color:#d4ddeb}
+button:disabled{opacity:.55;cursor:wait}
+.status{margin-top:13px;border-radius:11px;padding:10px 13px;line-height:1.8;display:none;white-space:pre-wrap}
+.status.show{display:block}.status.error{background:#fff1f0;border:1px solid #f3cfcb;color:#9b2822}.status.success{background:#effaf3;border:1px solid #ccebd6;color:#216a3e}.status.info{background:#edf4ff;border:1px solid #d4e3ff;color:#264c89}
+.output{margin-top:20px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:right;padding:11px 9px;border-bottom:1px solid #e7ebf2;vertical-align:middle}
+th{background:#f6f8fc;color:#526078;white-space:nowrap}
+td a{color:#245fc0;overflow-wrap:anywhere}
+td .copy{min-height:34px;padding:5px 9px;font-size:.8rem;white-space:nowrap}
+.code{direction:ltr;unicode-bidi:plaintext;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.85rem}
+.export-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
+.export-grid button{width:100%;font-size:.91rem;padding:12px}
+.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef3ff;color:#315a9b;font-size:.78rem;font-weight:750}
+footer{font-size:.82rem;color:#7a8597;text-align:center;padding:10px}
+@media(max-width:680px){body{padding:15px 10px 32px}.grid{grid-template-columns:1fr;gap:0}.export-grid{grid-template-columns:1fr}.card{border-radius:16px}th,td{padding:9px 7px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">BARسان · ابزار مدیریتی پژوهش</div>
+<h1>مدیریت لینک‌های اختصاصی</h1>
+<p class="subtitle">کد کارکنان را وارد کن، گروه Frame یا Control را تعیین کن و برای هر کد یک لینک اختصاصی بساز. توکن مدیریتی فقط در همین صفحه و تا زمان بستن آن استفاده می‌شود و در مرورگر ذخیره نخواهد شد.</p>
+</header>
+
+<section class="card">
+<h2>۱. ایجاد لینک برای کارکنان</h2>
+<p class="hint">هر خط یک کد است. اگر گروه تمام افراد یکسان است، از «گروه پیش‌فرض» استفاده کن. برای تعیین گروه جداگانه در هر خط، به شکل <span class="code">CODE-001,Frame</span> یا <span class="code">CODE-002,Control</span> بنویس. برای Frame مقدار A و برای Control مقدار B ثبت می‌شود. حداکثر ۵۰۰ کد در هر نوبت.</p>
+<div class="field">
+<label for="adminToken">توکن مدیریتی (ADMIN_TOKEN)</label>
+<input id="adminToken" type="password" autocomplete="off" placeholder="توکن مدیریتی هاست را وارد کن">
+</div>
+<div class="grid">
+<div class="field">
+<label for="defaultGroup">گروه پیش‌فرض</label>
+<select id="defaultGroup"><option value="Frame">Frame</option><option value="Control">Control</option></select>
+</div>
+<div class="field">
+<label for="codes">کدهای کارکنان</label>
+<textarea id="codes" spellcheck="false" placeholder="مثلاً:
+BS-001
+BS-002,Frame
+BS-003,Control"></textarea>
+</div>
+</div>
+<div class="actions">
+<button id="createAssignments">ساخت لینک‌ها</button>
+<button class="secondary" id="clearAssignments" type="button">پاک کردن ورودی</button>
+</div>
+<div id="assignmentStatus" class="status" role="status" aria-live="polite"></div>
+<div id="assignmentOutput" class="output"></div>
+</section>
+
+<section class="card">
+<h2>۲. لینک‌های مستقل تست</h2>
+<p class="hint">با هر بار کلیک، دو لینک تازه با کد ورود <span class="pill">TEST</span> ساخته می‌شود: یکی برای Frame و دیگری برای Control. هر لینک در فضای دادهٔ جداگانه ذخیره می‌شود؛ هیچ‌کدام وارد خروجی اصلی پژوهش نمی‌شوند. لینک‌ها و داده‌های تست قبلی نیز حذف نمی‌شوند.</p>
+<button id="createTestLinks">ساخت دو لینک تست</button>
+<div id="testStatus" class="status" role="status" aria-live="polite"></div>
+<div id="testOutput" class="output"></div>
+</section>
+
+<section class="card">
+<h2>۳. دریافت خروجی داده‌های تست</h2>
+<p class="hint">این فایل‌ها فقط داده‌های متعلق به لینک‌های تست را برمی‌گردانند. پس از واردکردن توکن مدیریتی در بخش اول، نوع خروجی را انتخاب کن.</p>
+<div class="export-grid">
+<button class="secondary" data-export="questionnaire" type="button">خروجی پرسشنامهٔ تست</button>
+<button class="secondary" data-export="lifetrade" type="button">خروجی Life-Trade تست</button>
+<button class="secondary" data-export="ultimatum" type="button">خروجی Ultimatum تست</button>
+</div>
+<div id="exportStatus" class="status" role="status" aria-live="polite"></div>
+</section>
+<footer>داده‌های تاریخی پاک نمی‌شوند. لینک‌ها و خروجی‌ها را مانند دادهٔ پژوهشی محرمانه نگه دار.</footer>
+</main>
+<script>
+(function(){
+ const $=id=>document.getElementById(id);
+ const basePath=window.location.pathname.replace(/\/admin\/links\/?$/,"").replace(/\/$/,"");
+ const token=()=>$("adminToken").value.trim();
+ let latestAssignments=[];
+ function setStatus(id,message,type){
+   const el=$(id);el.textContent=message;el.className="status show "+(type||"info");
+ }
+ function clearStatus(id){const el=$(id);el.textContent="";el.className="status";}
+ async function adminFetch(path,options){
+   if(!token())throw new Error("ابتدا توکن مدیریتی را وارد کن.");
+   const response=await fetch(basePath+path,{...options,headers:{...(options&&options.headers||{}),"X-Admin-Token":token(),...(options&&options.body?{"Content-Type":"application/json"}:{})}});
+   if(!response.ok){
+     let detail="درخواست ناموفق بود ("+response.status+")";
+     try{const data=await response.json();detail=typeof data.detail==="string"?data.detail:JSON.stringify(data.detail||data)}catch(_){}
+     throw new Error(detail);
+   }
+   return response;
+ }
+ function parseLines(){
+   const lines=$("codes").value.split(/\r?\n/);
+   const seen=new Set(),records=[];
+   for(let i=0;i<lines.length;i++){
+     const raw=lines[i].trim();
+     if(!raw||raw.startsWith("#"))continue;
+     const parts=raw.split(/[,;\t]/).map(v=>v.trim()).filter(Boolean);
+     if(parts.length>2)throw new Error("خط "+(i+1)+": فقط کد و گروه را وارد کن.");
+     const code=parts[0];
+     const group=(parts[1]||$("defaultGroup").value).toLowerCase();
+     let condition,label;
+     if(["a","frame","framing"].includes(group)){condition="A";label="Frame";}
+     else if(["b","control","کنترل"].includes(group)){condition="B";label="Control";}
+     else throw new Error("گروه خط "+(i+1)+" معتبر نیست؛ Frame یا Control وارد کن.");
+     const key=code.toUpperCase();
+     if(seen.has(key))throw new Error("کد تکراری در ورودی: "+code);
+     seen.add(key);records.push({participant_code:code,condition_code:condition,group:label});
+   }
+   if(!records.length)throw new Error("حداقل یک کد کارکنان وارد کن.");
+   if(records.length>500)throw new Error("در هر نوبت حداکثر ۵۰۰ کد مجاز است.");
+   return records;
+ }
+ function makeTable(target,rows){
+   const root=$(target);root.replaceChildren();
+   const table=document.createElement("table");
+   const thead=document.createElement("thead"),trh=document.createElement("tr");
+   ["کد ورود","گروه","لینک اختصاصی","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;trh.appendChild(th)});
+   thead.appendChild(trh);table.appendChild(thead);
+   const tbody=document.createElement("tbody");
+   rows.forEach(item=>{
+     const tr=document.createElement("tr");
+     const code=document.createElement("td");code.textContent=item.participant_code||"TEST";tr.appendChild(code);
+     const group=document.createElement("td");group.textContent=item.group||(item.condition_code==="A"?"Frame":"Control");tr.appendChild(group);
+     const urlCell=document.createElement("td"),link=document.createElement("a");
+     link.href=item.invitation_url;link.textContent=item.invitation_url;link.target="_blank";link.rel="noopener noreferrer";
+     urlCell.appendChild(link);tr.appendChild(urlCell);
+     const ops=document.createElement("td"),copy=document.createElement("button");
+     copy.type="button";copy.className="secondary copy";copy.textContent="کپی لینک";
+     copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";setTimeout(()=>copy.textContent="کپی لینک",1400)}catch(_){window.prompt("لینک را کپی کن:",item.invitation_url)}});
+     ops.appendChild(copy);tr.appendChild(ops);tbody.appendChild(tr);
+   });
+   table.appendChild(tbody);root.appendChild(table);
+   const actions=document.createElement("div");actions.className="actions";
+   const download=document.createElement("button");download.className="secondary";download.type="button";download.textContent="دریافت فهرست لینک‌ها به‌صورت CSV";
+   download.addEventListener("click",()=>downloadCsv(rows));
+   actions.appendChild(download);root.appendChild(actions);
+ }
+ function csvEscape(value){return '"'+String(value==null?"":value).replace(/"/g,'""')+'"'}
+ function downloadCsv(rows){
+   const head=["participant_code","group","condition_code","study_code","invitation_url"];
+   const csv=[head.join(","),...rows.map(r=>head.map(k=>csvEscape(k==="group"?(r.group||(r.condition_code==="A"?"Frame":"Control")):r[k])).join(","))].join("\r\n");
+   const blob=new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"});
+   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="barsan_invitation_links.csv";a.click();URL.revokeObjectURL(a.href);
+ }
+ $("createAssignments").addEventListener("click",async()=>{
+   clearStatus("assignmentStatus");$("assignmentOutput").replaceChildren();
+   const button=$("createAssignments");button.disabled=true;
+   try{
+     const assignments=parseLines();
+     const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
+     const data=await response.json();
+     latestAssignments=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
+     makeTable("assignmentOutput",latestAssignments);
+     setStatus("assignmentStatus","برای "+data.created_count+" کد لینک ساخته شد. لینک کامل فقط همین بار از API برگردانده می‌شود؛ فایل CSV را محرمانه نگه دار.","success");
+   }catch(error){setStatus("assignmentStatus",error.message,"error")}
+   finally{button.disabled=false}
+ });
+ $("clearAssignments").addEventListener("click",()=>{$("codes").value="";$("assignmentOutput").replaceChildren();clearStatus("assignmentStatus")});
+ $("createTestLinks").addEventListener("click",async()=>{
+   clearStatus("testStatus");$("testOutput").replaceChildren();
+   const button=$("createTestLinks");button.disabled=true;
+   try{
+     const response=await adminFetch("/api/admin/test-links",{method:"POST"});
+     const data=await response.json();
+     makeTable("testOutput",data.assignments);
+     setStatus("testStatus","دو لینک مستقل تست ساخته شد. کد ورود برای هر دو لینک TEST است؛ گروه‌ها و فضای داده جدا هستند. نسل تست: "+data.generation,"success");
+   }catch(error){setStatus("testStatus",error.message,"error")}
+   finally{button.disabled=false}
+ });
+ document.querySelectorAll("[data-export]").forEach(button=>button.addEventListener("click",async()=>{
+   clearStatus("exportStatus");button.disabled=true;
+   const type=button.getAttribute("data-export");
+   const paths={
+     questionnaire:"/api/admin/questionnaire/export.csv?scope=test",
+     lifetrade:"/api/admin/export.csv?scope=test",
+     ultimatum:"/api/admin/ultimatum/export.csv?scope=test"
+   };
+   try{
+     const response=await adminFetch(paths[type],{method:"GET"});
+     const blob=await response.blob();
+     const disposition=response.headers.get("Content-Disposition")||"";
+     const match=disposition.match(/filename="?([^";]+)"?/i);
+     const filename=match?match[1]:"barsan_test_"+type+".csv";
+     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();URL.revokeObjectURL(a.href);
+     setStatus("exportStatus","دانلود خروجی تست آغاز شد: "+filename,"success");
+   }catch(error){setStatus("exportStatus",error.message,"error")}
+   finally{button.disabled=false}
+ }));
+})();
+</script>
+</body>
+</html>
