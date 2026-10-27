@@ -163,7 +163,7 @@ def test_test_links_use_code_test_and_create_separate_frame_control_studies(clie
 
     page = client.get("/admin/links")
     assert page.status_code == 200
-    assert "مدیریت لینک‌های اختصاصی" in page.text
+    assert "پنل مدیریت آزمایش" in page.text
     assert "ساخت دو لینک تست" in page.text
 
 
