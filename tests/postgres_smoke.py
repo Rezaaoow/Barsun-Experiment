@@ -107,6 +107,18 @@ def main_test():
         assert "url_available" in active_links_csv.text
         assert "barsan-test-" in active_links_csv.text
 
+        keep_existing = client.post(
+            "/api/admin/assignments/reissue-missing-links",
+            headers=admin_headers,
+            json={
+                "scope": "test",
+                "assignment_ids": [item["assignment_id"] for item in links_payload["items"]],
+            },
+        )
+        assert keep_existing.status_code == 200, keep_existing.text
+        assert keep_existing.json()["reissued_count"] == 0
+        assert keep_existing.json()["skipped_count"] == 2
+
         target_link = links_payload["items"][0]
         toggle_off = client.post(
             "/api/admin/assignments/status",
