@@ -2241,7 +2241,7 @@ def export_csv(
 
     def generate_csv():
         buffer = io.StringIO(newline="")
-        buffer.write("\\ufeff")
+        buffer.write("\ufeff")
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         yield buffer.getvalue()
@@ -2313,6 +2313,17 @@ app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")
 def load_homepage() -> str:
     with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
         return file.read()
+
+
+@app.get("/admin/links", response_class=HTMLResponse)
+def admin_links_page():
+    """Serve the protected-action UI; actual link creation/export still requires ADMIN_TOKEN."""
+    path = os.path.join(ROOT, "app", "admin-links.html")
+    try:
+        with open(path, encoding="utf-8") as file:
+            return HTMLResponse(file.read())
+    except OSError as exc:
+        raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 
 
 @app.get("/", response_class=HTMLResponse)
