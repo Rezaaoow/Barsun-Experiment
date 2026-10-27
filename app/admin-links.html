@@ -73,6 +73,26 @@ a{color:#245fc0;overflow-wrap:anywhere}
 .inline label{margin:0}
 .small{font-size:.8rem;color:#778399;line-height:1.8}
 .warning-box{padding:12px 13px;border-radius:12px;background:#fff8ed;border:1px solid #f2dfbd;color:#79511c;font-size:.86rem;line-height:1.9}
+.link-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.link-count{border:1px solid #e0e8f3;border-radius:14px;background:linear-gradient(145deg,#fff,#f7faff);padding:13px 15px;min-width:0}
+.link-count-label{font-size:.8rem;color:#65738a;font-weight:700}
+.link-count-value{font-size:1.65rem;font-weight:900;color:#203452;line-height:1.4;font-variant-numeric:tabular-nums}
+.link-count.active{border-color:#cde8d8;background:#f4fbf6}.link-count.active .link-count-value{color:#207147}
+.link-count.inactive{border-color:#f0d8c8;background:#fff9f5}.link-count.inactive .link-count-value{color:#9a4e24}
+.link-manager-tools{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin:14px 0}
+.link-manager-tools .field{flex:1;min-width:180px;margin:0}
+.link-manager-tools .actions{margin:0}
+.link-mgmt-table table{min-width:880px}
+.link-mgmt-table td{white-space:nowrap}
+.link-mgmt-table .row-code{font-weight:850;color:#263e64;direction:ltr;text-align:right}
+.link-state{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-weight:800;font-size:.76rem}
+.link-state.active{background:#e9f8ef;color:#217044}.link-state.inactive{background:#fff1e9;color:#98501e}
+.link-state::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.link-row-actions{display:flex;gap:6px;align-items:center}
+.link-row-actions button{min-height:32px;padding:5px 9px;font-size:.78rem;white-space:nowrap}
+.link-manager-note{padding:11px 13px;border:1px solid #dce6f6;background:#f5f8ff;border-radius:12px;color:#4e607e;font-size:.83rem;line-height:1.9;margin:12px 0}
+.link-selection{display:inline-flex;align-items:center;gap:7px;font-size:.83rem;color:#56647a;font-weight:650}
+.link-selection input{width:auto}
 .compact-input{max-width:280px}
 footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
@@ -155,6 +175,43 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </div>
 <div id="assignmentStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentOutput"></div>
+
+<div class="divider"></div>
+<div class="card-head">
+ <div>
+  <h3 id="linkManagementTitle">مدیریت لینک‌های ساخته‌شده</h3>
+  <p class="hint" style="margin-bottom:0">وضعیت هر لینک را مدیریت کن، لینک‌های فعال و غیرفعال را جدا ببین و لینک‌های فعال را به CSV بگیر.</p>
+ </div>
+ <span class="badge neutral">LINKS</span>
+</div>
+<div class="link-counts" aria-live="polite">
+ <div class="link-count"><div class="link-count-label">کل لینک‌ها</div><div class="link-count-value" id="linkCountTotal">—</div></div>
+ <div class="link-count active"><div class="link-count-label">لینک‌های فعال</div><div class="link-count-value" id="linkCountActive">—</div></div>
+ <div class="link-count inactive"><div class="link-count-label">لینک‌های غیرفعال</div><div class="link-count-value" id="linkCountInactive">—</div></div>
+</div>
+<div class="link-manager-tools">
+ <div class="field">
+  <label for="linkSearch">جست‌وجو بر اساس کد شرکت‌کننده</label>
+  <input id="linkSearch" type="text" class="compact-input" placeholder="مثلاً BS-001">
+ </div>
+ <div class="field">
+  <label for="linkStatusFilter">نمایش وضعیت</label>
+  <select id="linkStatusFilter"><option value="all">همهٔ لینک‌ها</option><option value="active">فقط فعال‌ها</option><option value="inactive">فقط غیرفعال‌ها</option></select>
+ </div>
+ <div class="actions">
+  <button id="refreshAssignments" type="button">بارگذاری لینک‌ها</button>
+  <button id="downloadActiveLinks" class="secondary" type="button">دریافت CSV لینک‌های فعال</button>
+ </div>
+</div>
+<div class="actions">
+ <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ موارد نمایش‌داده‌شده</label>
+ <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
+ <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
+ <button id="deleteInactiveLinks" class="danger" type="button">حذف همهٔ لینک‌های غیرفعال</button>
+</div>
+<div class="link-manager-note">غیرفعال‌کردن لینک دسترسی با URL فعلی را مسدود می‌کند و با فعال‌کردن دوباره، همان URL قابل استفاده می‌شود. حذف لینک غیرفعال فقط تخصیص لینک را حذف می‌کند و پاسخ‌ها/داده‌های پژوهشی قبلی را پاک نمی‌کند. برای لینک‌های قدیمی که توکن قابل بازیابی ندارند، «صدور URL جدید» لینک قبلی را باطل می‌کند.</div>
+<div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
+<div id="assignmentManagementTable" class="table-wrap link-mgmt-table"><p class="hint" style="padding:12px">برای دیدن لینک‌ها، «بارگذاری لینک‌ها» را بزن.</p></div>
 </section>
 
 <section class="card" aria-labelledby="testTitle">
