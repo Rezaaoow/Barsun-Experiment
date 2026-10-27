@@ -574,12 +574,11 @@ def test_admin_link_management_status_reissue_and_active_csv(client, monkeypatch
             "UPDATE experiment_assignments SET invitation_token_encrypted=NULL WHERE assignment_id=?",
             (row_a["assignment_id"],),
         )
+    row_b = next(row for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B")
     bulk_reissue = client.post(
         "/api/admin/assignments/reissue-missing-links",
         headers=headers,
-        json={"scope": "main", "assignment_ids": [row_a["assignment_id"], row_b_id := next(
-            row["assignment_id"] for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B"
-        )]},
+        json={"scope": "main", "assignment_ids": [row_a["assignment_id"], row_b["assignment_id"]]},
     )
     assert bulk_reissue.status_code == 200, bulk_reissue.text
     assert bulk_reissue.json()["reissued_count"] == 1
@@ -597,7 +596,6 @@ def test_admin_link_management_status_reissue_and_active_csv(client, monkeypatch
         json={"invitation_token": token_after_bulk, "participant_code": "BS-LINK-A"},
     ).status_code == 200
 
-    row_b = next(row for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B")
     deactivate = client.post(
         "/api/admin/assignments/status",
         headers=headers,
