@@ -8,12 +8,13 @@ import random
 import secrets
 import sqlite3
 import uuid
+import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Iterator, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,7 +25,7 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
 STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
 TEST_STUDY_PREFIX = "barsan-test-"
-PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "https://my-experiment.ir/lifetrade").rstrip("?&")
+PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "").rstrip("?&")
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
 STAGE_TO_INSTRUMENT = {
@@ -100,6 +101,22 @@ def normalize_participant_code(value: str) -> str:
     return normalized
 
 
+def _invitation_base_url(request: Request, api_route: str) -> str:
+    """Use an explicit public URL when configured, otherwise derive the mounted app path."""
+    if PUBLIC_EXPERIMENT_URL:
+        return PUBLIC_EXPERIMENT_URL.rstrip("/")
+
+    request_path = str(request.url.path or "")
+    prefix = request_path[:-len(api_route)] if request_path.endswith(api_route) else ""
+    root_path = str(request.scope.get("root_path") or "").rstrip("/")
+    if not prefix:
+        prefix = root_path
+    base = str(request.base_url).rstrip("/")
+    if prefix and not base.endswith(prefix.rstrip("/")):
+        base += prefix if prefix.startswith("/") else "/" + prefix
+    return base.rstrip("/")
+
+
 if DATABASE_URL:
     from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
@@ -115,7 +132,7 @@ if DATABASE_URL:
         kwargs={
             "row_factory": dict_row,
             "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
-            "application_name": "lifetrade-api",
+            "application_name": "barsan-experiment-api",
         },
         open=True,
     )
@@ -531,6 +548,16 @@ class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
 
 
+class ModuleTestLinkIn(BaseModel):
+    stage_code: StageCode
+    condition_code: Literal["A", "B"] = "A"
+
+
+class MaintenanceResetIn(BaseModel):
+    scope: Literal["main", "test"]
+    confirm_phrase: str = Field(min_length=1, max_length=40)
+
+
 class ExperimentIdentityIn(BaseModel):
     invitation_token: str = Field(min_length=20, max_length=200)
     participant_code: str = Field(min_length=1, max_length=100)
@@ -709,7 +736,7 @@ def health():
             connection.execute("SELECT 1").fetchone()
         return {
             "ok": True,
-            "service": "lifetrade",
+            "service": "barsan-experiment",
             "database": database_type,
             "database_connected": True,
             "study_code": STUDY_CODE,
@@ -724,7 +751,7 @@ def health():
             status_code=503,
             detail={
                 "ok": False,
-                "service": "lifetrade",
+                "service": "barsan-experiment",
                 "database": database_type,
                 "database_connected": False,
                 "time": now(),
@@ -827,6 +854,85 @@ def _ensure_participation(
     return participant["participant_id"], participation["participation_id"]
 
 
+def _test_module_from_study_code(study_code: str) -> str | None:
+    prefix = TEST_STUDY_PREFIX + "module-"
+    if not study_code.startswith(prefix):
+        return None
+    suffix = study_code[len(prefix):]
+    for stage_code in STAGE_ORDER:
+        if suffix.endswith("-" + stage_code):
+            return stage_code
+    return None
+
+
+def _seed_completed_test_stage(connection: Any, participation_id: str, stage_code: str) -> None:
+    """Insert an auditable synthetic completed prerequisite for a module-only test link."""
+    instrument_code, version, instrument_name = STAGE_TO_INSTRUMENT[stage_code]
+    timestamp = now()
+    marker = "%s" if DATABASE_URL else "?"
+    settings = {"module": stage_code, "test_prerequisite": True, "schema_version": 1}
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO instruments(instrument_code,instrument_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(instrument_code) DO NOTHING",
+            (instrument_code, instrument_name, timestamp),
+        )
+        connection.execute(
+            "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+            "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
+            (str(uuid.uuid4()), instrument_code, version, _json_param(settings), timestamp),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
+            (instrument_code, instrument_name, timestamp),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+            "VALUES(?,?,?,?,?)",
+            (str(uuid.uuid4()), instrument_code, version, _json_param(settings), timestamp),
+        )
+    version_row = connection.execute(
+        "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=" + marker
+        + " AND version=" + marker,
+        (instrument_code, version),
+    ).fetchone()
+    run_id = str(uuid.uuid4())
+    metadata = _json_param({"attempt_number": 1, "test_prerequisite": True, "module": stage_code})
+    connection.execute(
+        "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,completed_at,"
+        "status,trial_count,metadata) VALUES(" + ",".join([marker] * 8) + ")",
+        (run_id, participation_id, version_row["instrument_version_id"], timestamp, timestamp,
+         "completed", 0, metadata),
+    )
+    empty_payload = _json_param({"test_prerequisite": True, "module": stage_code})
+    connection.execute(
+        "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+        "draft_payload,started_at,completed_at,updated_at) VALUES("
+        + ",".join([marker] * 9)
+        + ") ON CONFLICT(participation_id,stage_code) DO UPDATE SET "
+        "status='completed',attempt_number=1,current_run_id=excluded.current_run_id,"
+        "draft_payload=excluded.draft_payload,started_at=excluded.started_at,"
+        "completed_at=excluded.completed_at,updated_at=excluded.updated_at",
+        (participation_id, stage_code, "completed", 1, run_id, empty_payload, timestamp, timestamp, timestamp),
+    )
+
+
+def _scope_filter(scope: str, column: str, marker: str) -> tuple[str, tuple[Any, ...]]:
+    if scope == "test":
+        return column + " LIKE 'barsan-test-%'", ()
+    return column + "=" + marker, (STUDY_CODE,)
+
+
+def _scope_rows(connection: Any, scope: str, table: str, column: str = "study_code") -> list[dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    condition, params = _scope_filter(scope, column, marker)
+    return [dict(row) for row in connection.execute(
+        "SELECT * FROM " + table + " WHERE " + condition,
+        params,
+    ).fetchall()]
+
+
 def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -894,12 +1000,16 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
 
 
 @app.post("/api/admin/assignments")
-def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Header(default=None)):
+def create_assignments(
+    data: AssignmentBatchIn,
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
     """Create fixed per-participant assignments and one-time-displayed invite links."""
     authorize(x_admin_token)
     created = []
     seen_codes = set()
-    base_url = PUBLIC_EXPERIMENT_URL
+    base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
         for item in data.assignments:
@@ -945,11 +1055,14 @@ def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Head
 
 
 @app.post("/api/admin/test-links")
-def create_test_links(x_admin_token: str | None = Header(default=None)):
+def create_test_links(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
     """Create two isolated, fresh test studies with the shared participant code TEST."""
     authorize(x_admin_token)
     generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
-    base_url = PUBLIC_EXPERIMENT_URL
+    base_url = _invitation_base_url(request, "/api/admin/test-links")
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
@@ -1005,6 +1118,47 @@ def create_test_links(x_admin_token: str | None = Header(default=None)):
     }
 
 
+@app.post("/api/admin/module-test-links")
+def create_module_test_link(
+    data: ModuleTestLinkIn,
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Create a single-module-only test link; prerequisites are synthetic and explicitly flagged."""
+    authorize(x_admin_token)
+    stage_index = STAGE_ORDER.index(data.stage_code)
+    generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    study_code = f"{TEST_STUDY_PREFIX}module-{generation}-{data.stage_code}"
+    study_name = f"BarSan module test — {data.stage_code} — {generation}"
+    participant_code = "TEST"
+    base_url = _invitation_base_url(request, "/api/admin/module-test-links")
+    joiner = "&" if "?" in base_url else "?"
+    with conn() as connection:
+        participant_id, participation_id = _ensure_participation(
+            connection, participant_code, study_code=study_code, study_name=study_name
+        )
+        marker = "%s" if DATABASE_URL else "?"
+        invitation_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+        connection.execute(
+            "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+            "invitation_token_hash,active,assigned_at) VALUES(" + ",".join([marker] * 7) + ")",
+            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, 1, now()),
+        )
+        for prerequisite in STAGE_ORDER[:stage_index]:
+            _seed_completed_test_stage(connection, participation_id, prerequisite)
+    return {
+        "participant_code": participant_code,
+        "condition_code": data.condition_code,
+        "group": "Frame" if data.condition_code == "A" else "Control",
+        "stage_code": data.stage_code,
+        "study_code": study_code,
+        "invitation_url": base_url + joiner + "invite=" + invitation_token,
+        "test_code": "TEST",
+        "prerequisites_marked_synthetic": list(STAGE_ORDER[:stage_index]),
+    }
+
+
 @app.post("/api/experiment/consent")
 def record_experiment_consent(data: ExperimentConsentIn):
     """Persist acceptance of the current consent text without storing IP or device identity."""
@@ -1050,6 +1204,8 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     return {
         "participant_code": assignment["participant_code"],
         "condition_code": assignment["condition_code"],
+        "study_code": assignment["study_code"],
+        "test_module_only": _test_module_from_study_code(assignment["study_code"]),
         "current_stage": current_stage,
         "stages": states,
     }
@@ -1471,6 +1627,7 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
             opponent_share = ULTIMATUM_TOTAL_POINTS - participant_share
             payload["offer_model"] = offer_model
             payload["opponent_offer_generated_at"] = now()
+        connection.execute("SAVEPOINT ultimatum_prepare_insert")
         try:
             connection.execute(
                 "INSERT INTO ultimatum_trials(round_id,run_id,phase,block_code,block_order,trial_in_block,"
@@ -1483,8 +1640,24 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
                     participant_share, opponent_share, timestamp, now(), _json_param(payload),
                 ),
             )
+            connection.execute("RELEASE SAVEPOINT ultimatum_prepare_insert")
         except Exception as exc:
-            raise HTTPException(409, "این دور اولتیماتوم هم‌زمان ایجاد شده است؛ دوباره تلاش کنید.") from exc
+            connection.execute("ROLLBACK TO SAVEPOINT ultimatum_prepare_insert")
+            connection.execute("RELEASE SAVEPOINT ultimatum_prepare_insert")
+            concurrent = connection.execute(
+                "SELECT * FROM ultimatum_trials WHERE run_id=" + marker
+                + " AND phase=" + marker + " AND block_code=" + marker + " AND trial_in_block=" + marker,
+                (data.run_id, data.phase, data.block_code, data.trial_in_block),
+            ).fetchone()
+            if concurrent and concurrent["status"] == "prepared":
+                row = dict(concurrent)
+                return {
+                    "round_id": row["round_id"], "phase": row["phase"], "block_code": row["block_code"],
+                    "role": row["role"], "opponent_condition": row["opponent_condition"],
+                    "participant_share": row["participant_share"], "opponent_share": row["opponent_share"],
+                    "started_at": row["started_at"], "offer_model": _json_value(row["payload"]).get("offer_model"),
+                }
+            raise HTTPException(503, "ثبت این دور موقتاً موفق نشد؛ لطفاً دوباره تلاش کنید.") from exc
         return {
             "round_id": round_id,
             "phase": data.phase,
@@ -1514,9 +1687,55 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
         if not row:
             raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
         record = dict(row)
+
+        def stored_resolve_result(completed_record: dict[str, Any]) -> dict[str, Any]:
+            saved_payload = _json_value(completed_record["payload"])
+            existing_result = saved_payload.get("resolve_result")
+            if isinstance(existing_result, dict) and existing_result.get("round_id"):
+                return existing_result
+            total = connection.execute(
+                "SELECT COALESCE(SUM(points_earned),0) AS score,"
+                "COALESCE(SUM(potential_points_lost),0) AS lost "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
+                (data.run_id,),
+            ).fetchone()
+            block_total = connection.execute(
+                "SELECT COALESCE(SUM(points_earned),0) AS score,"
+                "COALESCE(SUM(potential_points_lost),0) AS lost "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed' "
+                "AND block_code=" + marker,
+                (data.run_id, completed_record["block_code"]),
+            ).fetchone()
+            recovered = {
+                "round_id": completed_record["round_id"],
+                "phase": completed_record["phase"],
+                "block_code": completed_record["block_code"],
+                "block_order": completed_record["block_order"],
+                "trial_in_block": completed_record["trial_in_block"],
+                "role": completed_record["role"],
+                "opponent_condition": completed_record["opponent_condition"],
+                "participant_share": completed_record["participant_share"],
+                "opponent_share": completed_record["opponent_share"],
+                "participant_decision": completed_record["participant_decision"],
+                "opponent_decision": completed_record["opponent_decision"],
+                "accepted": bool(completed_record["accepted"]),
+                "points_earned": int(completed_record["points_earned"] or 0),
+                "potential_points_lost": int(completed_record["potential_points_lost"] or 0),
+                "total_score": int(total["score"] or 0),
+                "total_potential_lost": int(total["lost"] or 0),
+                "block_score": int(block_total["score"] or 0),
+                "block_potential_lost": int(block_total["lost"] or 0),
+                "resolved_at": completed_record["completed_at"],
+            }
+            saved_payload["resolve_result"] = recovered
+            connection.execute(
+                "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker + " AND run_id=" + marker,
+                (_json_param(saved_payload), completed_record["round_id"], data.run_id),
+            )
+            return recovered
+
         if record["status"] == "completed":
-            saved_payload = _json_value(record["payload"])
-            return saved_payload.get("resolve_result", {})
+            return stored_resolve_result(record)
         if record["role"] == "proposer":
             if data.participant_offer_to_opponent is None or data.participant_decision is not None:
                 raise HTTPException(422, "برای نقش پیشنهاددهنده باید مقدار پیشنهاد ارسال شود.")
@@ -1584,14 +1803,11 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             # A concurrent duplicate submission may have completed this round first.
             # Return the persisted result without double-counting the run.
             current = connection.execute(
-                "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+                "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
                 (data.round_id, data.run_id),
             ).fetchone()
             if current and current["status"] == "completed":
-                saved_payload = _json_value(current["payload"])
-                saved_result = saved_payload.get("resolve_result")
-                if saved_result:
-                    return saved_result
+                return stored_resolve_result(dict(current))
             raise HTTPException(409, "این دور هم‌زمان ثبت شده است؛ وضعیت بازی را دوباره بررسی کنید.")
         connection.execute(
             "UPDATE instrument_runs SET trial_count=trial_count+1 WHERE run_id=" + marker,
@@ -1941,37 +2157,224 @@ def authorize(token: str | None) -> None:
         raise HTTPException(401, "Unauthorized")
 
 
-@app.get("/api/admin/progress")
-def experiment_progress(x_admin_token: str | None = Header(default=None)):
-    """One row per preassigned participant, with authoritative status for all three stages."""
+@app.get("/api/admin/maintenance/preview")
+def maintenance_preview(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Return exact counts before any scoped data reset."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    if scope == "test":
+        condition = "study_code LIKE 'barsan-test-%'"
+        params: tuple[Any, ...] = ()
+    else:
+        condition = "study_code=" + marker
+        params = (STUDY_CODE,)
+
+    queries = {
+        "assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition, params),
+        "participations": ("SELECT COUNT(*) AS n FROM study_participations WHERE " + condition, params),
+        "runs": (
+            "SELECT COUNT(*) AS n FROM instrument_runs ir JOIN study_participations sp "
+            "ON sp.participation_id=ir.participation_id WHERE " + condition.replace("study_code", "sp.study_code"),
+            params,
+        ),
+        "questionnaire_responses": (
+            "SELECT COUNT(*) AS n FROM questionnaire_responses qr JOIN instrument_runs ir ON ir.run_id=qr.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "lifetrade_trials": (
+            "SELECT COUNT(*) AS n FROM lifetrade_trials t JOIN instrument_runs ir ON ir.run_id=t.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "ultimatum_trials": (
+            "SELECT COUNT(*) AS n FROM ultimatum_trials u JOIN instrument_runs ir ON ir.run_id=u.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "participants": (
+            "SELECT COUNT(DISTINCT p.participant_id) AS n FROM participants p JOIN experiment_assignments a "
+            "ON a.participant_id=p.participant_id WHERE " + condition.replace("study_code", "a.study_code"), params,
+        ),
+    }
+    counts = {}
+    with conn() as connection:
+        for name, (query, query_params) in queries.items():
+            counts[name] = int(connection.execute(query, query_params).fetchone()["n"] or 0)
+        condition_sp = condition.replace("study_code", "sp.study_code")
+        counts["completed_experiments"] = int(connection.execute(
+            "SELECT COUNT(*) AS n FROM (SELECT sp.participation_id "
+            "FROM study_participations sp JOIN experiment_stage_progress q "
+            "ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' AND q.status='completed' "
+            "JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id "
+            "AND d.stage_code='dd_lifetrade' AND d.status='completed' "
+            "JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id "
+            "AND u.stage_code='ultimatum' AND u.status='completed' WHERE " + condition_sp + ") completed",
+            params,
+        ).fetchone()["n"] or 0)
+    return {"scope": scope, "study_code": STUDY_CODE if scope == "main" else TEST_STUDY_PREFIX + "*",
+            "counts": counts,
+            "warning": "This action permanently deletes rows in the selected study scope; participant master codes and instrument definitions are retained."}
+
+
+@app.post("/api/admin/maintenance/reset")
+def reset_study_data(
+    data: MaintenanceResetIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Permanently remove only one explicitly confirmed study scope, keeping shared registries."""
+    authorize(x_admin_token)
+    expected_phrase = "CLEAR MAIN DATA" if data.scope == "main" else "CLEAR TEST DATA"
+    if data.confirm_phrase != expected_phrase:
+        raise HTTPException(422, "عبارت تأیید پاک‌سازی با محدودهٔ انتخاب‌شده مطابقت ندارد.")
+    marker = "%s" if DATABASE_URL else "?"
+    condition = "study_code LIKE 'barsan-test-%'" if data.scope == "test" else "study_code=" + marker
+    params: tuple[Any, ...] = () if data.scope == "test" else (STUDY_CODE,)
+    deleted: dict[str, int] = {}
+
+    # The preview count and deletion occur within a single transaction; scoped child rows are
+    # removed before their parent run/participation/assignment rows to respect foreign keys.
+    with conn() as connection:
+        for name, query in (
+            ("questionnaire_responses",
+             "DELETE FROM questionnaire_responses WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("lifetrade_trials",
+             "DELETE FROM lifetrade_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("ultimatum_trials",
+             "DELETE FROM ultimatum_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_stage_progress",
+             "DELETE FROM experiment_stage_progress WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_consents",
+             "DELETE FROM experiment_consents WHERE assignment_id IN "
+             "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
+             + condition.replace("study_code", "a.study_code") + ")"),
+            ("experiment_assignments",
+             "DELETE FROM experiment_assignments WHERE " + condition),
+            ("instrument_runs",
+             "DELETE FROM instrument_runs WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("study_participations",
+             "DELETE FROM study_participations WHERE " + condition),
+        ):
+            cursor = connection.execute(query, params)
+            deleted[name] = max(0, int(cursor.rowcount or 0))
+        if data.scope == "test":
+            cursor = connection.execute(
+                "DELETE FROM studies WHERE study_code LIKE 'barsan-test-%'"
+            )
+            deleted["test_studies"] = max(0, int(cursor.rowcount or 0))
+        else:
+            deleted["test_studies"] = 0
+    return {"reset": True, "scope": data.scope, "deleted_rows": deleted,
+            "participant_master_rows_retained": True,
+            "message": "محدودهٔ انتخاب‌شده پاک شد؛ برای شروع دوباره باید لینک‌های اختصاصی جدید ساخته شوند."}
+
+
+@app.get("/api/admin/progress")
+def experiment_progress(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """One row per assignment, with module position and stale-incomplete indicator."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    condition, params = _scope_filter(scope, "a.study_code", marker)
     query = (
-        "SELECT p.participant_code,a.condition_code,a.assigned_at,"
+        "SELECT a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
         "COALESCE(q.status,'not_started') AS questionnaire_status,"
         "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
         "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
+        "q.updated_at AS questionnaire_updated_at,"
         "COALESCE(d.status,'not_started') AS dd_lifetrade_status,"
         "COALESCE(d.attempt_number,0) AS dd_lifetrade_attempts,"
         "d.started_at AS dd_lifetrade_started_at,d.completed_at AS dd_lifetrade_completed_at,"
+        "d.updated_at AS dd_lifetrade_updated_at,"
         "COALESCE(u.status,'not_started') AS ultimatum_status,"
         "COALESCE(u.attempt_number,0) AS ultimatum_attempts,"
-        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at "
+        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at,"
+        "u.updated_at AS ultimatum_updated_at "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
-        "LEFT JOIN experiment_stage_progress q ON q.participation_id=("
-        "SELECT sp.participation_id FROM study_participations sp "
-        "WHERE sp.participant_id=a.participant_id AND sp.study_code=a.study_code) "
-        "AND q.stage_code='questionnaire' "
-        "LEFT JOIN experiment_stage_progress d ON d.participation_id=q.participation_id "
-        "AND d.stage_code='dd_lifetrade' "
-        "LEFT JOIN experiment_stage_progress u ON u.participation_id=q.participation_id "
-        "AND u.stage_code='ultimatum' "
-        "WHERE a.study_code=" + marker + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
+        "LEFT JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+        "LEFT JOIN experiment_stage_progress q ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' "
+        "LEFT JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id AND d.stage_code='dd_lifetrade' "
+        "LEFT JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id AND u.stage_code='ultimatum' "
+        "WHERE " + condition + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
     )
     with conn() as connection:
-        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
-    return [dict(row) for row in rows]
+        raw_rows = connection.execute(query, params).fetchall()
+
+    current_time = datetime.now(timezone.utc)
+    stale_cutoff = current_time.timestamp() - 24 * 60 * 60
+
+    def parse_time(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            normalized = str(value).replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        except (TypeError, ValueError):
+            return None
+
+    output = []
+    for raw in raw_rows:
+        row = dict(raw)
+        stage_statuses = [row["questionnaire_status"], row["dd_lifetrade_status"], row["ultimatum_status"]]
+        stages = [
+            ("questionnaire", "questionnaire"),
+            ("dd_lifetrade", "dd_lifetrade"),
+            ("ultimatum", "ultimatum"),
+        ]
+        completed_stages = sum(status == "completed" for status in stage_statuses)
+        row["completed_stages"] = completed_stages
+        row["current_stage"] = next(
+            (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
+            None,
+        )
+        has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
+        last_activity_candidates = [parse_time(row.get("assigned_at"))]
+        for stage_code, _ in stages:
+            last_activity_candidates.extend([
+                parse_time(row.get(stage_code + "_started_at")),
+                parse_time(row.get(stage_code + "_completed_at")),
+                parse_time(row.get(stage_code + "_updated_at")),
+            ])
+        valid_times = [value for value in last_activity_candidates if value is not None]
+        last_activity_epoch = max(valid_times) if valid_times else None
+        row["last_activity_at"] = (
+            datetime.fromtimestamp(last_activity_epoch, timezone.utc).isoformat()
+            if last_activity_epoch is not None else row.get("assigned_at")
+        )
+        row["hours_since_activity"] = (
+            round(max(0.0, (current_time.timestamp() - last_activity_epoch) / 3600), 2)
+            if last_activity_epoch is not None else None
+        )
+        if completed_stages == len(STAGE_ORDER):
+            row["progress_state"] = "completed"
+        elif not has_started:
+            row["progress_state"] = "not_started"
+        elif last_activity_epoch is not None and last_activity_epoch < stale_cutoff:
+            row["progress_state"] = "stale_incomplete"
+        else:
+            row["progress_state"] = "in_progress"
+        # Assignment and activity metadata are now already flattened for JSON/CSV consumers.
+        output.append(row)
+    return output
 
 
 @app.get("/api/admin/ultimatum/export.csv")
@@ -2184,20 +2587,25 @@ def export_questionnaire_csv(
 
 
 @app.get("/api/admin/sessions")
-def sessions(x_admin_token: str | None = Header(default=None)):
+def sessions(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    study_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    params = (INSTRUMENT_CODE,) if scope == "test" else (INSTRUMENT_CODE, STUDY_CODE)
     with conn() as connection:
         rows = connection.execute(
-            "SELECT ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
-            "ir.completed_at,ir.status,ir.trial_count,iv.version AS experiment_version "
+            "SELECT sp.study_code,ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
+            "ir.completed_at,ir.status,ir.trial_count,iv.instrument_code,iv.version AS experiment_version "
             "FROM instrument_runs ir "
             "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
             "JOIN participants p ON p.participant_id=sp.participant_id "
             "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
             "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-            "WHERE i.instrument_code=" + marker + " AND sp.study_code=" + marker + " ORDER BY ir.started_at DESC",
-            (INSTRUMENT_CODE, STUDY_CODE),
+            "WHERE i.instrument_code=" + marker + " AND " + study_filter + " ORDER BY ir.started_at DESC",
+            params,
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -2301,6 +2709,59 @@ def export_csv(
     )
 
 
+async def _read_streaming_response(response: StreamingResponse) -> bytes:
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.encode("utf-8") if isinstance(chunk, str) else bytes(chunk))
+    return b"".join(chunks)
+
+
+@app.get("/api/admin/export-all.zip")
+async def export_all_modules_zip(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Download all three module exports and current participant progress in one ZIP."""
+    authorize(x_admin_token)
+    # Reuse the exact same scoped export functions as the individual CSV buttons.
+    responses = [
+        ("questionnaire.csv", export_questionnaire_csv(x_admin_token, scope)),
+        ("lifetrade.csv", export_csv(x_admin_token, scope)),
+        ("ultimatum.csv", export_ultimatum_csv(x_admin_token, scope)),
+    ]
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for filename, response in responses:
+            archive.writestr(filename, await _read_streaming_response(response))
+        participant_rows = experiment_progress(x_admin_token, scope)
+        progress_buffer = io.StringIO(newline="")
+        progress_buffer.write("\ufeff")
+        progress_fields = sorted({
+            field for row in participant_rows for field in row.keys()
+        } or {"study_code", "participant_code", "condition_code", "progress_state"})
+        progress_writer = csv.DictWriter(progress_buffer, fieldnames=progress_fields, extrasaction="ignore")
+        progress_writer.writeheader()
+        progress_writer.writerows(participant_rows)
+        archive.writestr("participant_progress.csv", progress_buffer.getvalue().encode("utf-8"))
+        archive.writestr(
+            "README.txt",
+            "BarSan Experiment export\n"
+            + "Scope: " + scope + "\n"
+            + ("Test data only (study_code starts with barsan-test-)." if scope == "test"
+               else "Main study only (study_code equals configured STUDY_CODE).")
+            + "\nFiles are CSV UTF-8; keep the archive confidential.\n",
+        )
+    filename = "barsan_test_full_export.zip" if scope == "test" else "barsan_main_full_export.zip"
+    return StreamingResponse(
+        io.BytesIO(archive_buffer.getvalue()),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
 
@@ -2310,6 +2771,7 @@ def load_homepage() -> str:
         return file.read()
 
 
+@app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/links", response_class=HTMLResponse)
 def admin_links_page():
     """Serve the protected-action UI; actual link creation/export still requires ADMIN_TOKEN."""
