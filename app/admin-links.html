@@ -446,7 +446,7 @@ function renderAssignmentManagement(data){
  });
  table.appendChild(tbody);root.className="table-wrap link-mgmt-table";root.appendChild(table);
  const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";
- footer.textContent="نمایش "+rows.length+" از "+counts.total+" لینک در این محدوده.";
+ footer.textContent="نمایش "+rows.length+" لینک با فیلتر فعلی؛ مجموع این محدوده: "+counts.total+" لینک.";
  root.appendChild(footer);
  if(data.legacy_token_count>0){
   setStatus("linkManagementStatus",data.legacy_token_count+" لینک در فهرست فعلی URL قابل بازیابی ندارد؛ برای آن‌ها «صدور URL جدید» را انتخاب کن. لینک قبلی در زمان صدور مجدد باطل می‌شود.","info");
@@ -563,7 +563,7 @@ $("createAssignments").addEventListener("click",async()=>{
   const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
-  setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. لینک‌ها فقط در این پاسخ نمایش داده می‌شوند؛ فهرست را محرمانه دانلود و نگه‌داری کن.","success");
+  setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. URLها به‌صورت رمزنگاری‌شده نگه‌داری می‌شوند و از مدیریت لینک‌ها یا CSV لینک‌های فعال قابل دریافت‌اند؛ فایل خروجی را محرمانه نگه‌دار.","success");
   refreshProgress();refreshAssignments();
  }catch(e){setStatus("assignmentStatus",e.message,"error");}
  finally{button.disabled=false;}
