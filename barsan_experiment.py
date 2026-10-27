@@ -28,7 +28,7 @@ STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Exp
 TEST_STUDY_PREFIX = "barsan-test-"
 PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "").rstrip("?&")
 INVITATION_TOKEN_KEY_FILE = os.getenv(
-    "INVITATION_TOKEN_KEY_FILE", os.path.join(os.path.dirname(ROOT), ".barsan_invitation_tokens.key")
+    "INVITATION_TOKEN_KEY_FILE", os.path.join(os.path.expanduser("~"), ".barsan_invitation_tokens.key")
 )
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
@@ -1377,25 +1377,24 @@ def delete_inactive_admin_assignments(
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
     with conn() as connection:
-        id_rows = connection.execute(
-            "SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition,
+        inactive_count = int(connection.execute(
+            "SELECT COUNT(*) AS n FROM experiment_assignments WHERE active=0 AND " + scope_condition,
             scope_params,
-        ).fetchall()
-        ids = [row["assignment_id"] for row in id_rows]
-        if not ids:
+        ).fetchone()["n"] or 0)
+        if not inactive_count:
             return {
                 "deleted_count": 0,
                 "scope": data.scope,
                 "message": "در محدودهٔ انتخاب‌شده لینک غیرفعالی برای حذف وجود ندارد.",
             }
-        placeholders = ",".join([marker] * len(ids))
         connection.execute(
-            "DELETE FROM experiment_consents WHERE assignment_id IN (" + placeholders + ")",
-            tuple(ids),
+            "DELETE FROM experiment_consents WHERE assignment_id IN "
+            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
+            scope_params,
         )
         cursor = connection.execute(
-            "DELETE FROM experiment_assignments WHERE active=0 AND assignment_id IN (" + placeholders + ")",
-            tuple(ids),
+            "DELETE FROM experiment_assignments WHERE active=0 AND " + scope_condition,
+            scope_params,
         )
         deleted_count = max(0, int(cursor.rowcount or 0))
     return {
