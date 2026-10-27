@@ -23,6 +23,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql:
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
 STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
+TEST_STUDY_PREFIX = "barsan-test-"
 PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "https://my-experiment.ir/lifetrade").rstrip("?&")
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
@@ -766,15 +767,27 @@ def _json_param(value: dict[str, Any]) -> Any:
     return Jsonb(value) if DATABASE_URL else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, str]:
-    """Create/reuse a participant and study participation without making a new code."""
+def _ensure_participation(
+    connection: Any,
+    participant_code: str,
+    study_code: str = STUDY_CODE,
+    study_name: str | None = None,
+) -> tuple[str, str]:
+    """Create/reuse a participant in a named study without generating their code."""
     participant_id = str(uuid.uuid4())
     participation_id = str(uuid.uuid4())
+    resolved_study_name = study_name or study_code
+    timestamp = now()
     if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(study_code) DO NOTHING",
+            (study_code, resolved_study_name, timestamp),
+        )
         connection.execute(
             "INSERT INTO participants(participant_id,participant_code,created_at) VALUES(%s,%s,%s) "
             "ON CONFLICT(participant_code) DO NOTHING",
-            (participant_id, participant_code, now()),
+            (participant_id, participant_code, timestamp),
         )
         participant = connection.execute(
             "SELECT participant_id FROM participants WHERE participant_code=%s",
@@ -783,16 +796,20 @@ def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, 
         connection.execute(
             "INSERT INTO study_participations(participation_id,study_code,participant_id,joined_at) "
             "VALUES(%s,%s,%s,%s) ON CONFLICT(study_code,participant_id) DO NOTHING",
-            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            (participation_id, study_code, participant["participant_id"], timestamp),
         )
         participation = connection.execute(
             "SELECT participation_id FROM study_participations WHERE study_code=%s AND participant_id=%s",
-            (STUDY_CODE, participant["participant_id"]),
+            (study_code, participant["participant_id"]),
         ).fetchone()
     else:
         connection.execute(
+            "INSERT OR IGNORE INTO studies(study_code,study_name,created_at) VALUES(?,?,?)",
+            (study_code, resolved_study_name, timestamp),
+        )
+        connection.execute(
             "INSERT OR IGNORE INTO participants(participant_id,participant_code,created_at) VALUES(?,?,?)",
-            (participant_id, participant_code, now()),
+            (participant_id, participant_code, timestamp),
         )
         participant = connection.execute(
             "SELECT participant_id FROM participants WHERE participant_code=?",
@@ -801,11 +818,11 @@ def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, 
         connection.execute(
             "INSERT OR IGNORE INTO study_participations(participation_id,study_code,participant_id,joined_at) "
             "VALUES(?,?,?,?)",
-            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            (participation_id, study_code, participant["participant_id"], timestamp),
         )
         participation = connection.execute(
             "SELECT participation_id FROM study_participations WHERE study_code=? AND participant_id=?",
-            (STUDY_CODE, participant["participant_id"]),
+            (study_code, participant["participant_id"]),
         ).fetchone()
     return participant["participant_id"], participation["participation_id"]
 
@@ -820,9 +837,9 @@ def _lookup_assignment(connection: Any, invitation_token: str, participant_code:
         "JOIN participants p ON p.participant_id=a.participant_id "
         "JOIN study_participations sp ON sp.participant_id=a.participant_id "
         "AND sp.study_code=a.study_code "
-        "WHERE a.study_code=" + marker + " AND p.participant_code=" + marker
+        "WHERE p.participant_code=" + marker
         + " AND a.invitation_token_hash=" + marker + " AND a.active=1",
-        (STUDY_CODE, normalize_participant_code(participant_code), token_hash),
+        (normalize_participant_code(participant_code), token_hash),
     ).fetchone()
     if not row:
         # A generic error avoids distinguishing a bad code from a bad invitation link.
@@ -925,6 +942,67 @@ def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Head
                 "invitation_url": base_url + joiner + "invite=" + invitation_token,
             })
     return {"created_count": len(created), "assignments": created}
+
+
+@app.post("/api/admin/test-links")
+def create_test_links(x_admin_token: str | None = Header(default=None)):
+    """Create two isolated, fresh test studies with the shared participant code TEST."""
+    authorize(x_admin_token)
+    generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    base_url = PUBLIC_EXPERIMENT_URL
+    joiner = "&" if "?" in base_url else "?"
+    created = []
+    with conn() as connection:
+        for condition, group_label in (("A", "Frame"), ("B", "Control")):
+            group_slug = group_label.lower()
+            study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
+            study_name = f"BarSan isolated test — {generation} — {group_label}"
+            participant_code = "TEST"
+            participant_id, _participation_id = _ensure_participation(
+                connection,
+                participant_code,
+                study_code=study_code,
+                study_name=study_name,
+            )
+            marker = "%s" if DATABASE_URL else "?"
+            existing = connection.execute(
+                "SELECT assignment_id FROM experiment_assignments "
+                "WHERE study_code=" + marker + " AND participant_id=" + marker,
+                (study_code, participant_id),
+            ).fetchone()
+            if existing:
+                raise HTTPException(409, "A test assignment already exists for this test generation")
+            invitation_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            values = (
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, 1, now()
+            )
+            if DATABASE_URL:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    values,
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(?,?,?,?,?,?,?)",
+                    values,
+                )
+            created.append({
+                "participant_code": participant_code,
+                "condition_code": condition,
+                "group": group_label,
+                "study_code": study_code,
+                "invitation_url": base_url + joiner + "invite=" + invitation_token,
+            })
+    return {
+        "test_code": "TEST",
+        "generation": generation,
+        "created_count": len(created),
+        "assignments": created,
+        "note": "Each click creates a new isolated test pair; keep downloaded invitation URLs because raw tokens cannot be retrieved later; existing test data is retained.",
+    }
 
 
 @app.post("/api/experiment/consent")
@@ -1033,7 +1111,7 @@ def start_experiment_stage(data: StageStartIn):
                 (timestamp, old_run_id),
             )
 
-        settings = {"module": data.stage_code, "study_code": STUDY_CODE, "schema_version": 1}
+        settings = {"module": data.stage_code, "study_code": assignment["study_code"], "schema_version": 1}
         if DATABASE_URL:
             connection.execute(
                 "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
@@ -1897,12 +1975,16 @@ def experiment_progress(x_admin_token: str | None = Header(default=None)):
 
 
 @app.get("/api/admin/ultimatum/export.csv")
-def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
-    """Export all ultimatum attempts, including practice and superseded attempts for audit."""
+def export_ultimatum_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Export Ultimatum attempts from the main study or isolated test studies."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
+        "SELECT sp.study_code,p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
         "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
         "ir.metadata AS run_metadata,usp.current_run_id AS current_stage_run_id,"
         "usp.draft_payload AS final_stage_payload,iv.version AS instrument_version,"
@@ -1920,13 +2002,13 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         "AND a.study_code=sp.study_code "
         "LEFT JOIN experiment_stage_progress usp ON usp.participation_id=sp.participation_id "
         "AND usp.stage_code='ultimatum' "
-        "WHERE sp.study_code=" + marker + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
+        "WHERE " + scope_filter + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
     )
     with conn() as connection:
-        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
+        rows = connection.execute(query, () if scope == "test" else (STUDY_CODE,)).fetchall()
 
     fields = [
-        "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
+        "study_code", "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
         "run_completed_at", "attempt_number", "instrument_version", "round_id", "phase",
         "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
         "opponent_condition", "opponent_actual_type", "round_status", "participant_share",
@@ -2040,19 +2122,23 @@ def export_ultimatum_csv(x_admin_token: str | None = Header(default=None)):
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="barsan_ultimatum_trials.csv"',
+            "Content-Disposition": 'attachment; filename="' + ("barsan_test_ultimatum_trials.csv" if scope == "test" else "barsan_ultimatum_trials.csv") + '"',
             "Cache-Control": "no-store",
         },
     )
 
 
 @app.get("/api/admin/questionnaire/export.csv")
-def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
-    """Export completed questionnaire answers in long format, one row per question response."""
+def export_questionnaire_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Export completed questionnaire answers in long format for one data scope."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
+        "SELECT sp.study_code,p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
         "qr.updated_at,qr.run_id,iv.version AS instrument_version "
         "FROM questionnaire_responses qr "
         "JOIN instrument_runs ir ON ir.run_id=qr.run_id "
@@ -2061,18 +2147,19 @@ def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
         "JOIN participants p ON p.participant_id=sp.participant_id "
         "LEFT JOIN experiment_assignments a ON a.participant_id=p.participant_id "
         "AND a.study_code=sp.study_code "
-        "WHERE iv.instrument_code=" + marker + " AND sp.study_code=" + marker
+        "WHERE iv.instrument_code=" + marker + " AND " + scope_filter
         + " AND ir.status='completed' "
         "ORDER BY p.participant_code,qr.question_code"
     )
     with conn() as connection:
-        rows = connection.execute(query, ("questionnaire", STUDY_CODE)).fetchall()
+        params = ("questionnaire",) if scope == "test" else ("questionnaire", STUDY_CODE)
+        rows = connection.execute(query, params).fetchall()
 
     def generate_csv():
         buffer = io.StringIO(newline="")
         buffer.write("\ufeff")
         fields = [
-            "participant_code", "condition_code", "question_code", "response_value",
+            "study_code", "participant_code", "condition_code", "question_code", "response_value",
             "updated_at", "run_id", "instrument_version",
         ]
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
@@ -2090,7 +2177,7 @@ def export_questionnaire_csv(x_admin_token: str | None = Header(default=None)):
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="barsan_questionnaire_responses.csv"',
+            "Content-Disposition": 'attachment; filename="' + ("barsan_test_questionnaire_responses.csv" if scope == "test" else "barsan_questionnaire_responses.csv") + '"',
             "Cache-Control": "no-store",
         },
     )
@@ -2109,32 +2196,43 @@ def sessions(x_admin_token: str | None = Header(default=None)):
             "JOIN participants p ON p.participant_id=sp.participant_id "
             "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
             "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-            "WHERE i.instrument_code=" + marker + " ORDER BY ir.started_at DESC",
-            (INSTRUMENT_CODE,),
+            "WHERE i.instrument_code=" + marker + " AND sp.study_code=" + marker + " ORDER BY ir.started_at DESC",
+            (INSTRUMENT_CODE, STUDY_CODE),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
 @app.get("/api/admin/export.csv")
-def export_csv(x_admin_token: str | None = Header(default=None)):
+def export_csv(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Stream Life-Trade trial rows from the main study or isolated test studies."""
     authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+
     with conn() as connection:
-        if DATABASE_URL:
-            key_rows = connection.execute(
-                "SELECT DISTINCT x.json_key FROM lifetrade_trials t "
-                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
-                "CROSS JOIN LATERAL jsonb_object_keys(t.payload) AS x(json_key) "
-                "WHERE ir.status <> 'superseded'"
-            ).fetchall()
-        else:
-            key_rows = connection.execute(
-                "SELECT DISTINCT json_each.key AS json_key "
-                "FROM lifetrade_trials t JOIN instrument_runs ir ON ir.run_id=t.run_id, "
-                "json_each(t.payload) WHERE ir.status <> 'superseded'"
-            ).fetchall()
+        key_query = (
+            "SELECT t.payload FROM lifetrade_trials t "
+            "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+            "WHERE ir.status <> 'superseded' AND " + scope_filter
+        )
+        key_params = () if scope == "test" else (STUDY_CODE,)
+        key_rows = connection.execute(key_query, key_params).fetchall()
+
+    payload_fields = set()
+    for key_row in key_rows:
+        payload = key_row["payload"]
+        parsed = json.loads(payload) if isinstance(payload, str) else payload
+        if isinstance(parsed, dict):
+            payload_fields.update(parsed.keys())
+
     fields = sorted(
-        {row["json_key"] for row in key_rows}
-        | {"server_received_at", "server_run_id", "server_session_id", "participant_code", "instrument_code", "instrument_version"}
+        payload_fields
+        | {"server_received_at", "server_run_id", "server_session_id", "participant_code",
+           "instrument_code", "instrument_version", "study_code"}
     )
 
     def generate_csv():
@@ -2148,34 +2246,30 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
         last_event_id = None
 
         while True:
-            base_query = (
-                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,iv.version "
+            query = (
+                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,"
+                "iv.version,sp.study_code "
                 "FROM lifetrade_trials t "
                 "JOIN instrument_runs ir ON ir.run_id=t.run_id "
                 "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
                 "JOIN participants p ON p.participant_id=sp.participant_id "
                 "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
                 "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-                "WHERE i.instrument_code="
+                "WHERE i.instrument_code=" + marker + " AND " + scope_filter +
+                " AND ir.status <> 'superseded'"
             )
-            if last_received_at is None:
-                query = base_query + ("%s" if DATABASE_URL else "?")
-                query += " AND ir.status <> 'superseded' ORDER BY t.received_at,t.client_event_id LIMIT 500"
-                params = (INSTRUMENT_CODE,)
-            else:
-                marker = "%s" if DATABASE_URL else "?"
-                query = base_query + marker
+            params = [INSTRUMENT_CODE]
+            if scope != "test":
+                params.append(STUDY_CODE)
+            if last_received_at is not None:
                 query += (
-                    " AND ir.status <> 'superseded' AND (t.received_at,t.client_event_id) > ("
-                    + marker
-                    + ","
-                    + marker
-                    + ") ORDER BY t.received_at,t.client_event_id LIMIT 500"
+                    " AND (t.received_at,t.client_event_id) > (" + marker + "," + marker + ")"
                 )
-                params = (INSTRUMENT_CODE, last_received_at, last_event_id)
+                params.extend([last_received_at, last_event_id])
+            query += " ORDER BY t.received_at,t.client_event_id LIMIT 500"
 
             with conn() as connection:
-                rows = connection.execute(query, params).fetchall()
+                rows = connection.execute(query, tuple(params)).fetchall()
             if not rows:
                 break
             last_received_at = rows[-1]["received_at"]
@@ -2189,17 +2283,19 @@ def export_csv(x_admin_token: str | None = Header(default=None)):
                 item["participant_code"] = row["participant_code"]
                 item["instrument_code"] = INSTRUMENT_CODE
                 item["instrument_version"] = row["version"]
+                item["study_code"] = row["study_code"]
                 output_rows.append(item)
             writer.writerows(output_rows)
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
 
+    filename = "barsan_test_lifetrade_trials.csv" if scope == "test" else "lifetrade_trials.csv"
     return StreamingResponse(
         generate_csv(),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": 'attachment; filename="lifetrade_trials.csv"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
         },
     )
@@ -2212,6 +2308,17 @@ app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")
 def load_homepage() -> str:
     with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
         return file.read()
+
+
+@app.get("/admin/links", response_class=HTMLResponse)
+def admin_links_page():
+    """Serve the protected-action UI; actual link creation/export still requires ADMIN_TOKEN."""
+    path = os.path.join(ROOT, "app", "admin-links.html")
+    try:
+        with open(path, encoding="utf-8") as file:
+            return HTMLResponse(file.read())
+    except OSError as exc:
+        raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 
 
 @app.get("/", response_class=HTMLResponse)
