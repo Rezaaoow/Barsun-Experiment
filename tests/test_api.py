@@ -581,6 +581,23 @@ def test_admin_link_management_status_reissue_and_active_csv(client, monkeypatch
         json={"invitation_token": token_b, "participant_code": "BS-LINK-B"},
     ).status_code == 403
 
+    reactivate = client.post(
+        "/api/admin/assignments/status",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_b["assignment_id"]], "active": True},
+    )
+    assert reactivate.status_code == 200, reactivate.text
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": token_b, "participant_code": "BS-LINK-B"},
+    ).status_code == 200
+    # Disable it once more to test bulk removal of inactive links.
+    client.post(
+        "/api/admin/assignments/status",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_b["assignment_id"]], "active": False},
+    )
+
     split = client.get("/api/admin/assignments?scope=main&status=all", headers=headers)
     assert split.json()["counts"] == {"active": 1, "inactive": 1, "total": 2}
     assert len(client.get("/api/admin/assignments?scope=main&status=inactive", headers=headers).json()["items"]) == 1
