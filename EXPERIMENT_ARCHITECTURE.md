@@ -46,6 +46,15 @@ Questionnaire draft answers are saved to `experiment_stage_progress.draft_payloa
 
 Do not distribute invitation URLs for final data collection yet. The UI includes the welcome/ethics pages, one-question-per-page questionnaire, DD/Life-Trade task and initial Ultimatum flow. Its cPanel deployment and full hosted database path have not been verified; the AI decision model still needs researcher confirmation.
 
+## Admin link tool and test data isolation
+
+- `GET /admin/links` serves a Persian RTL admin page. Its actions require `X-Admin-Token`; the page does not persist that token in local storage.
+- The page accepts one participant code per line, optionally followed by `,Frame` or `,Control`. Frame maps to condition `A`; Control maps to `B`. The existing protected assignment endpoint returns each invitation URL only at creation.
+- `POST /api/admin/test-links` creates two new test assignments with code `TEST`: one Frame and one Control. Each generation uses a unique `barsan-test-...` study code for each group, allowing the same participant code to have both test links without merging stage progress.
+- Experiment identity lookup uses the invitation-token hash plus participant code to locate the matching assignment across study scopes. All stage runs remain attached to that assignment's `study_participations` row.
+- Main exports and progress endpoints default to `STUDY_CODE`. The questionnaire, Life-Trade and Ultimatum CSV endpoints accept `?scope=test`, filtering to the `barsan-test-` prefix. Main exports cannot include these test studies.
+- Generating another pair creates a new isolated test generation and leaves previous test links/data intact. Export endpoints include `study_code` for traceability.
+
 ## Backend foundation implemented
 
 - Three instrument registry entries: `questionnaire`, `lifetrade`, `ultimatum`.
