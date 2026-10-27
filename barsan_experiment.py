@@ -8,6 +8,7 @@ import random
 import secrets
 import sqlite3
 import uuid
+import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -531,6 +532,15 @@ class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
 
 
+class ModuleTestLinkIn(BaseModel):
+    stage_code: StageCode
+
+
+class MaintenanceResetIn(BaseModel):
+    scope: Literal["main", "test"]
+    confirm_phrase: str = Field(min_length=1, max_length=40)
+
+
 class ExperimentIdentityIn(BaseModel):
     invitation_token: str = Field(min_length=20, max_length=200)
     participant_code: str = Field(min_length=1, max_length=100)
@@ -827,6 +837,85 @@ def _ensure_participation(
     return participant["participant_id"], participation["participation_id"]
 
 
+def _test_module_from_study_code(study_code: str) -> str | None:
+    prefix = TEST_STUDY_PREFIX + "module-"
+    if not study_code.startswith(prefix):
+        return None
+    suffix = study_code[len(prefix):]
+    for stage_code in STAGE_ORDER:
+        if suffix.endswith("-" + stage_code):
+            return stage_code
+    return None
+
+
+def _seed_completed_test_stage(connection: Any, participation_id: str, stage_code: str) -> None:
+    """Insert an auditable synthetic completed prerequisite for a module-only test link."""
+    instrument_code, version, instrument_name = STAGE_TO_INSTRUMENT[stage_code]
+    timestamp = now()
+    marker = "%s" if DATABASE_URL else "?"
+    settings = {"module": stage_code, "test_prerequisite": True, "schema_version": 1}
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO instruments(instrument_code,instrument_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(instrument_code) DO NOTHING",
+            (instrument_code, instrument_name, timestamp),
+        )
+        connection.execute(
+            "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+            "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
+            (str(uuid.uuid4()), instrument_code, version, _json_param(settings), timestamp),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
+            (instrument_code, instrument_name, timestamp),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+            "VALUES(?,?,?,?,?)",
+            (str(uuid.uuid4()), instrument_code, version, _json_param(settings), timestamp),
+        )
+    version_row = connection.execute(
+        "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=" + marker
+        + " AND version=" + marker,
+        (instrument_code, version),
+    ).fetchone()
+    run_id = str(uuid.uuid4())
+    metadata = _json_param({"attempt_number": 1, "test_prerequisite": True, "module": stage_code})
+    connection.execute(
+        "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,completed_at,"
+        "status,trial_count,metadata) VALUES(" + ",".join([marker] * 8) + ")",
+        (run_id, participation_id, version_row["instrument_version_id"], timestamp, timestamp,
+         "completed", 0, metadata),
+    )
+    empty_payload = _json_param({"test_prerequisite": True, "module": stage_code})
+    connection.execute(
+        "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+        "draft_payload,started_at,completed_at,updated_at) VALUES("
+        + ",".join([marker] * 9)
+        + ") ON CONFLICT(participation_id,stage_code) DO UPDATE SET "
+        "status='completed',attempt_number=1,current_run_id=excluded.current_run_id,"
+        "draft_payload=excluded.draft_payload,started_at=excluded.started_at,"
+        "completed_at=excluded.completed_at,updated_at=excluded.updated_at",
+        (participation_id, stage_code, "completed", 1, run_id, empty_payload, timestamp, timestamp, timestamp),
+    )
+
+
+def _scope_filter(scope: str, column: str, marker: str) -> tuple[str, tuple[Any, ...]]:
+    if scope == "test":
+        return column + " LIKE 'barsan-test-%'", ()
+    return column + "=" + marker, (STUDY_CODE,)
+
+
+def _scope_rows(connection: Any, scope: str, table: str, column: str = "study_code") -> list[dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    condition, params = _scope_filter(scope, column, marker)
+    return [dict(row) for row in connection.execute(
+        "SELECT * FROM " + table + " WHERE " + condition,
+        params,
+    ).fetchall()]
+
+
 def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -1005,6 +1094,46 @@ def create_test_links(x_admin_token: str | None = Header(default=None)):
     }
 
 
+@app.post("/api/admin/module-test-links")
+def create_module_test_link(
+    data: ModuleTestLinkIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Create a single-module-only test link; prerequisites are synthetic and explicitly flagged."""
+    authorize(x_admin_token)
+    stage_index = STAGE_ORDER.index(data.stage_code)
+    generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    study_code = f"{TEST_STUDY_PREFIX}module-{generation}-{data.stage_code}"
+    study_name = f"BarSan module test — {data.stage_code} — {generation}"
+    participant_code = "TEST"
+    base_url = PUBLIC_EXPERIMENT_URL
+    joiner = "&" if "?" in base_url else "?"
+    with conn() as connection:
+        participant_id, participation_id = _ensure_participation(
+            connection, participant_code, study_code=study_code, study_name=study_name
+        )
+        marker = "%s" if DATABASE_URL else "?"
+        invitation_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+        connection.execute(
+            "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+            "invitation_token_hash,active,assigned_at) VALUES(" + ",".join([marker] * 7) + ")",
+            (str(uuid.uuid4()), study_code, participant_id, "A", token_hash, 1, now()),
+        )
+        for prerequisite in STAGE_ORDER[:stage_index]:
+            _seed_completed_test_stage(connection, participation_id, prerequisite)
+    return {
+        "participant_code": participant_code,
+        "condition_code": "A",
+        "group": "Frame",
+        "stage_code": data.stage_code,
+        "study_code": study_code,
+        "invitation_url": base_url + joiner + "invite=" + invitation_token,
+        "test_code": "TEST",
+        "prerequisites_marked_synthetic": list(STAGE_ORDER[:stage_index]),
+    }
+
+
 @app.post("/api/experiment/consent")
 def record_experiment_consent(data: ExperimentConsentIn):
     """Persist acceptance of the current consent text without storing IP or device identity."""
@@ -1050,6 +1179,8 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     return {
         "participant_code": assignment["participant_code"],
         "condition_code": assignment["condition_code"],
+        "study_code": assignment["study_code"],
+        "test_module_only": _test_module_from_study_code(assignment["study_code"]),
         "current_stage": current_stage,
         "stages": states,
     }
