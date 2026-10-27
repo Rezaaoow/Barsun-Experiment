@@ -23,6 +23,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql:
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
 STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
+TEST_STUDY_PREFIX = "barsan-test-"
 PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "https://my-experiment.ir/lifetrade").rstrip("?&")
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
@@ -766,15 +767,27 @@ def _json_param(value: dict[str, Any]) -> Any:
     return Jsonb(value) if DATABASE_URL else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, str]:
-    """Create/reuse a participant and study participation without making a new code."""
+def _ensure_participation(
+    connection: Any,
+    participant_code: str,
+    study_code: str = STUDY_CODE,
+    study_name: str | None = None,
+) -> tuple[str, str]:
+    """Create/reuse a participant in a named study without generating their code."""
     participant_id = str(uuid.uuid4())
     participation_id = str(uuid.uuid4())
+    resolved_study_name = study_name or study_code
+    timestamp = now()
     if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(study_code) DO NOTHING",
+            (study_code, resolved_study_name, timestamp),
+        )
         connection.execute(
             "INSERT INTO participants(participant_id,participant_code,created_at) VALUES(%s,%s,%s) "
             "ON CONFLICT(participant_code) DO NOTHING",
-            (participant_id, participant_code, now()),
+            (participant_id, participant_code, timestamp),
         )
         participant = connection.execute(
             "SELECT participant_id FROM participants WHERE participant_code=%s",
@@ -783,16 +796,20 @@ def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, 
         connection.execute(
             "INSERT INTO study_participations(participation_id,study_code,participant_id,joined_at) "
             "VALUES(%s,%s,%s,%s) ON CONFLICT(study_code,participant_id) DO NOTHING",
-            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            (participation_id, study_code, participant["participant_id"], timestamp),
         )
         participation = connection.execute(
             "SELECT participation_id FROM study_participations WHERE study_code=%s AND participant_id=%s",
-            (STUDY_CODE, participant["participant_id"]),
+            (study_code, participant["participant_id"]),
         ).fetchone()
     else:
         connection.execute(
+            "INSERT OR IGNORE INTO studies(study_code,study_name,created_at) VALUES(?,?,?)",
+            (study_code, resolved_study_name, timestamp),
+        )
+        connection.execute(
             "INSERT OR IGNORE INTO participants(participant_id,participant_code,created_at) VALUES(?,?,?)",
-            (participant_id, participant_code, now()),
+            (participant_id, participant_code, timestamp),
         )
         participant = connection.execute(
             "SELECT participant_id FROM participants WHERE participant_code=?",
@@ -801,11 +818,11 @@ def _ensure_participation(connection: Any, participant_code: str) -> tuple[str, 
         connection.execute(
             "INSERT OR IGNORE INTO study_participations(participation_id,study_code,participant_id,joined_at) "
             "VALUES(?,?,?,?)",
-            (participation_id, STUDY_CODE, participant["participant_id"], now()),
+            (participation_id, study_code, participant["participant_id"], timestamp),
         )
         participation = connection.execute(
             "SELECT participation_id FROM study_participations WHERE study_code=? AND participant_id=?",
-            (STUDY_CODE, participant["participant_id"]),
+            (study_code, participant["participant_id"]),
         ).fetchone()
     return participant["participant_id"], participation["participation_id"]
 
@@ -820,9 +837,9 @@ def _lookup_assignment(connection: Any, invitation_token: str, participant_code:
         "JOIN participants p ON p.participant_id=a.participant_id "
         "JOIN study_participations sp ON sp.participant_id=a.participant_id "
         "AND sp.study_code=a.study_code "
-        "WHERE a.study_code=" + marker + " AND p.participant_code=" + marker
+        "WHERE p.participant_code=" + marker
         + " AND a.invitation_token_hash=" + marker + " AND a.active=1",
-        (STUDY_CODE, normalize_participant_code(participant_code), token_hash),
+        (normalize_participant_code(participant_code), token_hash),
     ).fetchone()
     if not row:
         # A generic error avoids distinguishing a bad code from a bad invitation link.
@@ -925,6 +942,67 @@ def create_assignments(data: AssignmentBatchIn, x_admin_token: str | None = Head
                 "invitation_url": base_url + joiner + "invite=" + invitation_token,
             })
     return {"created_count": len(created), "assignments": created}
+
+
+@app.post("/api/admin/test-links")
+def create_test_links(x_admin_token: str | None = Header(default=None)):
+    """Create two isolated, fresh test studies with the shared participant code TEST."""
+    authorize(x_admin_token)
+    generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    base_url = PUBLIC_EXPERIMENT_URL
+    joiner = "&" if "?" in base_url else "?"
+    created = []
+    with conn() as connection:
+        for condition, group_label in (("A", "Frame"), ("B", "Control")):
+            group_slug = group_label.lower()
+            study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
+            study_name = f"BarSan isolated test — {generation} — {group_label}"
+            participant_code = "TEST"
+            participant_id, _participation_id = _ensure_participation(
+                connection,
+                participant_code,
+                study_code=study_code,
+                study_name=study_name,
+            )
+            marker = "%s" if DATABASE_URL else "?"
+            existing = connection.execute(
+                "SELECT assignment_id FROM experiment_assignments "
+                "WHERE study_code=" + marker + " AND participant_id=" + marker,
+                (study_code, participant_id),
+            ).fetchone()
+            if existing:
+                raise HTTPException(409, "A test assignment already exists for this test generation")
+            invitation_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            values = (
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, 1, now()
+            )
+            if DATABASE_URL:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    values,
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+                    "invitation_token_hash,active,assigned_at) VALUES(?,?,?,?,?,?,?)",
+                    values,
+                )
+            created.append({
+                "participant_code": participant_code,
+                "condition_code": condition,
+                "group": group_label,
+                "study_code": study_code,
+                "invitation_url": base_url + joiner + "invite=" + invitation_token,
+            })
+    return {
+        "test_code": "TEST",
+        "generation": generation,
+        "created_count": len(created),
+        "assignments": created,
+        "note": "Each click creates a new isolated test pair; previous test links and data remain available.",
+    }
 
 
 @app.post("/api/experiment/consent")
@@ -1033,7 +1111,7 @@ def start_experiment_stage(data: StageStartIn):
                 (timestamp, old_run_id),
             )
 
-        settings = {"module": data.stage_code, "study_code": STUDY_CODE, "schema_version": 1}
+        settings = {"module": data.stage_code, "study_code": assignment["study_code"], "schema_version": 1}
         if DATABASE_URL:
             connection.execute(
                 "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
