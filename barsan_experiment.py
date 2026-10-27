@@ -1335,6 +1335,51 @@ def set_admin_assignments_status(
     }
 
 
+@app.post("/api/admin/assignments/reissue-missing-links")
+def reissue_missing_admin_assignment_links(
+    data: AssignmentIdBatchIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Regenerate only selected URLs whose tokens are not recoverable; preserve active status."""
+    authorize(x_admin_token)
+    if len(set(data.assignment_ids)) != len(data.assignment_ids):
+        raise HTTPException(422, "فهرست شناسه‌های لینک نباید تکراری باشد.")
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(data.scope, "a.study_code", marker)
+    reissued_count = 0
+    skipped_count = 0
+    with conn() as connection:
+        for start in range(0, len(data.assignment_ids), 400):
+            batch_ids = data.assignment_ids[start:start + 400]
+            placeholders = ",".join([marker] * len(batch_ids))
+            rows = connection.execute(
+                "SELECT a.assignment_id,a.invitation_token_encrypted "
+                "FROM experiment_assignments a WHERE a.assignment_id IN ("
+                + placeholders + ") AND " + scope_condition,
+                (*batch_ids, *scope_params),
+            ).fetchall()
+            for row in rows:
+                if _decrypt_invitation_token(row["invitation_token_encrypted"]):
+                    skipped_count += 1
+                    continue
+                new_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(new_token.encode("utf-8")).hexdigest()
+                token_encrypted = _encrypt_invitation_token(new_token)
+                connection.execute(
+                    "UPDATE experiment_assignments SET invitation_token_hash=" + marker
+                    + ",invitation_token_encrypted=" + marker + " WHERE assignment_id=" + marker,
+                    (token_hash, token_encrypted, row["assignment_id"]),
+                )
+                reissued_count += 1
+    return {
+        "reissued_count": reissued_count,
+        "skipped_count": skipped_count,
+        "scope": data.scope,
+        "message": "فقط لینک‌های بدون URL قابل بازیابی، با حفظ وضعیت فعال/غیرفعال، دوباره صادر شدند.",
+        "warning": "لینک قدیمی مواردی که دوباره صادر شدند باطل است.",
+    }
+
+
 @app.post("/api/admin/assignments/reissue-link")
 def reissue_admin_assignment_link(
     data: AssignmentReissueIn,
