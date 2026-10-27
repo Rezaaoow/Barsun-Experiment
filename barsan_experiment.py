@@ -1001,7 +1001,7 @@ def create_test_links(x_admin_token: str | None = Header(default=None)):
         "generation": generation,
         "created_count": len(created),
         "assignments": created,
-        "note": "Each click creates a new isolated test pair; previous test links and data remain available.",
+        "note": "Each click creates a new isolated test pair; keep downloaded invitation URLs because raw tokens cannot be retrieved later; existing test data is retained.",
     }
 
 
