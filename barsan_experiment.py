@@ -2072,37 +2072,224 @@ def authorize(token: str | None) -> None:
         raise HTTPException(401, "Unauthorized")
 
 
-@app.get("/api/admin/progress")
-def experiment_progress(x_admin_token: str | None = Header(default=None)):
-    """One row per preassigned participant, with authoritative status for all three stages."""
+@app.get("/api/admin/maintenance/preview")
+def maintenance_preview(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Return exact counts before any scoped data reset."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    if scope == "test":
+        condition = "study_code LIKE 'barsan-test-%'"
+        params: tuple[Any, ...] = ()
+    else:
+        condition = "study_code=" + marker
+        params = (STUDY_CODE,)
+
+    queries = {
+        "assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition, params),
+        "participations": ("SELECT COUNT(*) AS n FROM study_participations WHERE " + condition, params),
+        "runs": (
+            "SELECT COUNT(*) AS n FROM instrument_runs ir JOIN study_participations sp "
+            "ON sp.participation_id=ir.participation_id WHERE " + condition.replace("study_code", "sp.study_code"),
+            params,
+        ),
+        "questionnaire_responses": (
+            "SELECT COUNT(*) AS n FROM questionnaire_responses qr JOIN instrument_runs ir ON ir.run_id=qr.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "lifetrade_trials": (
+            "SELECT COUNT(*) AS n FROM lifetrade_trials t JOIN instrument_runs ir ON ir.run_id=t.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "ultimatum_trials": (
+            "SELECT COUNT(*) AS n FROM ultimatum_trials u JOIN instrument_runs ir ON ir.run_id=u.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+            + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "participants": (
+            "SELECT COUNT(DISTINCT p.participant_id) AS n FROM participants p JOIN experiment_assignments a "
+            "ON a.participant_id=p.participant_id WHERE " + condition.replace("study_code", "a.study_code"), params,
+        ),
+    }
+    counts = {}
+    with conn() as connection:
+        for name, (query, query_params) in queries.items():
+            counts[name] = int(connection.execute(query, query_params).fetchone()["n"] or 0)
+        condition_sp = condition.replace("study_code", "sp.study_code")
+        counts["completed_experiments"] = int(connection.execute(
+            "SELECT COUNT(*) AS n FROM (SELECT sp.participation_id "
+            "FROM study_participations sp JOIN experiment_stage_progress q "
+            "ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' AND q.status='completed' "
+            "JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id "
+            "AND d.stage_code='dd_lifetrade' AND d.status='completed' "
+            "JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id "
+            "AND u.stage_code='ultimatum' AND u.status='completed' WHERE " + condition_sp + ") completed",
+            params,
+        ).fetchone()["n"] or 0)
+    return {"scope": scope, "study_code": STUDY_CODE if scope == "main" else TEST_STUDY_PREFIX + "*",
+            "counts": counts,
+            "warning": "This action permanently deletes rows in the selected study scope; participant master codes and instrument definitions are retained."}
+
+
+@app.post("/api/admin/maintenance/reset")
+def reset_study_data(
+    data: MaintenanceResetIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Permanently remove only one explicitly confirmed study scope, keeping shared registries."""
+    authorize(x_admin_token)
+    expected_phrase = "CLEAR MAIN DATA" if data.scope == "main" else "CLEAR TEST DATA"
+    if data.confirm_phrase != expected_phrase:
+        raise HTTPException(422, "عبارت تأیید پاک‌سازی با محدودهٔ انتخاب‌شده مطابقت ندارد.")
+    marker = "%s" if DATABASE_URL else "?"
+    condition = "study_code LIKE 'barsan-test-%'" if data.scope == "test" else "study_code=" + marker
+    params: tuple[Any, ...] = () if data.scope == "test" else (STUDY_CODE,)
+    deleted: dict[str, int] = {}
+
+    # The preview count and deletion occur within a single transaction; scoped child rows are
+    # removed before their parent run/participation/assignment rows to respect foreign keys.
+    with conn() as connection:
+        for name, query in (
+            ("questionnaire_responses",
+             "DELETE FROM questionnaire_responses WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code")),
+            ("lifetrade_trials",
+             "DELETE FROM lifetrade_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code")),
+            ("ultimatum_trials",
+             "DELETE FROM ultimatum_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
+             "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code")),
+            ("experiment_stage_progress",
+             "DELETE FROM experiment_stage_progress WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code")),
+            ("experiment_consents",
+             "DELETE FROM experiment_consents WHERE assignment_id IN "
+             "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
+             + condition.replace("study_code", "a.study_code")),
+            ("experiment_assignments",
+             "DELETE FROM experiment_assignments WHERE " + condition),
+            ("instrument_runs",
+             "DELETE FROM instrument_runs WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code")),
+            ("study_participations",
+             "DELETE FROM study_participations WHERE " + condition),
+        ):
+            cursor = connection.execute(query, params)
+            deleted[name] = max(0, int(cursor.rowcount or 0))
+        if data.scope == "test":
+            cursor = connection.execute(
+                "DELETE FROM studies WHERE study_code LIKE 'barsan-test-%'"
+            )
+            deleted["test_studies"] = max(0, int(cursor.rowcount or 0))
+        else:
+            deleted["test_studies"] = 0
+    return {"reset": True, "scope": data.scope, "deleted_rows": deleted,
+            "participant_master_rows_retained": True,
+            "message": "محدودهٔ انتخاب‌شده پاک شد؛ برای شروع دوباره باید لینک‌های اختصاصی جدید ساخته شوند."}
+
+
+@app.get("/api/admin/progress")
+def experiment_progress(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """One row per assignment, with module position and stale-incomplete indicator."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    condition, params = _scope_filter(scope, "a.study_code", marker)
     query = (
-        "SELECT p.participant_code,a.condition_code,a.assigned_at,"
+        "SELECT a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
         "COALESCE(q.status,'not_started') AS questionnaire_status,"
         "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
         "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
+        "q.updated_at AS questionnaire_updated_at,"
         "COALESCE(d.status,'not_started') AS dd_lifetrade_status,"
         "COALESCE(d.attempt_number,0) AS dd_lifetrade_attempts,"
         "d.started_at AS dd_lifetrade_started_at,d.completed_at AS dd_lifetrade_completed_at,"
+        "d.updated_at AS dd_lifetrade_updated_at,"
         "COALESCE(u.status,'not_started') AS ultimatum_status,"
         "COALESCE(u.attempt_number,0) AS ultimatum_attempts,"
-        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at "
+        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at,"
+        "u.updated_at AS ultimatum_updated_at "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
-        "LEFT JOIN experiment_stage_progress q ON q.participation_id=("
-        "SELECT sp.participation_id FROM study_participations sp "
-        "WHERE sp.participant_id=a.participant_id AND sp.study_code=a.study_code) "
-        "AND q.stage_code='questionnaire' "
-        "LEFT JOIN experiment_stage_progress d ON d.participation_id=q.participation_id "
-        "AND d.stage_code='dd_lifetrade' "
-        "LEFT JOIN experiment_stage_progress u ON u.participation_id=q.participation_id "
-        "AND u.stage_code='ultimatum' "
-        "WHERE a.study_code=" + marker + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
+        "LEFT JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+        "LEFT JOIN experiment_stage_progress q ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' "
+        "LEFT JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id AND d.stage_code='dd_lifetrade' "
+        "LEFT JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id AND u.stage_code='ultimatum' "
+        "WHERE " + condition + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
     )
     with conn() as connection:
-        rows = connection.execute(query, (STUDY_CODE,)).fetchall()
-    return [dict(row) for row in rows]
+        raw_rows = connection.execute(query, params).fetchall()
+
+    current_time = datetime.now(timezone.utc)
+    stale_cutoff = current_time.timestamp() - 24 * 60 * 60
+
+    def parse_time(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            normalized = str(value).replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        except (TypeError, ValueError):
+            return None
+
+    output = []
+    for raw in raw_rows:
+        row = dict(raw)
+        stage_statuses = [row["questionnaire_status"], row["dd_lifetrade_status"], row["ultimatum_status"]]
+        stages = [
+            ("questionnaire", "questionnaire"),
+            ("dd_lifetrade", "dd_lifetrade"),
+            ("ultimatum", "ultimatum"),
+        ]
+        completed_stages = sum(status == "completed" for status in stage_statuses)
+        row["completed_stages"] = completed_stages
+        row["current_stage"] = next(
+            (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
+            None,
+        )
+        has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
+        last_activity_candidates = [parse_time(row.get("assigned_at"))]
+        for stage_code, _ in stages:
+            last_activity_candidates.extend([
+                parse_time(row.get(stage_code + "_started_at")),
+                parse_time(row.get(stage_code + "_completed_at")),
+                parse_time(row.get(stage_code + "_updated_at")),
+            ])
+        valid_times = [value for value in last_activity_candidates if value is not None]
+        last_activity_epoch = max(valid_times) if valid_times else None
+        row["last_activity_at"] = (
+            datetime.fromtimestamp(last_activity_epoch, timezone.utc).isoformat()
+            if last_activity_epoch is not None else row.get("assigned_at")
+        )
+        row["hours_since_activity"] = (
+            round(max(0.0, (current_time.timestamp() - last_activity_epoch) / 3600), 2)
+            if last_activity_epoch is not None else None
+        )
+        if completed_stages == len(STAGE_ORDER):
+            row["progress_state"] = "completed"
+        elif not has_started:
+            row["progress_state"] = "not_started"
+        elif last_activity_epoch is not None and last_activity_epoch < stale_cutoff:
+            row["progress_state"] = "stale_incomplete"
+        else:
+            row["progress_state"] = "in_progress"
+        # Assignment and activity metadata are now already flattened for JSON/CSV consumers.
+        output.append(row)
+    return output
 
 
 @app.get("/api/admin/ultimatum/export.csv")
@@ -2315,20 +2502,25 @@ def export_questionnaire_csv(
 
 
 @app.get("/api/admin/sessions")
-def sessions(x_admin_token: str | None = Header(default=None)):
+def sessions(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
+    study_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
+    params = (INSTRUMENT_CODE,) if scope == "test" else (INSTRUMENT_CODE, STUDY_CODE)
     with conn() as connection:
         rows = connection.execute(
-            "SELECT ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
-            "ir.completed_at,ir.status,ir.trial_count,iv.version AS experiment_version "
+            "SELECT sp.study_code,ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
+            "ir.completed_at,ir.status,ir.trial_count,iv.instrument_code,iv.version AS experiment_version "
             "FROM instrument_runs ir "
             "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
             "JOIN participants p ON p.participant_id=sp.participant_id "
             "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
             "JOIN instruments i ON i.instrument_code=iv.instrument_code "
-            "WHERE i.instrument_code=" + marker + " AND sp.study_code=" + marker + " ORDER BY ir.started_at DESC",
-            (INSTRUMENT_CODE, STUDY_CODE),
+            "WHERE i.instrument_code=" + marker + " AND " + study_filter + " ORDER BY ir.started_at DESC",
+            params,
         ).fetchall()
     return [dict(row) for row in rows]
 
