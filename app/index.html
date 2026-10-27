@@ -984,7 +984,7 @@ const LIKERT_OPTIONS = [
   {value:"NA",label:"قابل‌اعمال نیست / نمی‌دانم"}
 ];
 
-const APP_BASE_PATH=window.location.pathname.replace(/\\/$/,"");
+const APP_BASE_PATH=window.location.pathname.replace(/\/$/,"");
 async function api(path, body){
  const url=APP_BASE_PATH+(path.startsWith('/')?path:'/'+path);
  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'});
