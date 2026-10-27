@@ -609,7 +609,7 @@ class AssignmentBatchIn(BaseModel):
 
 class AssignmentStatusBatchIn(BaseModel):
     scope: Literal["main", "test"] = "main"
-    assignment_ids: list[str] = Field(min_length=1, max_length=500)
+    assignment_ids: list[str] = Field(min_length=1, max_length=5000)
     active: bool
 
 
@@ -1309,15 +1309,19 @@ def set_admin_assignments_status(
         raise HTTPException(422, "فهرست شناسه‌های لینک نباید تکراری باشد.")
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
-    placeholders = ",".join([marker] * len(data.assignment_ids))
-    query = (
-        "UPDATE experiment_assignments SET active=" + marker
-        + " WHERE assignment_id IN (" + placeholders + ") AND " + scope_condition
-    )
-    params = (1 if data.active else 0, *data.assignment_ids, *scope_params)
+    changed = 0
+    # Chunk large selections so SQLite deployments stay below their bind-parameter limit.
     with conn() as connection:
-        cursor = connection.execute(query, params)
-        changed = max(0, int(cursor.rowcount or 0))
+        for start in range(0, len(data.assignment_ids), 400):
+            batch_ids = data.assignment_ids[start:start + 400]
+            placeholders = ",".join([marker] * len(batch_ids))
+            query = (
+                "UPDATE experiment_assignments SET active=" + marker
+                + " WHERE assignment_id IN (" + placeholders + ") AND " + scope_condition
+            )
+            params = (1 if data.active else 0, *batch_ids, *scope_params)
+            cursor = connection.execute(query, params)
+            changed += max(0, int(cursor.rowcount or 0))
     return {
         "updated_count": changed,
         "active": data.active,
