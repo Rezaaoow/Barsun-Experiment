@@ -1,4 +1,6 @@
+import io
 import sys
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -59,6 +61,36 @@ def main_test():
         assert "participant_code" in exported.text
         assert "PG-SMOKE-0001" in exported.text
         assert session_id in exported.text
+
+        # Exercise the isolated test scope on PostgreSQL. Passing an empty parameter
+        # tuple alongside a literal LIKE pattern containing '%' previously raised a
+        # psycopg formatting error, so all scope-specific admin queries are checked here.
+        admin_headers = {"x-admin-token": "ci-admin-token"}
+        test_links = client.post("/api/admin/test-links", headers=admin_headers)
+        assert test_links.status_code == 200, test_links.text
+
+        test_progress = client.get("/api/admin/progress?scope=test", headers=admin_headers)
+        assert test_progress.status_code == 200, test_progress.text
+        assert len(test_progress.json()) == 2, test_progress.json()
+        assert all(row["study_code"].startswith("barsan-test-") for row in test_progress.json())
+
+        preview = client.get("/api/admin/maintenance/preview?scope=test", headers=admin_headers)
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["counts"]["assignments"] == 2
+
+        for path in (
+            "/api/admin/questionnaire/export.csv?scope=test",
+            "/api/admin/export.csv?scope=test",
+            "/api/admin/ultimatum/export.csv?scope=test",
+        ):
+            scoped_export = client.get(path, headers=admin_headers)
+            assert scoped_export.status_code == 200, f"{path}: {scoped_export.text}"
+            assert scoped_export.headers.get("content-type", "").startswith("text/csv")
+
+        full_export = client.get("/api/admin/export-all.zip?scope=test", headers=admin_headers)
+        assert full_export.status_code == 200, full_export.text
+        with zipfile.ZipFile(io.BytesIO(full_export.content)) as archive:
+            assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
 
         completed = client.post(
             "/api/complete",
