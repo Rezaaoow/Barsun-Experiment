@@ -255,11 +255,8 @@ if DATABASE_URL:
                 "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
-            connection.execute(
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
-            assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
-            if "invitation_token_encrypted" not in assignment_columns:
-                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
+            connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
@@ -433,6 +430,9 @@ else:
                 "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
+            assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
+            if "invitation_token_encrypted" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
