@@ -44,8 +44,13 @@ jobs:
           scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", html, flags=re.I | re.S)
           assert scripts, "No inline JavaScript found"
           Path("/tmp/lifetrade-inline.js").write_text("\n".join(scripts), encoding="utf-8")
+          admin_html = Path("app/admin-links.html").read_text(encoding="utf-8")
+          admin_scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", admin_html, flags=re.I | re.S)
+          assert admin_scripts, "No admin-link JavaScript found"
+          Path("/tmp/admin-links-inline.js").write_text("\n".join(admin_scripts), encoding="utf-8")
           PY
           node --check /tmp/lifetrade-inline.js
+          node --check /tmp/admin-links-inline.js
       - name: Run SQLite API regression tests
         run: pytest -q
       - name: Run PostgreSQL integration smoke test
