@@ -534,6 +534,7 @@ class AssignmentBatchIn(BaseModel):
 
 class ModuleTestLinkIn(BaseModel):
     stage_code: StageCode
+    condition_code: Literal["A", "B"] = "A"
 
 
 class MaintenanceResetIn(BaseModel):
@@ -1118,14 +1119,14 @@ def create_module_test_link(
         connection.execute(
             "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
             "invitation_token_hash,active,assigned_at) VALUES(" + ",".join([marker] * 7) + ")",
-            (str(uuid.uuid4()), study_code, participant_id, "A", token_hash, 1, now()),
+            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, 1, now()),
         )
         for prerequisite in STAGE_ORDER[:stage_index]:
             _seed_completed_test_stage(connection, participation_id, prerequisite)
     return {
         "participant_code": participant_code,
-        "condition_code": "A",
-        "group": "Frame",
+        "condition_code": data.condition_code,
+        "group": "Frame" if data.condition_code == "A" else "Control",
         "stage_code": data.stage_code,
         "study_code": study_code,
         "invitation_url": base_url + joiner + "invite=" + invitation_token,
