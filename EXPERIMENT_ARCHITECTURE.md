@@ -46,14 +46,21 @@ Questionnaire draft answers are saved to `experiment_stage_progress.draft_payloa
 
 Do not distribute invitation URLs for final data collection yet. The UI includes the welcome/ethics pages, one-question-per-page questionnaire, DD/Life-Trade task and initial Ultimatum flow. Its cPanel deployment and full hosted database path have not been verified; the AI decision model still needs researcher confirmation.
 
-## Admin link tool and test data isolation
+## Experiment-wide admin dashboard
 
-- `GET /admin/links` serves a Persian RTL admin page. Its actions require `X-Admin-Token`; the page does not persist that token in local storage.
-- The page accepts one participant code per line, optionally followed by `,Frame` or `,Control`. Frame maps to condition `A`; Control maps to `B`. The existing protected assignment endpoint returns each invitation URL only at creation.
-- `POST /api/admin/test-links` creates two new test assignments with code `TEST`: one Frame and one Control. Each generation uses a unique `barsan-test-...` study code for each group, allowing the same participant code to have both test links without merging stage progress.
-- Experiment identity lookup uses the invitation-token hash plus participant code to locate the matching assignment across study scopes. All stage runs remain attached to that assignment's `study_participations` row.
-- Main exports and progress endpoints default to `STUDY_CODE`. The questionnaire, Life-Trade and Ultimatum CSV endpoints accept `?scope=test`, filtering to the `barsan-test-` prefix. Main exports cannot include these test studies.
-- Generating another pair creates a new isolated test generation and leaves previous test links/data intact. Export endpoints include `study_code` for traceability.
+- `GET /admin` and `GET /admin/links` serve the same Persian right-to-left dashboard. Dashboard actions still require `X-Admin-Token`; the token is not persisted in local storage.
+- Participant assignments can be created by pasting lines or uploading a CSV with `participant_code`/`code` and `group`/`condition_code` columns. Frame maps to `A`; Control maps to `B`. Raw invitation tokens are returned once at creation and only their SHA-256 hashes are stored in the database.
+- `POST /api/admin/test-links` creates a pair of full Experiment test links, one Frame and one Control, both using code `TEST`; each generation has two separate `barsan-test-...` study codes.
+- `POST /api/admin/module-test-links` creates a single-module test link (questionnaire, DD/Life-Trade, or Ultimatum) with code `TEST`. When prior stage completion is needed to reach the selected module, synthetic completed prerequisite runs and stage states are inserted with `test_prerequisite=true`; they contain no observed participant answers and must not be treated as behavioral data. The selected condition is returned as `A` or `B`.
+- `GET /api/admin/progress?scope=main|test` returns each active assignment, per-module status and attempts, current stage, completion count, last activity, and `progress_state`. `stale_incomplete` is an operational label for more than 24 hours since recorded activity, not conclusive proof that a participant abandoned the experiment.
+- Individual module CSV exports support `?scope=test`. `GET /api/admin/export-all.zip?scope=main|test` packages the questionnaire, Life-Trade and Ultimatum CSVs plus participant progress into one ZIP. Without `scope=test`, exports use only the configured main `STUDY_CODE`.
+- `GET /api/admin/maintenance/preview?scope=main|test` counts the selected scoped rows before deletion. `POST /api/admin/maintenance/reset` requires the exact matching phrase (`CLEAR MAIN DATA` or `CLEAR TEST DATA`) and deletes only within that study scope, child rows first. Instrument definitions and the global `participants` master rows are retained. Main reset invalidates the original main assignments; test reset removes all `barsan-test-*` study scopes.
+- The admin dashboard offers a destructive action only after a preview and exact phrase plus browser confirmation. Nevertheless, take an independent PostgreSQL backup before resetting live data.
+- `PUBLIC_EXPERIMENT_URL` overrides invitation URL generation. If it is blank, the app derives the base path from the incoming request and ASGI `root_path`; when deploying to cPanel under a sub-URI, set the explicit full public URL for reliable links.
+
+## Test data isolation details
+
+Test studies share the global participant-code registry intentionally: the two full-test links can use code `TEST` in distinct studies without sharing stage progress. All test assignments, participation records, stage progress, module runs and result rows remain scoped through `study_code`. The three module exports and the combined ZIP apply the scope filter at query time; a test export cannot include main-study rows and vice versa.
 
 ## Backend foundation implemented
 
