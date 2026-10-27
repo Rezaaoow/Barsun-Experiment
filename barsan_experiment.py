@@ -1603,6 +1603,7 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
             opponent_share = ULTIMATUM_TOTAL_POINTS - participant_share
             payload["offer_model"] = offer_model
             payload["opponent_offer_generated_at"] = now()
+        connection.execute("SAVEPOINT ultimatum_prepare_insert")
         try:
             connection.execute(
                 "INSERT INTO ultimatum_trials(round_id,run_id,phase,block_code,block_order,trial_in_block,"
@@ -1615,8 +1616,24 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
                     participant_share, opponent_share, timestamp, now(), _json_param(payload),
                 ),
             )
+            connection.execute("RELEASE SAVEPOINT ultimatum_prepare_insert")
         except Exception as exc:
-            raise HTTPException(409, "این دور اولتیماتوم هم‌زمان ایجاد شده است؛ دوباره تلاش کنید.") from exc
+            connection.execute("ROLLBACK TO SAVEPOINT ultimatum_prepare_insert")
+            connection.execute("RELEASE SAVEPOINT ultimatum_prepare_insert")
+            concurrent = connection.execute(
+                "SELECT * FROM ultimatum_trials WHERE run_id=" + marker
+                + " AND phase=" + marker + " AND block_code=" + marker + " AND trial_in_block=" + marker,
+                (data.run_id, data.phase, data.block_code, data.trial_in_block),
+            ).fetchone()
+            if concurrent and concurrent["status"] == "prepared":
+                row = dict(concurrent)
+                return {
+                    "round_id": row["round_id"], "phase": row["phase"], "block_code": row["block_code"],
+                    "role": row["role"], "opponent_condition": row["opponent_condition"],
+                    "participant_share": row["participant_share"], "opponent_share": row["opponent_share"],
+                    "started_at": row["started_at"], "offer_model": _json_value(row["payload"]).get("offer_model"),
+                }
+            raise HTTPException(503, "ثبت این دور موقتاً موفق نشد؛ لطفاً دوباره تلاش کنید.") from exc
         return {
             "round_id": round_id,
             "phase": data.phase,
@@ -1646,9 +1663,55 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
         if not row:
             raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
         record = dict(row)
+
+        def stored_resolve_result(completed_record: dict[str, Any]) -> dict[str, Any]:
+            saved_payload = _json_value(completed_record["payload"])
+            existing_result = saved_payload.get("resolve_result")
+            if isinstance(existing_result, dict) and existing_result.get("round_id"):
+                return existing_result
+            total = connection.execute(
+                "SELECT COALESCE(SUM(points_earned),0) AS score,"
+                "COALESCE(SUM(potential_points_lost),0) AS lost "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
+                (data.run_id,),
+            ).fetchone()
+            block_total = connection.execute(
+                "SELECT COALESCE(SUM(points_earned),0) AS score,"
+                "COALESCE(SUM(potential_points_lost),0) AS lost "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed' "
+                "AND block_code=" + marker,
+                (data.run_id, completed_record["block_code"]),
+            ).fetchone()
+            recovered = {
+                "round_id": completed_record["round_id"],
+                "phase": completed_record["phase"],
+                "block_code": completed_record["block_code"],
+                "block_order": completed_record["block_order"],
+                "trial_in_block": completed_record["trial_in_block"],
+                "role": completed_record["role"],
+                "opponent_condition": completed_record["opponent_condition"],
+                "participant_share": completed_record["participant_share"],
+                "opponent_share": completed_record["opponent_share"],
+                "participant_decision": completed_record["participant_decision"],
+                "opponent_decision": completed_record["opponent_decision"],
+                "accepted": bool(completed_record["accepted"]),
+                "points_earned": int(completed_record["points_earned"] or 0),
+                "potential_points_lost": int(completed_record["potential_points_lost"] or 0),
+                "total_score": int(total["score"] or 0),
+                "total_potential_lost": int(total["lost"] or 0),
+                "block_score": int(block_total["score"] or 0),
+                "block_potential_lost": int(block_total["lost"] or 0),
+                "resolved_at": completed_record["completed_at"],
+            }
+            saved_payload["resolve_result"] = recovered
+            connection.execute(
+                "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker + " AND run_id=" + marker,
+                (_json_param(saved_payload), completed_record["round_id"], data.run_id),
+            )
+            return recovered
+
         if record["status"] == "completed":
-            saved_payload = _json_value(record["payload"])
-            return saved_payload.get("resolve_result", {})
+            return stored_resolve_result(record)
         if record["role"] == "proposer":
             if data.participant_offer_to_opponent is None or data.participant_decision is not None:
                 raise HTTPException(422, "برای نقش پیشنهاددهنده باید مقدار پیشنهاد ارسال شود.")
@@ -1716,14 +1779,11 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             # A concurrent duplicate submission may have completed this round first.
             # Return the persisted result without double-counting the run.
             current = connection.execute(
-                "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+                "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
                 (data.round_id, data.run_id),
             ).fetchone()
             if current and current["status"] == "completed":
-                saved_payload = _json_value(current["payload"])
-                saved_result = saved_payload.get("resolve_result")
-                if saved_result:
-                    return saved_result
+                return stored_resolve_result(dict(current))
             raise HTTPException(409, "این دور هم‌زمان ثبت شده است؛ وضعیت بازی را دوباره بررسی کنید.")
         connection.execute(
             "UPDATE instrument_runs SET trial_count=trial_count+1 WHERE run_id=" + marker,
@@ -2687,6 +2747,7 @@ def load_homepage() -> str:
         return file.read()
 
 
+@app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/links", response_class=HTMLResponse)
 def admin_links_page():
     """Serve the protected-action UI; actual link creation/export still requires ADMIN_TOKEN."""
