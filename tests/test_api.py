@@ -568,6 +568,35 @@ def test_admin_link_management_status_reissue_and_active_csv(client, monkeypatch
     assert {row["participant_code"] for row in active_rows} == {"BS-LINK-A", "BS-LINK-B"}
     assert all(row["url_available"] == "True" and row["invitation_url"] for row in active_rows)
 
+    # Bulk reissue only rotates selected links whose encrypted token cannot be read.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_assignments SET invitation_token_encrypted=NULL WHERE assignment_id=?",
+            (row_a["assignment_id"],),
+        )
+    bulk_reissue = client.post(
+        "/api/admin/assignments/reissue-missing-links",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_a["assignment_id"], row_b_id := next(
+            row["assignment_id"] for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B"
+        )]},
+    )
+    assert bulk_reissue.status_code == 200, bulk_reissue.text
+    assert bulk_reissue.json()["reissued_count"] == 1
+    assert bulk_reissue.json()["skipped_count"] == 1
+    after_bulk = client.get("/api/admin/assignments?scope=main&status=active", headers=headers).json()
+    row_a_after_bulk = next(row for row in after_bulk["items"] if row["participant_code"] == "BS-LINK-A")
+    token_after_bulk = parse_qs(urlparse(row_a_after_bulk["invitation_url"]).query)["invite"][0]
+    assert token_after_bulk != new_token
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": new_token, "participant_code": "BS-LINK-A"},
+    ).status_code == 403
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": token_after_bulk, "participant_code": "BS-LINK-A"},
+    ).status_code == 200
+
     row_b = next(row for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B")
     deactivate = client.post(
         "/api/admin/assignments/status",
