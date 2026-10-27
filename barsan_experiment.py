@@ -132,7 +132,7 @@ if DATABASE_URL:
         kwargs={
             "row_factory": dict_row,
             "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
-            "application_name": "lifetrade-api",
+            "application_name": "barsan-experiment-api",
         },
         open=True,
     )
@@ -736,7 +736,7 @@ def health():
             connection.execute("SELECT 1").fetchone()
         return {
             "ok": True,
-            "service": "lifetrade",
+            "service": "barsan-experiment",
             "database": database_type,
             "database_connected": True,
             "study_code": STUDY_CODE,
@@ -751,7 +751,7 @@ def health():
             status_code=503,
             detail={
                 "ok": False,
-                "service": "lifetrade",
+                "service": "barsan-experiment",
                 "database": database_type,
                 "database_connected": False,
                 "time": now(),
