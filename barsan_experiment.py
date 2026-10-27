@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Any, Iterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,6 +27,9 @@ STUDY_CODE = os.getenv("STUDY_CODE", "main-study").strip() or "main-study"
 STUDY_NAME = os.getenv("STUDY_NAME", "BarSan Experiment").strip() or "BarSan Experiment"
 TEST_STUDY_PREFIX = "barsan-test-"
 PUBLIC_EXPERIMENT_URL = os.getenv("PUBLIC_EXPERIMENT_URL", "").rstrip("?&")
+INVITATION_TOKEN_KEY_FILE = os.getenv(
+    "INVITATION_TOKEN_KEY_FILE", os.path.join(os.path.expanduser("~"), ".barsan_invitation_tokens.key")
+)
 INSTRUMENT_CODE = "lifetrade"
 INSTRUMENT_NAME = "Life-Trade delay discounting"
 STAGE_TO_INSTRUMENT = {
@@ -86,6 +90,57 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
+
+
+def _invitation_fernet() -> Fernet:
+    """Load the invite-token encryption key, creating a private per-install key if needed."""
+    configured_key = os.getenv("INVITATION_TOKEN_ENCRYPTION_KEY", "").strip()
+    if configured_key:
+        key = configured_key.encode("ascii")
+    else:
+        key_path = INVITATION_TOKEN_KEY_FILE
+        os.makedirs(os.path.dirname(os.path.abspath(key_path)), mode=0o700, exist_ok=True)
+        try:
+            with open(key_path, "rb") as key_file:
+                key = key_file.read().strip()
+        except FileNotFoundError:
+            generated = Fernet.generate_key()
+            try:
+                descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "wb") as key_file:
+                    key_file.write(generated)
+                key = generated
+            except FileExistsError:
+                with open(key_path, "rb") as key_file:
+                    key = key_file.read().strip()
+        try:
+            os.chmod(key_path, 0o600)
+        except OSError:
+            pass
+    try:
+        return Fernet(key)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Invitation-token encryption key is invalid.") from exc
+
+
+def _encrypt_invitation_token(token: str) -> str:
+    return _invitation_fernet().encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def _decrypt_invitation_token(encrypted_token: str | None) -> str | None:
+    if not encrypted_token:
+        return None
+    try:
+        return _invitation_fernet().decrypt(encrypted_token.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeError, ValueError):
+        # Legacy assignments only stored a one-way hash; key loss also requires reissue.
+        return None
+
+
+def _invitation_url_for_token(request: Request, api_route: str, token: str) -> str:
+    base_url = _invitation_base_url(request, api_route)
+    joiner = "&" if "?" in base_url else "?"
+    return base_url + joiner + "invite=" + token
 
 
 def now() -> str:
@@ -197,9 +252,10 @@ if DATABASE_URL:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
+            connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -371,9 +427,12 @@ else:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
+            assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
+            if "invitation_token_encrypted" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -546,6 +605,27 @@ class AssignmentItemIn(BaseModel):
 
 class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
+
+
+class AssignmentStatusBatchIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    assignment_ids: list[str] = Field(min_length=1, max_length=5000)
+    active: bool
+
+
+class AssignmentIdBatchIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    assignment_ids: list[str] = Field(min_length=1, max_length=5000)
+
+
+class AssignmentReissueIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    assignment_id: str = Field(min_length=1, max_length=100)
+
+
+class InactiveAssignmentDeleteIn(BaseModel):
+    scope: Literal["main", "test"]
+    confirm_phrase: str = Field(min_length=1, max_length=40)
 
 
 class ModuleTestLinkIn(BaseModel):
@@ -1031,19 +1111,20 @@ def create_assignments(
                 raise HTTPException(409, "An assignment already exists for one of the supplied participant codes")
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, 1, now()
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,active,assigned_at) VALUES(?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1087,19 +1168,20 @@ def create_test_links(
                 raise HTTPException(409, "A test assignment already exists for this test generation")
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, 1, now()
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,active,assigned_at) VALUES(?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1114,7 +1196,7 @@ def create_test_links(
         "generation": generation,
         "created_count": len(created),
         "assignments": created,
-        "note": "Each click creates a new isolated test pair; keep downloaded invitation URLs because raw tokens cannot be retrieved later; existing test data is retained.",
+        "note": "Each click creates a new isolated test pair. Invitation URLs are encrypted at rest and can be exported later; preserve the private invitation-token key file when backing up this installation. Existing test data is retained.",
     }
 
 
@@ -1140,10 +1222,11 @@ def create_module_test_link(
         marker = "%s" if DATABASE_URL else "?"
         invitation_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+        token_encrypted = _encrypt_invitation_token(invitation_token)
         connection.execute(
             "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-            "invitation_token_hash,active,assigned_at) VALUES(" + ",".join([marker] * 7) + ")",
-            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, 1, now()),
+            "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(" + ",".join([marker] * 8) + ")",
+            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted, 1, now()),
         )
         for prerequisite in STAGE_ORDER[:stage_index]:
             _seed_completed_test_stage(connection, participation_id, prerequisite)
@@ -1157,6 +1240,276 @@ def create_module_test_link(
         "test_code": "TEST",
         "prerequisites_marked_synthetic": list(STAGE_ORDER[:stage_index]),
     }
+
+
+
+@app.get("/api/admin/assignments")
+def list_admin_assignments(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+    status: Literal["active", "inactive", "all"] = "all",
+    search: str = "",
+):
+    """List invitation assignments and counts, exposing URLs only to an authenticated admin."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(scope, "a.study_code", marker)
+    where = [scope_condition]
+    params: list[Any] = list(scope_params)
+    if status != "all":
+        where.append("a.active=" + marker)
+        params.append(1 if status == "active" else 0)
+    normalized_search = search.strip().lower()
+    if normalized_search:
+        where.append("LOWER(p.participant_code) LIKE " + marker)
+        params.append("%" + normalized_search + "%")
+    query = (
+        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,"
+        "a.active,a.assigned_at,a.invitation_token_encrypted "
+        "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
+        "WHERE " + " AND ".join(where) + " ORDER BY a.assigned_at DESC,p.participant_code"
+    )
+    count_query = (
+        "SELECT COALESCE(SUM(CASE WHEN a.active=1 THEN 1 ELSE 0 END),0) AS active_count,"
+        "COALESCE(SUM(CASE WHEN a.active=0 THEN 1 ELSE 0 END),0) AS inactive_count "
+        "FROM experiment_assignments a WHERE " + scope_condition
+    )
+    with conn() as connection:
+        rows = connection.execute(query, tuple(params)).fetchall()
+        counts = connection.execute(count_query, scope_params).fetchone()
+    base_url = _invitation_base_url(request, "/api/admin/assignments")
+    result_rows = []
+    for raw in rows:
+        item = dict(raw)
+        token = _decrypt_invitation_token(item.pop("invitation_token_encrypted", None))
+        item["active"] = bool(item["active"])
+        item["group"] = "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control"
+        item["url_available"] = bool(token)
+        item["invitation_url"] = (
+            base_url + ("&" if "?" in base_url else "?") + "invite=" + token if token else ""
+        )
+        result_rows.append(item)
+    return {
+        "scope": scope,
+        "status_filter": status,
+        "counts": {
+            "active": int(counts["active_count"] or 0),
+            "inactive": int(counts["inactive_count"] or 0),
+            "total": int(counts["active_count"] or 0) + int(counts["inactive_count"] or 0),
+        },
+        "items": result_rows,
+        "legacy_token_count": sum(not item["url_available"] for item in result_rows),
+    }
+
+
+@app.post("/api/admin/assignments/status")
+def set_admin_assignments_status(
+    data: AssignmentStatusBatchIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Activate/deactivate selected links without deleting their associated research data."""
+    authorize(x_admin_token)
+    if len(set(data.assignment_ids)) != len(data.assignment_ids):
+        raise HTTPException(422, "فهرست شناسه‌های لینک نباید تکراری باشد.")
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
+    changed = 0
+    # Chunk large selections so SQLite deployments stay below their bind-parameter limit.
+    with conn() as connection:
+        for start in range(0, len(data.assignment_ids), 400):
+            batch_ids = data.assignment_ids[start:start + 400]
+            placeholders = ",".join([marker] * len(batch_ids))
+            query = (
+                "UPDATE experiment_assignments SET active=" + marker
+                + " WHERE assignment_id IN (" + placeholders + ") AND " + scope_condition
+            )
+            params = (1 if data.active else 0, *batch_ids, *scope_params)
+            cursor = connection.execute(query, params)
+            changed += max(0, int(cursor.rowcount or 0))
+    return {
+        "updated_count": changed,
+        "active": data.active,
+        "scope": data.scope,
+        "message": "وضعیت لینک‌ها تغییر کرد؛ داده‌های پژوهشی مرتبط دست‌نخورده ماندند.",
+    }
+
+
+@app.post("/api/admin/assignments/reissue-missing-links")
+def reissue_missing_admin_assignment_links(
+    data: AssignmentIdBatchIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Regenerate only selected URLs whose tokens are not recoverable; preserve active status."""
+    authorize(x_admin_token)
+    if len(set(data.assignment_ids)) != len(data.assignment_ids):
+        raise HTTPException(422, "فهرست شناسه‌های لینک نباید تکراری باشد.")
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(data.scope, "a.study_code", marker)
+    reissued_count = 0
+    skipped_count = 0
+    with conn() as connection:
+        for start in range(0, len(data.assignment_ids), 400):
+            batch_ids = data.assignment_ids[start:start + 400]
+            placeholders = ",".join([marker] * len(batch_ids))
+            rows = connection.execute(
+                "SELECT a.assignment_id,a.invitation_token_encrypted "
+                "FROM experiment_assignments a WHERE a.assignment_id IN ("
+                + placeholders + ") AND " + scope_condition,
+                (*batch_ids, *scope_params),
+            ).fetchall()
+            for row in rows:
+                if _decrypt_invitation_token(row["invitation_token_encrypted"]):
+                    skipped_count += 1
+                    continue
+                new_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(new_token.encode("utf-8")).hexdigest()
+                token_encrypted = _encrypt_invitation_token(new_token)
+                connection.execute(
+                    "UPDATE experiment_assignments SET invitation_token_hash=" + marker
+                    + ",invitation_token_encrypted=" + marker + " WHERE assignment_id=" + marker,
+                    (token_hash, token_encrypted, row["assignment_id"]),
+                )
+                reissued_count += 1
+    return {
+        "reissued_count": reissued_count,
+        "skipped_count": skipped_count,
+        "scope": data.scope,
+        "message": "فقط لینک‌های بدون URL قابل بازیابی، با حفظ وضعیت فعال/غیرفعال، دوباره صادر شدند.",
+        "warning": "لینک قدیمی مواردی که دوباره صادر شدند باطل است.",
+    }
+
+
+@app.post("/api/admin/assignments/reissue-link")
+def reissue_admin_assignment_link(
+    data: AssignmentReissueIn,
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Issue a replacement URL for an assignment whose original token cannot be recovered."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(data.scope, "a.study_code", marker)
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.active "
+            "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
+            "WHERE a.assignment_id=" + marker + " AND " + scope_condition,
+            (data.assignment_id, *scope_params),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "لینک در محدودهٔ انتخاب‌شده پیدا نشد.")
+        new_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(new_token.encode("utf-8")).hexdigest()
+        token_encrypted = _encrypt_invitation_token(new_token)
+        connection.execute(
+            "UPDATE experiment_assignments SET invitation_token_hash=" + marker
+            + ",invitation_token_encrypted=" + marker + " WHERE assignment_id=" + marker,
+            (token_hash, token_encrypted, data.assignment_id),
+        )
+    return {
+        "assignment_id": data.assignment_id,
+        "participant_code": row["participant_code"],
+        "condition_code": row["condition_code"],
+        "group": "Frame" if str(row["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
+        "active": bool(row["active"]),
+        "study_code": row["study_code"],
+        "invitation_url": _invitation_url_for_token(request, "/api/admin/assignments/reissue-link", new_token),
+        "warning": "لینک قبلی باطل شد؛ وضعیت فعال/غیرفعال مانند قبل باقی ماند.",
+    }
+
+
+@app.post("/api/admin/assignments/delete-inactive")
+def delete_inactive_admin_assignments(
+    data: InactiveAssignmentDeleteIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Delete only inactive invitation assignments in an explicitly selected study scope."""
+    authorize(x_admin_token)
+    if data.confirm_phrase != "DELETE INACTIVE LINKS":
+        raise HTTPException(422, "برای حذف لینک‌های غیرفعال عبارت DELETE INACTIVE LINKS را دقیق وارد کن.")
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
+    with conn() as connection:
+        inactive_count = int(connection.execute(
+            "SELECT COUNT(*) AS n FROM experiment_assignments WHERE active=0 AND " + scope_condition,
+            scope_params,
+        ).fetchone()["n"] or 0)
+        if not inactive_count:
+            return {
+                "deleted_count": 0,
+                "scope": data.scope,
+                "message": "در محدودهٔ انتخاب‌شده لینک غیرفعالی برای حذف وجود ندارد.",
+            }
+        connection.execute(
+            "DELETE FROM experiment_consents WHERE assignment_id IN "
+            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
+            scope_params,
+        )
+        cursor = connection.execute(
+            "DELETE FROM experiment_assignments WHERE active=0 AND " + scope_condition,
+            scope_params,
+        )
+        deleted_count = max(0, int(cursor.rowcount or 0))
+    return {
+        "deleted_count": deleted_count,
+        "scope": data.scope,
+        "message": "لینک‌های غیرفعال حذف شدند؛ داده‌های پژوهشی و پاسخ‌های قبلی پاک نشدند.",
+    }
+
+
+@app.get("/api/admin/assignments/export.csv")
+def export_admin_active_assignments_csv(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Export active assignments; legacy URLs are marked unavailable rather than fabricated."""
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    scope_condition, scope_params = _scope_filter(scope, "a.study_code", marker)
+    query = (
+        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,"
+        "a.assigned_at,a.invitation_token_encrypted "
+        "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
+        "WHERE a.active=1 AND " + scope_condition
+        + " ORDER BY a.assigned_at,p.participant_code"
+    )
+    with conn() as connection:
+        rows = connection.execute(query, scope_params).fetchall()
+    base_url = _invitation_base_url(request, "/api/admin/assignments/export.csv")
+    output = io.StringIO(newline="")
+    output.write("\ufeff")
+    fields = [
+        "participant_code", "group", "condition_code", "active", "study_code",
+        "assigned_at", "invitation_url", "url_available", "link_id",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for raw in rows:
+        item = dict(raw)
+        token = _decrypt_invitation_token(item.get("invitation_token_encrypted"))
+        writer.writerow({
+            "participant_code": item["participant_code"],
+            "group": "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
+            "condition_code": item["condition_code"],
+            "active": True,
+            "study_code": item["study_code"],
+            "assigned_at": item["assigned_at"],
+            "invitation_url": base_url + ("&" if "?" in base_url else "?") + "invite=" + token if token else "",
+            "url_available": bool(token),
+            "link_id": item["assignment_id"],
+        })
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="' + (
+                "barsan_test_active_links.csv" if scope == "test" else "barsan_active_links.csv"
+            ) + '"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/api/experiment/consent")

@@ -25,6 +25,8 @@ import barsan_experiment as main
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", str(tmp_path / "lifetrade.sqlite3"))
+    monkeypatch.setattr(main, "INVITATION_TOKEN_KEY_FILE", str(tmp_path / "private" / "invitation_tokens.key"))
+    monkeypatch.delenv("INVITATION_TOKEN_ENCRYPTION_KEY", raising=False)
     main.init_db()
     with TestClient(main.app) as test_client:
         yield test_client
@@ -514,6 +516,137 @@ def test_admin_test_scope_monitoring_and_exports(client, monkeypatch):
     assert archive_response.status_code == 200, archive_response.text
     with zipfile.ZipFile(io.BytesIO(archive_response.content)) as archive:
         assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
+
+
+def test_admin_link_management_status_reissue_and_active_csv(client, monkeypatch):
+    old_token_a = _create_assignment(client, monkeypatch, code="BS-LINK-A", condition="A")
+    token_b = _create_assignment(client, monkeypatch, code="BS-LINK-B", condition="B")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "link-management-token")
+    headers = {"x-admin-token": "link-management-token"}
+
+    listing = client.get("/api/admin/assignments?scope=main&status=all", headers=headers)
+    assert listing.status_code == 200, listing.text
+    data = listing.json()
+    assert data["counts"] == {"active": 2, "inactive": 0, "total": 2}
+    assert {row["participant_code"] for row in data["items"]} == {"BS-LINK-A", "BS-LINK-B"}
+    assert all(row["url_available"] and row["invitation_url"] for row in data["items"])
+
+    # Legacy assignments did not store a reversible token, so the admin can explicitly
+    # reissue a replacement (invalidating the old URL) instead of exporting a fake URL.
+    row_a = next(row for row in data["items"] if row["participant_code"] == "BS-LINK-A")
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_assignments SET invitation_token_encrypted=NULL WHERE assignment_id=?",
+            (row_a["assignment_id"],),
+        )
+    legacy_listing = client.get("/api/admin/assignments?scope=main&status=active", headers=headers)
+    legacy_a = next(row for row in legacy_listing.json()["items"] if row["participant_code"] == "BS-LINK-A")
+    assert legacy_a["url_available"] is False
+    assert legacy_a["invitation_url"] == ""
+
+    reissued = client.post(
+        "/api/admin/assignments/reissue-link",
+        headers=headers,
+        json={"scope": "main", "assignment_id": row_a["assignment_id"]},
+    )
+    assert reissued.status_code == 200, reissued.text
+    assert reissued.json()["active"] is True
+    new_token = parse_qs(urlparse(reissued.json()["invitation_url"]).query)["invite"][0]
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": old_token_a, "participant_code": "BS-LINK-A"},
+    ).status_code == 403
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": new_token, "participant_code": "BS-LINK-A"},
+    ).status_code == 200
+
+    active_csv = client.get("/api/admin/assignments/export.csv?scope=main", headers=headers)
+    assert active_csv.status_code == 200, active_csv.text
+    active_rows = list(csv.DictReader(io.StringIO(active_csv.text.lstrip("\ufeff"))))
+    assert len(active_rows) == 2
+    assert {row["participant_code"] for row in active_rows} == {"BS-LINK-A", "BS-LINK-B"}
+    assert all(row["url_available"] == "True" and row["invitation_url"] for row in active_rows)
+
+    # Bulk reissue only rotates selected links whose encrypted token cannot be read.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_assignments SET invitation_token_encrypted=NULL WHERE assignment_id=?",
+            (row_a["assignment_id"],),
+        )
+    row_b = next(row for row in listing.json()["items"] if row["participant_code"] == "BS-LINK-B")
+    bulk_reissue = client.post(
+        "/api/admin/assignments/reissue-missing-links",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_a["assignment_id"], row_b["assignment_id"]]},
+    )
+    assert bulk_reissue.status_code == 200, bulk_reissue.text
+    assert bulk_reissue.json()["reissued_count"] == 1
+    assert bulk_reissue.json()["skipped_count"] == 1
+    after_bulk = client.get("/api/admin/assignments?scope=main&status=active", headers=headers).json()
+    row_a_after_bulk = next(row for row in after_bulk["items"] if row["participant_code"] == "BS-LINK-A")
+    token_after_bulk = parse_qs(urlparse(row_a_after_bulk["invitation_url"]).query)["invite"][0]
+    assert token_after_bulk != new_token
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": new_token, "participant_code": "BS-LINK-A"},
+    ).status_code == 403
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": token_after_bulk, "participant_code": "BS-LINK-A"},
+    ).status_code == 200
+
+    deactivate = client.post(
+        "/api/admin/assignments/status",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_b["assignment_id"]], "active": False},
+    )
+    assert deactivate.status_code == 200, deactivate.text
+    assert deactivate.json()["updated_count"] == 1
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": token_b, "participant_code": "BS-LINK-B"},
+    ).status_code == 403
+
+    reactivate = client.post(
+        "/api/admin/assignments/status",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_b["assignment_id"]], "active": True},
+    )
+    assert reactivate.status_code == 200, reactivate.text
+    assert client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": token_b, "participant_code": "BS-LINK-B"},
+    ).status_code == 200
+    # Disable it once more to test bulk removal of inactive links.
+    client.post(
+        "/api/admin/assignments/status",
+        headers=headers,
+        json={"scope": "main", "assignment_ids": [row_b["assignment_id"]], "active": False},
+    )
+
+    split = client.get("/api/admin/assignments?scope=main&status=all", headers=headers)
+    assert split.json()["counts"] == {"active": 1, "inactive": 1, "total": 2}
+    assert len(client.get("/api/admin/assignments?scope=main&status=inactive", headers=headers).json()["items"]) == 1
+
+    bad_delete = client.post(
+        "/api/admin/assignments/delete-inactive",
+        headers=headers,
+        json={"scope": "main", "confirm_phrase": "wrong"},
+    )
+    assert bad_delete.status_code == 422
+    good_delete = client.post(
+        "/api/admin/assignments/delete-inactive",
+        headers=headers,
+        json={"scope": "main", "confirm_phrase": "DELETE INACTIVE LINKS"},
+    )
+    assert good_delete.status_code == 200, good_delete.text
+    assert good_delete.json()["deleted_count"] == 1
+    final_list = client.get("/api/admin/assignments?scope=main&status=all", headers=headers)
+    assert final_list.json()["counts"] == {"active": 1, "inactive": 0, "total": 1}
+    with main.conn() as connection:
+        master_count = connection.execute("SELECT COUNT(*) AS n FROM participants").fetchone()["n"]
+    assert master_count == 2  # Deleting a link keeps the participant master/data intact.
 
 
 def test_assignment_creation_requires_admin_and_does_not_allow_reassignment(client, monkeypatch):

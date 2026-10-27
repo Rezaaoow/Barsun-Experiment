@@ -92,6 +92,71 @@ def main_test():
         with zipfile.ZipFile(io.BytesIO(full_export.content)) as archive:
             assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
 
+        # Link management on PostgreSQL: active CSV URLs are recoverable from encrypted tokens,
+        # status changes preserve the URL, and deletion is limited to inactive assignments.
+        links_response = client.get("/api/admin/assignments?scope=test&status=active", headers=admin_headers)
+        assert links_response.status_code == 200, links_response.text
+        links_payload = links_response.json()
+        assert links_payload["counts"] == {"active": 2, "inactive": 0, "total": 2}
+        assert len(links_payload["items"]) == 2
+        assert all(item["url_available"] and "?invite=" in item["invitation_url"] for item in links_payload["items"])
+
+        active_links_csv = client.get("/api/admin/assignments/export.csv?scope=test", headers=admin_headers)
+        assert active_links_csv.status_code == 200, active_links_csv.text
+        assert "invitation_url" in active_links_csv.text
+        assert "url_available" in active_links_csv.text
+        assert "barsan-test-" in active_links_csv.text
+
+        keep_existing = client.post(
+            "/api/admin/assignments/reissue-missing-links",
+            headers=admin_headers,
+            json={
+                "scope": "test",
+                "assignment_ids": [item["assignment_id"] for item in links_payload["items"]],
+            },
+        )
+        assert keep_existing.status_code == 200, keep_existing.text
+        assert keep_existing.json()["reissued_count"] == 0
+        assert keep_existing.json()["skipped_count"] == 2
+
+        target_link = links_payload["items"][0]
+        toggle_off = client.post(
+            "/api/admin/assignments/status",
+            headers=admin_headers,
+            json={"scope": "test", "assignment_ids": [target_link["assignment_id"]], "active": False},
+        )
+        assert toggle_off.status_code == 200, toggle_off.text
+        after_off = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
+        assert after_off.status_code == 200, after_off.text
+        assert after_off.json()["counts"] == {"active": 1, "inactive": 1, "total": 2}
+
+        toggle_on = client.post(
+            "/api/admin/assignments/status",
+            headers=admin_headers,
+            json={"scope": "test", "assignment_ids": [target_link["assignment_id"]], "active": True},
+        )
+        assert toggle_on.status_code == 200, toggle_on.text
+        after_on = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
+        assert after_on.status_code == 200, after_on.text
+        assert after_on.json()["counts"] == {"active": 2, "inactive": 0, "total": 2}
+
+        # Finally prove that the confirmed bulk deletion only removes inactive links.
+        client.post(
+            "/api/admin/assignments/status",
+            headers=admin_headers,
+            json={"scope": "test", "assignment_ids": [target_link["assignment_id"]], "active": False},
+        )
+        delete_inactive = client.post(
+            "/api/admin/assignments/delete-inactive",
+            headers=admin_headers,
+            json={"scope": "test", "confirm_phrase": "DELETE INACTIVE LINKS"},
+        )
+        assert delete_inactive.status_code == 200, delete_inactive.text
+        assert delete_inactive.json()["deleted_count"] == 1
+        after_delete = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
+        assert after_delete.status_code == 200, after_delete.text
+        assert after_delete.json()["counts"] == {"active": 1, "inactive": 0, "total": 1}
+
         completed = client.post(
             "/api/complete",
             json={"session_id": session_id, "status": "completed", "trial_count": 2},
