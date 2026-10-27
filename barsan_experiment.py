@@ -2624,6 +2624,59 @@ def export_csv(
     )
 
 
+async def _read_streaming_response(response: StreamingResponse) -> bytes:
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.encode("utf-8") if isinstance(chunk, str) else bytes(chunk))
+    return b"".join(chunks)
+
+
+@app.get("/api/admin/export-all.zip")
+async def export_all_modules_zip(
+    x_admin_token: str | None = Header(default=None),
+    scope: Literal["main", "test"] = "main",
+):
+    """Download all three module exports and current participant progress in one ZIP."""
+    authorize(x_admin_token)
+    # Reuse the exact same scoped export functions as the individual CSV buttons.
+    responses = [
+        ("questionnaire.csv", export_questionnaire_csv(x_admin_token, scope)),
+        ("lifetrade.csv", export_csv(x_admin_token, scope)),
+        ("ultimatum.csv", export_ultimatum_csv(x_admin_token, scope)),
+    ]
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for filename, response in responses:
+            archive.writestr(filename, await _read_streaming_response(response))
+        participant_rows = experiment_progress(x_admin_token, scope)
+        progress_buffer = io.StringIO(newline="")
+        progress_buffer.write("\ufeff")
+        progress_fields = sorted({
+            field for row in participant_rows for field in row.keys()
+        } or {"study_code", "participant_code", "condition_code", "progress_state"})
+        progress_writer = csv.DictWriter(progress_buffer, fieldnames=progress_fields, extrasaction="ignore")
+        progress_writer.writeheader()
+        progress_writer.writerows(participant_rows)
+        archive.writestr("participant_progress.csv", progress_buffer.getvalue().encode("utf-8"))
+        archive.writestr(
+            "README.txt",
+            "BarSan Experiment export\n"
+            + "Scope: " + scope + "\n"
+            + ("Test data only (study_code starts with barsan-test-)." if scope == "test"
+               else "Main study only (study_code equals configured STUDY_CODE).")
+            + "\nFiles are CSV UTF-8; keep the archive confidential.\n",
+        )
+    filename = "barsan_test_full_export.zip" if scope == "test" else "barsan_main_full_export.zip"
+    return StreamingResponse(
+        io.BytesIO(archive_buffer.getvalue()),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
 
 
