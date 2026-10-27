@@ -2237,7 +2237,6 @@ def export_csv(
 
     def generate_csv():
         buffer = io.StringIO(newline="")
-        buffer.write("\ufeff")
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         yield buffer.getvalue()
