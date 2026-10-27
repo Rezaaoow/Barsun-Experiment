@@ -2213,28 +2213,24 @@ def export_csv(
     scope_filter = "sp.study_code LIKE 'barsan-test-%'" if scope == "test" else "sp.study_code=" + marker
 
     with conn() as connection:
-        if DATABASE_URL:
-            key_query = (
-                "SELECT DISTINCT x.json_key FROM lifetrade_trials t "
-                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
-                "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
-                "CROSS JOIN LATERAL jsonb_object_keys(t.payload) AS x(json_key) "
-                "WHERE ir.status <> 'superseded' AND " + scope_filter
-            )
-        else:
-            key_query = (
-                "SELECT DISTINCT json_each.key AS json_key "
-                "FROM lifetrade_trials t "
-                "JOIN instrument_runs ir ON ir.run_id=t.run_id "
-                "JOIN study_participations sp ON sp.participation_id=ir.participation_id, "
-                "json_each(t.payload) "
-                "WHERE ir.status <> 'superseded' AND " + scope_filter
-            )
+        key_query = (
+            "SELECT t.payload FROM lifetrade_trials t "
+            "JOIN instrument_runs ir ON ir.run_id=t.run_id "
+            "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
+            "WHERE ir.status <> 'superseded' AND " + scope_filter
+        )
         key_params = () if scope == "test" else (STUDY_CODE,)
         key_rows = connection.execute(key_query, key_params).fetchall()
 
+    payload_fields = set()
+    for key_row in key_rows:
+        payload = key_row["payload"]
+        parsed = json.loads(payload) if isinstance(payload, str) else payload
+        if isinstance(parsed, dict):
+            payload_fields.update(parsed.keys())
+
     fields = sorted(
-        {row["json_key"] for row in key_rows}
+        payload_fields
         | {"server_received_at", "server_run_id", "server_session_id", "participant_code",
            "instrument_code", "instrument_version", "study_code"}
     )
