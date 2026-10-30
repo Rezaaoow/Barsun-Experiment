@@ -3081,6 +3081,10 @@ def experiment_progress(
         "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='questionnaire') AS questionnaire_active_seconds,"
         "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='dd_lifetrade') AS dd_lifetrade_active_seconds,"
         "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='ultimatum') AS ultimatum_active_seconds,"
+        "(SELECT COUNT(*) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id) AS flow_steps_total,"
+        "(SELECT COUNT(*) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.status='completed') AS flow_steps_completed,"
+        "(SELECT module_code FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.status<>'completed' ORDER BY fp.step_index LIMIT 1) AS flow_current_stage,"
+        "(SELECT COUNT(*) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.status='in_progress') AS flow_started_steps,"
         "tt.first_seen_at AS first_opened_at,tt.last_activity_at AS time_last_activity_at,"
         "COALESCE(q.status,'not_started') AS questionnaire_status,"
         "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
@@ -3130,13 +3134,21 @@ def experiment_progress(
             ("dd_lifetrade", "dd_lifetrade"),
             ("ultimatum", "ultimatum"),
         ]
-        completed_stages = sum(status == "completed" for status in stage_statuses)
+        flow_total = int(row.get("flow_steps_total") or 0)
+        flow_completed = int(row.get("flow_steps_completed") or 0)
+        completed_stages = flow_completed if flow_total else sum(status == "completed" for status in stage_statuses)
         row["completed_stages"] = completed_stages
-        row["current_stage"] = next(
-            (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
-            None,
+        row["flow_steps_total"] = flow_total or len(STAGE_ORDER)
+        row["current_stage"] = (
+            row.get("flow_current_stage") if flow_total
+            else next((stage_code for stage_code, key in stages if row[key + "_status"] != "completed"), None)
         )
-        has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
+        has_started = (
+            any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
+            or bool(row.get("first_opened_at"))
+            or bool(int(row.get("total_active_seconds") or 0))
+            or bool(int(row.get("flow_started_steps") or 0))
+        )
         last_activity_candidates = [
             parse_time(row.get("assigned_at")),
             parse_time(row.get("first_opened_at")),
@@ -3158,7 +3170,7 @@ def experiment_progress(
             round(max(0.0, (current_time.timestamp() - last_activity_epoch) / 3600), 2)
             if last_activity_epoch is not None else None
         )
-        if completed_stages == len(STAGE_ORDER):
+        if completed_stages >= int(row.get("flow_steps_total") or len(STAGE_ORDER)):
             row["progress_state"] = "completed"
         elif not has_started:
             row["progress_state"] = "not_started"
