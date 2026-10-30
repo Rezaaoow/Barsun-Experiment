@@ -98,6 +98,62 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
 @media(max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){body{padding:13px 9px 30px}header{display:block}.header-mark{display:inline-block;margin-top:12px}.grid,.grid-3,.module-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border-radius:16px}.export-grid{grid-template-columns:1fr}.card-head{display:block}.card-head .actions{margin-top:10px}}
+
+.workflow-builder{margin:16px 0 22px;padding:17px;border:1px solid #dce5f2;border-radius:17px;background:linear-gradient(145deg,#fbfdff,#f4f7fc)}
+.workflow-builder-heading,.workflow-timeline-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.workflow-builder-heading h3{font-size:1.08rem;margin:0 0 3px}
+.workflow-builder-heading .small{font-size:.9rem;margin:0}
+.workflow-palette{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:15px 0}
+.workflow-module{min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#fff;color:#27436d;border:1px solid #cfdbee;border-radius:13px;font-size:1rem;font-weight:850}
+.workflow-module span{font-size:.76rem;color:#60718d;font-weight:650}
+.workflow-timeline-head{margin:16px 0 8px}
+.workflow-timeline-head strong{font-size:1rem}
+.workflow-timeline{list-style:none;margin:0;padding:0;display:grid;gap:8px;min-height:70px}
+.workflow-step{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:11px;min-width:0;padding:11px 12px;border:1px solid #dbe4f0;border-radius:13px;background:#fff}
+.workflow-step[draggable=true]{cursor:grab}
+.workflow-step.dragging{opacity:.45;border-style:dashed}
+.workflow-step.drag-over{border:2px dashed #4774b9;background:#eff5ff}
+.workflow-step-number{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#eaf0fb;color:#254b83;font-weight:900}
+.workflow-step-name{font-size:.98rem;font-weight:850;color:#223654}
+.workflow-step-meta{font-size:.78rem;color:#718097}
+.workflow-step-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-start}
+.workflow-step-actions button{min-width:39px;min-height:40px;padding:5px 9px;font-size:.92rem}
+.workflow-step-actions .remove-step{color:#9b302a;border-color:#ecd0cc;background:#fff7f6}
+.workflow-empty{padding:18px 12px;text-align:center;border:1px dashed #cbd7e8;border-radius:13px;color:#68758b;background:#fff;font-weight:650}
+.workflow-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.workflow-note{margin:10px 0 0}
+.link-manager-tools .actions{gap:8px}
+.link-row-actions{flex-wrap:wrap}
+.link-row-actions button{min-height:40px;padding:7px 11px;font-size:.85rem}
+.link-manager-note{font-size:.91rem}
+@media(max-width:680px){
+ body{font-size:17px}
+ h1{font-size:1.8rem}
+ h2{font-size:1.3rem}
+ h3{font-size:1.1rem}
+ .hint,.small{font-size:.96rem}
+ label{font-size:1rem}
+ input,select,textarea{font-size:1rem;min-height:50px;padding:12px 13px}
+ textarea{min-height:150px}
+ button{min-height:50px;font-size:1rem;padding:11px 15px}
+ .workflow-builder{padding:13px}
+ .workflow-palette{grid-template-columns:1fr;gap:8px}
+ .workflow-module{min-height:55px}
+ .workflow-step{grid-template-columns:auto 1fr;gap:9px;padding:11px}
+ .workflow-step-actions{grid-column:1/-1;justify-content:flex-start}
+ .workflow-step-actions button{flex:1;min-height:45px}
+ .workflow-step-name{font-size:1.05rem}
+ .link-manager-tools .field{min-width:100%}
+ .link-manager-tools .actions{width:100%;display:grid;grid-template-columns:1fr}
+ .link-manager-tools .actions button{width:100%}
+ .link-row-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .link-row-actions button{min-height:45px;font-size:.9rem}
+ .link-count-label,.kpi-label{font-size:.9rem}
+ .kpi-value{font-size:2rem}
+ table{font-size:.95rem}
+ th,td{padding:13px 11px}
+ .status{font-size:.97rem}
+}
 </style>
 </head>
 <body>
@@ -151,8 +207,28 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </section>
 
 <section class="card" aria-labelledby="linkTitle">
-<h2 id="linkTitle">۲. ساخت لینک اختصاصی کارکنان</h2>
-<p class="hint">یک کد در هر خط بنویس یا فایل CSV بارگذاری کن. قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
+<h2 id="linkTitle">۲. روند آزمایش و ساخت لینک</h2>
+<p class="hint">ابتدا ترتیب ماژول‌ها را در تایم‌لاین مشخص کن. سپس کد کارکنان را وارد کن یا فایل CSV را بارگذاری کن. قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
+
+<div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
+ <div class="workflow-builder-heading">
+  <div><h3 id="workflowBuilderTitle">چیدمان روند اجرای آزمایش</h3><p class="small">ماژول‌ها را با کشیدن به تایم‌لاین اضافه کن یا روی آن‌ها بزن. هر ماژول را می‌توانی چند بار وارد روند کنی.</p></div>
+  <span class="badge neutral">TIMELINE</span>
+ </div>
+ <div class="workflow-palette" aria-label="ماژول‌های قابل افزودن">
+  <button type="button" class="workflow-module" draggable="true" data-add-module="questionnaire">پرسشنامه <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="dd_lifetrade">DD / Life-Trade <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum">Ultimatum <span>+ افزودن</span></button>
+ </div>
+ <div class="workflow-timeline-head"><strong>تایم‌لاین آزمایش</strong><span id="workflowStepCount" class="pill">۰ ماژول</span></div>
+ <ol id="workflowTimeline" class="workflow-timeline" aria-label="ترتیب اجرای ماژول‌ها"></ol>
+ <div class="workflow-actions">
+  <button id="saveWorkflow" type="button">ذخیره روند آزمایش</button>
+  <button id="resetWorkflow" type="button" class="secondary">بازگردانی ترتیب پیش‌فرض</button>
+ </div>
+ <p class="small workflow-note">ترتیب ذخیره‌شده برای لینک‌های جدید استفاده می‌شود. لینک‌هایی که قبلاً ساخته‌ای، روند زمان ساخت خودشان را حفظ می‌کنند.</p>
+ <div id="workflowStatus" class="status" role="status" aria-live="polite"></div>
+</div>
 <div class="grid">
 <div class="field">
 <label for="defaultGroup">گروه پیش‌فرض</label>
@@ -281,6 +357,12 @@ const basePath=window.location.pathname.replace(/\/admin(?:\/links)?\/?$/,"").re
 const token=()=>$("adminToken").value.trim();
 let progressRows=[];
 let lastAssignmentLinks=[];
+let workflowSteps=[
+ {step_id:"default-questionnaire",module_code:"questionnaire"},
+ {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
+ {step_id:"default-ultimatum",module_code:"ultimatum"}
+];
+let workflowLoaded=false;
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
 function clearStatus(id){const el=$(id);el.textContent="";el.className="status";}
 function escapeHtml(value){return String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
@@ -356,6 +438,115 @@ function csvToTextarea(text){
  $("codes").value=lines.join("\n");
  return lines.length;
 }
+const workflowModuleLabels={
+ questionnaire:"پرسشنامه",
+ dd_lifetrade:"DD / Life-Trade",
+ ultimatum:"بازی Ultimatum"
+};
+function newWorkflowStepId(){
+ const suffix=(window.crypto&&typeof window.crypto.randomUUID==="function")
+  ?window.crypto.randomUUID().replace(/-/g,"")
+  :Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+ return "step-"+suffix.slice(0,28);
+}
+function renderWorkflowBuilder(){
+ const root=$("workflowTimeline");
+ if(!root)return;
+ root.replaceChildren();
+ $("workflowStepCount").textContent=workflowSteps.length.toLocaleString("fa-IR")+" ماژول";
+ if(!workflowSteps.length){
+  const empty=document.createElement("li");empty.className="workflow-empty";
+  empty.textContent="هنوز ماژولی اضافه نشده است. یکی از ماژول‌های بالا را به این قسمت بکش یا روی آن بزن.";
+  root.appendChild(empty);
+ }
+ workflowSteps.forEach((step,index)=>{
+  const item=document.createElement("li");item.className="workflow-step";item.draggable=true;
+  item.dataset.index=String(index);item.dataset.stepId=step.step_id;
+  const number=document.createElement("span");number.className="workflow-step-number";number.textContent=String(index+1).toLocaleString("fa-IR");
+  const info=document.createElement("div");
+  const name=document.createElement("div");name.className="workflow-step-name";name.textContent=workflowModuleLabels[step.module_code]||step.module_code;
+  const meta=document.createElement("div");meta.className="workflow-step-meta";meta.textContent="ماژول شمارهٔ "+String(index+1).toLocaleString("fa-IR")+" · قابل جابه‌جایی";
+  info.append(name,meta);
+  const actions=document.createElement("div");actions.className="workflow-step-actions";
+  const up=document.createElement("button");up.type="button";up.className="secondary";up.textContent="↑";up.title="انتقال به بالا";up.setAttribute("aria-label","انتقال "+name.textContent+" به بالا");up.disabled=index===0;
+  up.addEventListener("click",()=>moveWorkflowStep(index,index-1));
+  const down=document.createElement("button");down.type="button";down.className="secondary";down.textContent="↓";down.title="انتقال به پایین";down.setAttribute("aria-label","انتقال "+name.textContent+" به پایین");down.disabled=index===workflowSteps.length-1;
+  down.addEventListener("click",()=>moveWorkflowStep(index,index+1));
+  const remove=document.createElement("button");remove.type="button";remove.className="remove-step";remove.textContent="حذف";remove.addEventListener("click",()=>{workflowSteps.splice(index,1);renderWorkflowBuilder();});
+  actions.append(up,down,remove);item.append(number,info,actions);root.appendChild(item);
+ });
+}
+function addWorkflowStep(moduleCode,index){
+ if(!workflowModuleLabels[moduleCode])return;
+ const step={step_id:newWorkflowStepId(),module_code:moduleCode};
+ const target=Number.isInteger(index)?Math.max(0,Math.min(workflowSteps.length,index)):workflowSteps.length;
+ workflowSteps.splice(target,0,step);renderWorkflowBuilder();
+}
+function moveWorkflowStep(from,to){
+ if(from<0||from>=workflowSteps.length||to<0||to>=workflowSteps.length||from===to)return;
+ const [step]=workflowSteps.splice(from,1);workflowSteps.splice(to,0,step);renderWorkflowBuilder();
+}
+async function saveWorkflow(){
+ if(!workflowSteps.length)throw new Error("برای روند آزمایش حداقل یک ماژول اضافه کن.");
+ if(workflowSteps.length>60)throw new Error("حداکثر ۶۰ نوبت ماژول در هر روند مجاز است.");
+ const response=await adminFetch("/api/admin/workflow",{method:"POST",body:JSON.stringify({steps:workflowSteps})});
+ const data=await response.json();workflowSteps=data.steps||workflowSteps;workflowLoaded=true;renderWorkflowBuilder();
+ setStatus("workflowStatus","روند آزمایش ذخیره شد؛ "+workflowSteps.length+" نوبت ماژول برای لینک‌های جدید استفاده می‌شود.","success");
+ return workflowSteps;
+}
+async function loadWorkflow(){
+ try{
+  const response=await adminFetch("/api/admin/workflow",{method:"GET"});
+  const data=await response.json();
+  if(Array.isArray(data.steps)&&data.steps.length)workflowSteps=data.steps;
+  workflowLoaded=true;renderWorkflowBuilder();
+  setStatus("workflowStatus","روند ذخیره‌شده بارگذاری شد. تغییرات پس از ذخیره برای لینک‌های جدید اعمال می‌شوند.","info");
+ }catch(error){setStatus("workflowStatus",error.message,"error");}
+}
+document.querySelectorAll("[data-add-module]").forEach(button=>{
+ button.addEventListener("click",()=>addWorkflowStep(button.dataset.addModule));
+ button.addEventListener("dragstart",event=>{
+  event.dataTransfer.setData("text/plain","module:"+button.dataset.addModule);
+  event.dataTransfer.effectAllowed="copy";
+ });
+});
+$("workflowTimeline").addEventListener("dragstart",event=>{
+ const item=event.target.closest(".workflow-step");if(!item)return;
+ event.dataTransfer.setData("text/plain","step:"+item.dataset.stepId);
+ event.dataTransfer.effectAllowed="move";item.classList.add("dragging");
+});
+$("workflowTimeline").addEventListener("dragend",()=>document.querySelectorAll(".workflow-step").forEach(item=>item.classList.remove("dragging","drag-over")));
+$("workflowTimeline").addEventListener("dragover",event=>{
+ event.preventDefault();const target=event.target.closest(".workflow-step");
+ document.querySelectorAll(".workflow-step").forEach(item=>item.classList.toggle("drag-over",item===target));
+});
+$("workflowTimeline").addEventListener("drop",event=>{
+ event.preventDefault();
+ const raw=event.dataTransfer.getData("text/plain");
+ const target=event.target.closest(".workflow-step");
+ const index=target?Number(target.dataset.index):workflowSteps.length;
+ if(raw.startsWith("module:"))addWorkflowStep(raw.slice(7),index);
+ else if(raw.startsWith("step:")){
+  const from=workflowSteps.findIndex(step=>step.step_id===raw.slice(5));
+  if(from>=0)moveWorkflowStep(from,Math.min(index,workflowSteps.length-1));
+ }
+ document.querySelectorAll(".workflow-step").forEach(item=>item.classList.remove("dragging","drag-over"));
+});
+$("saveWorkflow").addEventListener("click",async()=>{
+ const button=$("saveWorkflow");button.disabled=true;clearStatus("workflowStatus");
+ try{await saveWorkflow();}catch(error){setStatus("workflowStatus",error.message,"error");}
+ finally{button.disabled=false;}
+});
+$("resetWorkflow").addEventListener("click",()=>{
+ workflowSteps=[
+  {step_id:"default-questionnaire",module_code:"questionnaire"},
+  {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
+  {step_id:"default-ultimatum",module_code:"ultimatum"}
+ ];
+ renderWorkflowBuilder();setStatus("workflowStatus","ترتیب پیش‌فرض نمایش داده شد؛ برای اعمال آن دکمهٔ «ذخیره روند آزمایش» را بزن.","info");
+});
+renderWorkflowBuilder();
+
 function parseAssignments(){
  const lines=$("codes").value.split(/\r?\n/);const seen=new Set(),assignments=[];
  for(let i=0;i<lines.length;i++){
@@ -512,6 +703,13 @@ function stageStatusLabel(state){
  return ({not_started:"شروع نشده",in_progress:"در حال انجام",completed:"کامل"})[state]||state||"—";
 }
 function currentStageLabel(code){return code?stageLabel(code):"همهٔ مراحل کامل";}
+function formatDuration(value){
+ const total=Math.max(0,Math.floor(Number(value)||0));
+ const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),seconds=total%60;
+ if(hours)return hours.toLocaleString("fa-IR")+" ساعت و "+minutes.toLocaleString("fa-IR")+" دقیقه";
+ if(minutes)return minutes.toLocaleString("fa-IR")+" دقیقه و "+seconds.toLocaleString("fa-IR")+" ثانیه";
+ return seconds.toLocaleString("fa-IR")+" ثانیه";
+}
 function renderProgress(){
  const query=$("monitorSearch").value.trim().toUpperCase();
  const filter=$("monitorStatus").value;
@@ -525,11 +723,12 @@ function renderProgress(){
  const root=$("participantTable");root.replaceChildren();
  if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","زمان کل فعال","زمان پرسشنامه","زمان Life-Trade","زمان Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
-  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
+  const times=r.module_time_seconds||{};
+  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),formatDuration(r.total_active_seconds),formatDuration(times.questionnaire),formatDuration(times.dd_lifetrade),formatDuration(times.ultimatum),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
   cells.forEach((value,i)=>{const td=document.createElement("td");if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}else td.textContent=value;tr.appendChild(td);});
   tbody.appendChild(tr);
  });
@@ -540,14 +739,14 @@ async function refreshProgress(){
  clearStatus("monitorStatusMessage");$("refreshButton").disabled=true;$("connectButton").disabled=true;
  try{
   const scope=$("monitorScope").value;
-  const response=await adminFetch("/api/admin/progress?scope="+scope,{method:"GET"});
+  const response=await adminFetch("/api/admin/progress?scope="+scope+"&include_timing=true",{method:"GET"});
   progressRows=await response.json();renderProgress();
   setStatus("monitorStatusMessage","پایش دریافت شد: "+progressRows.length+" لینک در محدودهٔ انتخاب‌شده.","success");
   setStatus("connectionStatus","اتصال مدیریتی برقرار است. آخرین به‌روزرسانی: "+new Date().toLocaleTimeString("fa-IR"),"success");
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
  finally{$("refreshButton").disabled=false;$("connectButton").disabled=false;}
 }
-$("connectButton").addEventListener("click",refreshProgress);
+$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();});
 $("refreshButton").addEventListener("click",refreshProgress);
 $("monitorScope").addEventListener("change",()=>{refreshProgress();refreshAssignments();});
 $("monitorSearch").addEventListener("input",renderProgress);
@@ -560,8 +759,9 @@ $("assignmentCsv").addEventListener("change",async event=>{
 $("createAssignments").addEventListener("click",async()=>{
  clearStatus("assignmentStatus");$("assignmentOutput").replaceChildren();const button=$("createAssignments");button.disabled=true;
  try{
+  const steps=await saveWorkflow();
   const assignments=parseAssignments();
-  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
+  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code})),steps})});
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
   setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. URLها به‌صورت رمزنگاری‌شده نگه‌داری می‌شوند و از مدیریت لینک‌ها یا CSV لینک‌های فعال قابل دریافت‌اند؛ فایل خروجی را محرمانه نگه‌دار.","success");
@@ -620,7 +820,8 @@ $("createModuleTest").addEventListener("click",async()=>{
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
-  const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
+  const steps=await saveWorkflow();
+  const response=await adminFetch("/api/admin/test-links",{method:"POST",body:JSON.stringify({steps})});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
   setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
