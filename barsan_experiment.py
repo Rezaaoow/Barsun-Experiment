@@ -288,27 +288,6 @@ if DATABASE_URL:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_assignment ON experiment_activity_pings(assignment_id,received_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_run ON experiment_activity_pings(run_id,received_at)")
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS experiment_workflow_steps ("
-                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
-                "step_index INTEGER NOT NULL, module_code TEXT NOT NULL CHECK(module_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
-                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
-                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
-                "draft_payload TEXT NOT NULL DEFAULT '{}', started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
-                "PRIMARY KEY(participation_id,step_index), UNIQUE(current_run_id))"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS study_workflow_configs ("
-                "study_code TEXT PRIMARY KEY REFERENCES studies(study_code), workflow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS experiment_activity_pings ("
-                "ping_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
-                "run_id TEXT REFERENCES instrument_runs(run_id), active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
-                "received_at TEXT NOT NULL)"
-            )
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_assignment ON experiment_activity_pings(assignment_id,received_at)")
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_run ON experiment_activity_pings(run_id,received_at)")
-            connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
                 "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
                 "stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
@@ -492,6 +471,27 @@ else:
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_steps ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_index INTEGER NOT NULL, module_code TEXT NOT NULL CHECK(module_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload TEXT NOT NULL DEFAULT '{}', started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id,step_index), UNIQUE(current_run_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS study_workflow_configs ("
+                "study_code TEXT PRIMARY KEY REFERENCES studies(study_code), workflow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_activity_pings ("
+                "ping_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "run_id TEXT REFERENCES instrument_runs(run_id), active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
+                "received_at TEXT NOT NULL)"
+            )
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_assignment ON experiment_activity_pings(assignment_id,received_at)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_run ON experiment_activity_pings(run_id,received_at)")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
                 "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
