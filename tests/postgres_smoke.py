@@ -92,6 +92,96 @@ def main_test():
         with zipfile.ZipFile(io.BytesIO(full_export.content)) as archive:
             assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
 
+        # Configurable workflow, repeated module instances and active-time aggregation on PostgreSQL.
+        configured_workflow = ["dd_lifetrade", "dd_lifetrade", "questionnaire"]
+        workflow_saved = client.put(
+            "/api/admin/workflow",
+            headers=admin_headers,
+            json={"workflow": configured_workflow},
+        )
+        assert workflow_saved.status_code == 200, workflow_saved.text
+
+        assignment_response = client.post(
+            "/api/admin/assignments",
+            headers=admin_headers,
+            json={"assignments": [{"participant_code": "PG-WORKFLOW-01", "condition_code": "A"}]},
+        )
+        assert assignment_response.status_code == 200, assignment_response.text
+        workflow_url = assignment_response.json()["assignments"][0]["invitation_url"]
+        workflow_token = workflow_url.split("invite=", 1)[1].split("&", 1)[0]
+        workflow_identity = {
+            "invitation_token": workflow_token,
+            "participant_code": "PG-WORKFLOW-01",
+        }
+
+        opened = client.post(
+            "/api/experiment/activity/open",
+            json={"invitation_token": workflow_token},
+        )
+        assert opened.status_code == 200, opened.text
+        consent = client.post(
+            "/api/experiment/consent",
+            json={**workflow_identity, "accepted": True},
+        )
+        assert consent.status_code == 200, consent.text
+        identified = client.post("/api/experiment/identify", json=workflow_identity)
+        assert identified.status_code == 200, identified.text
+        assert identified.json()["workflow"] == configured_workflow
+
+        first_step = client.post(
+            "/api/experiment/stages/start",
+            json={**workflow_identity, "stage_code": "dd_lifetrade", "workflow_step_index": 0},
+        )
+        assert first_step.status_code == 200, first_step.text
+        first_run = first_step.json()["run_id"]
+        blocked_second = client.post(
+            "/api/experiment/stages/start",
+            json={**workflow_identity, "stage_code": "dd_lifetrade", "workflow_step_index": 1},
+        )
+        assert blocked_second.status_code == 409
+
+        first_ping = client.post(
+            "/api/experiment/activity/ping",
+            json={**workflow_identity, "ping_id": "pg-workflow-active-ping-0001",
+                  "run_id": first_run, "active_seconds": 20},
+        )
+        assert first_ping.status_code == 200, first_ping.text
+        first_done = client.post(
+            "/api/experiment/stages/complete",
+            json={**workflow_identity, "stage_code": "dd_lifetrade",
+                  "workflow_step_index": 0, "run_id": first_run},
+        )
+        assert first_done.status_code == 200, first_done.text
+
+        second_step = client.post(
+            "/api/experiment/stages/start",
+            json={**workflow_identity, "stage_code": "dd_lifetrade", "workflow_step_index": 1},
+        )
+        assert second_step.status_code == 200, second_step.text
+        second_run = second_step.json()["run_id"]
+        second_ping = client.post(
+            "/api/experiment/activity/ping",
+            json={**workflow_identity, "ping_id": "pg-workflow-active-ping-0002",
+                  "run_id": second_run, "active_seconds": 35},
+        )
+        assert second_ping.status_code == 200, second_ping.text
+        second_done = client.post(
+            "/api/experiment/stages/complete",
+            json={**workflow_identity, "stage_code": "dd_lifetrade",
+                  "workflow_step_index": 1, "run_id": second_run},
+        )
+        assert second_done.status_code == 200, second_done.text
+
+        progress_response = client.get("/api/admin/progress?scope=main", headers=admin_headers)
+        assert progress_response.status_code == 200, progress_response.text
+        workflow_row = next(row for row in progress_response.json()
+                            if row["participant_code"] == "PG-WORKFLOW-01")
+        assert workflow_row["first_opened_at"]
+        assert workflow_row["total_active_seconds"] == 55.0
+        assert [step["active_seconds"] for step in workflow_row["workflow_steps"]] == [20.0, 35.0, 0.0]
+        assert workflow_row["current_step_index"] == 2
+        assert workflow_row["current_stage"] == "questionnaire"
+
         # Link management on PostgreSQL: active CSV URLs are recoverable from encrypted tokens,
         # status changes preserve the URL, and deletion is limited to inactive assignments.
         links_response = client.get("/api/admin/assignments?scope=test&status=active", headers=admin_headers)
