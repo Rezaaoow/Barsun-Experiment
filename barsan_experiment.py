@@ -677,7 +677,7 @@ class AssignmentBatchIn(BaseModel):
 
 
 class WorkflowConfigIn(BaseModel):
-    workflow: list[StageCode] = Field(min_length=1, max_length=40)
+    workflow: list[StageCode] = Field(min_length=1)
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -727,24 +727,24 @@ class ActivityOpenIn(BaseModel):
 class ActivityPingIn(ExperimentIdentityIn):
     ping_id: str = Field(min_length=16, max_length=100)
     run_id: str | None = Field(default=None, max_length=100)
-    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
+    workflow_step_index: int | None = Field(default=None, ge=0)
     active_seconds: float = Field(ge=0, le=60)
 
 
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
-    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
+    workflow_step_index: int | None = Field(default=None, ge=0)
 
 
 class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
-    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
+    workflow_step_index: int | None = Field(default=None, ge=0)
     run_id: str = Field(min_length=1, max_length=100)
     draft_payload: dict[str, Any]
 
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
-    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
+    workflow_step_index: int | None = Field(default=None, ge=0)
     run_id: str = Field(min_length=1, max_length=100)
     question_code: str = Field(min_length=1, max_length=16)
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
@@ -753,7 +753,7 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
 
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
-    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
+    workflow_step_index: int | None = Field(default=None, ge=0)
     run_id: str = Field(min_length=1, max_length=100)
     final_payload: dict[str, Any] | None = None
 
@@ -1025,8 +1025,8 @@ def _ensure_participation(
 
 
 def _normalize_workflow(value: Any) -> list[str]:
-    if not isinstance(value, list) or not value or len(value) > 40:
-        raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۴۰ ماژول داشته باشد.")
+    if not isinstance(value, list) or not value:
+        raise HTTPException(422, "روند آزمایش باید حداقل یک ماژول داشته باشد.")
     allowed = set(STAGE_TO_INSTRUMENT)
     workflow: list[str] = []
     for item in value:
@@ -1308,7 +1308,7 @@ def get_admin_workflow(x_admin_token: str | None = Header(default=None)):
             {"code": "dd_lifetrade", "label": "DD / Life-Trade", "description": "تکلیف تصمیم‌گیری و ترجیح زمانی"},
             {"code": "ultimatum", "label": "بازی اولتیماتوم", "description": "بازی تقسیم امتیاز"},
         ],
-        "max_steps": 40,
+        "max_steps": None,
     }
 
 
