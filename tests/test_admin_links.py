@@ -421,24 +421,28 @@ def test_delete_inactive_assignments_removes_assignment_child_rows_safely(client
         ).fetchone() is None
 
 
-def test_active_links_csv_identifies_frame_and_control_ultimatum_variants(client):
-    steps = [
-        {"step_id": "csv-q", "module_code": "questionnaire"},
+def test_active_links_csv_identifies_workflow_selected_ultimatum_variant(client):
+    frame_steps = [
+        {"step_id": "csv-q-frame", "module_code": "questionnaire"},
         {"step_id": "csv-frame", "module_code": "ultimatum_frame"},
+    ]
+    control_steps = [
+        {"step_id": "csv-q-control", "module_code": "questionnaire"},
         {"step_id": "csv-control", "module_code": "ultimatum_control"},
     ]
-    created = client.post(
+    frame = client.post(
         "/api/admin/assignments",
         headers={"x-admin-token": "test-admin-token"},
-        json={
-            "assignments": [
-                {"participant_code": "CSV-FRAME", "condition_code": "Frame"},
-                {"participant_code": "CSV-CONTROL", "condition_code": "Control"},
-            ],
-            "steps": steps,
-        },
+        json={"assignments": [{"participant_code": "CSV-FRAME"}], "steps": frame_steps},
     )
-    assert created.status_code == 200, created.text
+    control = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"assignments": [{"participant_code": "CSV-CONTROL"}], "steps": control_steps},
+    )
+    assert frame.status_code == 200, frame.text
+    assert control.status_code == 200, control.text
+
     response = client.get(
         "/api/admin/assignments/export.csv",
         headers={"x-admin-token": "test-admin-token"},
