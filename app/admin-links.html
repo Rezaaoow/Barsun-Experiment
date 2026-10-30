@@ -137,6 +137,59 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
 @media(max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){body{padding:13px 9px 30px}header{display:block}.header-mark{display:inline-block;margin-top:12px}.grid,.grid-3,.module-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border-radius:16px}.export-grid{grid-template-columns:1fr}.card-head{display:block}.card-head .actions{margin-top:10px}}
+
+/* Admin mobile legibility and generous touch controls */
+body{font-size:16px;line-height:1.8}
+h1{font-size:clamp(1.7rem,4vw,2.25rem);font-weight:900}
+h2{font-size:1.25rem;font-weight:900}
+h3{font-size:1.1rem;font-weight:850}
+.subtitle,.hint{font-size:1rem;line-height:1.95}
+label{font-size:.98rem;font-weight:850}
+input,select,textarea{font-size:1rem;min-height:52px}
+button{min-height:50px;font-size:.98rem;font-weight:850;padding:12px 16px}
+.status{font-size:.95rem;line-height:1.9}
+@media(max-width:680px){
+ body{padding:10px 8px 26px;font-size:17px}
+ header{padding:8px 4px 17px}
+ h1{font-size:1.7rem;line-height:1.5}
+ h2{font-size:1.28rem}
+ .subtitle{font-size:1rem}
+ .card{padding:19px 14px;border-radius:16px}
+ .grid,.grid-3,.module-grid,.workflow-layout{grid-template-columns:1fr}
+ .workflow-builder{padding:14px}
+ .workflow-module{min-height:64px;font-size:1.03rem}
+ .workflow-step{grid-template-columns:34px minmax(0,1fr);gap:8px}
+ .workflow-step-actions{grid-column:1/-1;justify-content:flex-end}
+ .workflow-step-actions button{min-height:44px;width:48px}
+ .workflow-step-actions button.remove-step{width:auto}
+ label{font-size:1.02rem}
+ input,select,textarea{min-height:58px;font-size:1.05rem;padding:12px 13px}
+ textarea{min-height:150px}
+ button{min-height:56px;width:auto;font-size:1.02rem;padding:12px 15px}
+ .actions{gap:8px}
+ .actions button{flex:1}
+ .link-manager-tools{display:grid;grid-template-columns:1fr}
+ .link-manager-tools .field{min-width:0}
+ .link-manager-tools .actions{display:grid;grid-template-columns:1fr}
+ .link-action-group .actions{display:grid;grid-template-columns:1fr}
+ .link-action-group .link-selection{margin:0}
+ .link-counts{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+ .link-count{padding:10px 7px}
+ .link-count-label{font-size:.72rem;line-height:1.55}
+ .link-count-value{font-size:1.4rem}
+ .export-grid{grid-template-columns:1fr}
+ .export-grid button{min-height:56px;font-size:1rem}
+ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .kpi{padding:12px 10px}
+ .kpi-label{font-size:.88rem}
+ .kpi-value{font-size:1.6rem}
+ .card-head{display:block}
+ .card-head .actions{margin-top:10px}
+ .workflow-save-row{display:grid;grid-template-columns:1fr}
+ .workflow-save-row .actions{display:grid;grid-template-columns:1fr}
+ .workflow-meta{font-size:.8rem}
+ .status{font-size:.98rem;padding:12px}
+}
 </style>
 </head>
 <body>
@@ -171,7 +224,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 
 <section class="card" aria-labelledby="monitorTitle">
 <div class="card-head">
-<div><h2 id="monitorTitle">۱. پایش فرایند آزمایش</h2><p class="hint" style="margin-bottom:0">وضعیت هر فرد از سمت سرور خوانده می‌شود. «متوقف/نیازمند پیگیری» یعنی از آخرین فعالیت بیش از ۲۴ ساعت گذشته؛ این شاخص به‌تنهایی اثبات ترک آزمایش نیست.</p></div>
+<div><h2 id="monitorTitle">۱. پایش فرایند آزمایش</h2><p class="hint" style="margin-bottom:0">زمان اولین ورود، زمان فعال کل، مدت سپری‌شده از ورود و زمان فعال هر جایگاه از روند آزمایش را ببین. زمان فعال فقط وقتی صفحه در پیش‌زمینه است محاسبه می‌شود. «متوقف/نیازمند پیگیری» یعنی از آخرین فعالیت بیش از ۲۴ ساعت گذشته؛ این شاخص به‌تنهایی اثبات ترک آزمایش نیست.</p></div>
 <span id="scopePill" class="pill">آزمایش اصلی</span>
 </div>
 <div class="kpis" id="kpis">
@@ -296,7 +349,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 
 <section class="card" aria-labelledby="testTitle">
 <h2 id="testTitle">۳. تست مستقل ماژول‌ها</h2>
-<p class="hint">لینک مستقل ماژول‌ها بدون تغییر، فقط همان ماژول انتخاب‌شده را اجرا می‌کند. اما «ساخت دو لینک تست کامل» از همان روند Timeline ذخیره‌شده استفاده می‌کند و دو لینک Frame و Control می‌سازد. خروجی‌ها فقط در محدودهٔ تست باقی می‌مانند.</p>
+<p class="hint">هر دکمه یک لینک جداگانه با کد ورود <span class="pill">TEST</span> می‌سازد و مستقیماً وارد همان ماژول می‌شود. برای تست DD/Life-Trade و Ultimatum لازم نیست کل آزمایش اجرا شود. مراحل پیشین لازم برای مسیریابی در فضای تست به‌صورت مصنوعی تکمیل علامت می‌خورند و دادهٔ رفتاری واقعی محسوب نمی‌شوند. «ساخت دو لینک تست کامل» اما از همان روند Timeline ذخیره‌شده استفاده می‌کند و دو لینک Frame و Control می‌سازد.</p>
 <div class="grid">
 <div class="field">
 <label for="moduleTestGroup">گروه برای لینک تست مستقل</label>
@@ -852,7 +905,9 @@ $("createModuleTest").addEventListener("click",async()=>{
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
-  const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
+  if(workflowDirty){throw new Error("ابتدا Timeline را ذخیره کن تا لینک تست کامل با همان روند ساخته شود.");}
+   if(!workflowItems.length){throw new Error("Timeline خالی است؛ حداقل یک ماژول اضافه کن.");}
+   const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
   setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
@@ -868,7 +923,7 @@ $("previewReset").addEventListener("click",async()=>{
  clearStatus("maintenanceStatus");$("maintenancePreview").hidden=true;const button=$("previewReset");button.disabled=true;
  try{
   const scope=$("monitorScope").value;const response=await adminFetch("/api/admin/maintenance/preview?scope="+scope,{method:"GET"});const data=await response.json();
-  const labels={participants:"کدهای شرکت‌کننده",assignments:"تخصیص‌ها / لینک‌ها",participations:"مشارکت‌ها",runs:"اجرای ماژول‌ها",questionnaire_responses:"پاسخ‌های پرسشنامه",lifetrade_trials:"دورهای Life-Trade",ultimatum_trials:"دورهای Ultimatum",completed_experiments:"آزمایش کامل",test_studies:"فضاهای تست"};
+  const labels={participants:"کدهای شرکت‌کننده",assignments:"تخصیص‌ها / لینک‌ها",opened_assignments:"لینک‌های بازشده",participations:"مشارکت‌ها",runs:"اجرای ماژول‌ها",workflow_steps:"جایگاه‌های روند آزمایش",activity_pings:"ثبت‌های زمان فعال",questionnaire_responses:"پاسخ‌های پرسشنامه",lifetrade_trials:"دورهای Life-Trade",ultimatum_trials:"دورهای Ultimatum",completed_experiments:"آزمایش کامل",test_studies:"فضاهای تست"};
   const table=document.createElement("table");const head=document.createElement("thead"),hr=document.createElement("tr");
   ["نوع داده","تعداد"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hr.appendChild(th)});head.appendChild(hr);table.appendChild(head);
   const body=document.createElement("tbody");Object.entries(data.counts).forEach(([key,value])=>{const tr=document.createElement("tr"),td1=document.createElement("td"),td2=document.createElement("td");td1.textContent=labels[key]||key;td2.textContent=value;tr.append(td1,td2);body.appendChild(tr)});table.appendChild(body);
