@@ -660,8 +660,13 @@ class AssignmentItemIn(BaseModel):
     condition_code: str = Field(min_length=1, max_length=64)
 
 
+class WorkflowTemplateIn(BaseModel):
+    workflow_steps: list[StageCode] = Field(default_factory=list, max_length=500)
+
+
 class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
+    workflow_steps: list[StageCode] | None = Field(default=None, max_length=500)
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -706,15 +711,18 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     draft_payload: dict[str, Any]
 
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     question_code: str = Field(min_length=1, max_length=16)
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
@@ -723,11 +731,13 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
 
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     final_payload: dict[str, Any] | None = None
 
 
 class UltimatumPrepareIn(ExperimentIdentityIn):
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     phase: Literal["practice", "main"]
     block_code: Literal[
@@ -741,6 +751,7 @@ class UltimatumPrepareIn(ExperimentIdentityIn):
 
 
 class UltimatumResolveIn(ExperimentIdentityIn):
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     round_id: str = Field(min_length=1, max_length=100)
     participant_offer_to_opponent: int | None = Field(default=None, ge=0, le=10)
@@ -754,9 +765,24 @@ class UltimatumResolveIn(ExperimentIdentityIn):
 
 
 class UltimatumEventsIn(ExperimentIdentityIn):
+    step_id: str | None = Field(default=None, min_length=1, max_length=100)
     run_id: str = Field(min_length=1, max_length=100)
     round_id: str = Field(min_length=1, max_length=100)
     event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
+
+
+
+class ActivityOpenIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+
+
+class ActivityEventIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+    activity_session_id: str = Field(min_length=1, max_length=100)
+    event: Literal["heartbeat", "module", "pause", "resume", "close"]
+    step_id: str | None = Field(default=None, max_length=100)
+    module_code: StageCode | None = None
+
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -1109,6 +1135,55 @@ def _get_stage_rows(connection: Any, participation_id: str) -> dict[str, dict[st
         (participation_id,),
     ).fetchall()
     return {row["stage_code"]: dict(row) for row in rows}
+
+
+def _workflow_steps_for_assignment(assignment: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Return the immutable workflow captured when this invitation was created."""
+    raw = assignment.get("workflow_json")
+    if not raw:
+        return None
+    parsed = _json_value(raw)
+    if isinstance(parsed, dict):
+        steps = parsed.get("steps")
+    else:
+        steps = parsed
+    if not isinstance(steps, list):
+        return None
+    output = []
+    for item in steps:
+        if not isinstance(item, dict):
+            continue
+        module_code = item.get("module_code")
+        step_id = item.get("step_id")
+        if module_code not in STAGE_ORDER or not step_id:
+            continue
+        output.append({"step_id": str(step_id), "stage_code": module_code})
+    return output
+
+
+def _new_workflow_definition(module_codes: list[str]) -> dict[str, Any]:
+    """Create unique stable step IDs; repeated module codes remain separate steps."""
+    if len(module_codes) > 500:
+        raise HTTPException(422, "روند آزمایش نمی‌تواند بیش از ۵۰۰ جایگاه داشته باشد.")
+    if any(code not in STAGE_ORDER for code in module_codes):
+        raise HTTPException(422, "یکی از ماژول‌های روند آزمایش معتبر نیست.")
+    return {
+        "version": 1,
+        "steps": [
+            {"step_id": str(uuid.uuid4()), "module_code": code}
+            for code in module_codes
+        ],
+    }
+
+
+def _get_workflow_step_rows(connection: Any, participation_id: str) -> dict[str, dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    rows = connection.execute(
+        "SELECT step_id,stage_code,status,attempt_number,current_run_id,draft_payload,started_at,completed_at,updated_at "
+        "FROM experiment_workflow_step_progress WHERE participation_id=" + marker,
+        (participation_id,),
+    ).fetchall()
+    return {row["step_id"]: dict(row) for row in rows}
 
 
 def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str, Any]:
