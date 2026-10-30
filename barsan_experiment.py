@@ -1100,7 +1100,7 @@ def _lookup_assignment(connection: Any, invitation_token: str, participant_code:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
     row = connection.execute(
-        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
         "sp.participation_id,p.participant_code "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -1209,6 +1209,154 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
     if stage_code == "questionnaire":
         state["draft_payload"] = _json_value(row.get("draft_payload"))
     return state
+
+
+
+
+
+@app.get("/api/admin/workflow")
+def get_admin_workflow_template(x_admin_token: str | None = Header(default=None)):
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT workflow_json,updated_at FROM experiment_workflow_templates WHERE template_id=" + marker,
+            ("active",),
+        ).fetchone()
+    if row:
+        payload = _json_value(row["workflow_json"])
+        codes = payload.get("workflow_steps", []) if isinstance(payload, dict) else []
+        return {"workflow_steps": codes, "updated_at": row["updated_at"], "saved": True}
+    return {"workflow_steps": list(STAGE_ORDER), "updated_at": None, "saved": False}
+
+
+@app.post("/api/admin/workflow")
+def save_admin_workflow_template(
+    data: WorkflowTemplateIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    authorize(x_admin_token)
+    if any(code not in STAGE_ORDER for code in data.workflow_steps):
+        raise HTTPException(422, "یکی از ماژول‌های انتخاب‌شده معتبر نیست.")
+    timestamp = now()
+    marker = "%s" if DATABASE_URL else "?"
+    payload = {"workflow_steps": data.workflow_steps, "version": 1}
+    if DATABASE_URL:
+        with conn() as connection:
+            connection.execute(
+                "INSERT INTO experiment_workflow_templates(template_id,workflow_json,updated_at) "
+                "VALUES(%s,%s,%s) ON CONFLICT(template_id) DO UPDATE SET "
+                "workflow_json=EXCLUDED.workflow_json,updated_at=EXCLUDED.updated_at",
+                ("active", Jsonb(payload), timestamp),
+            )
+    else:
+        with conn() as connection:
+            connection.execute(
+                "INSERT INTO experiment_workflow_templates(template_id,workflow_json,updated_at) "
+                "VALUES(?,?,?) ON CONFLICT(template_id) DO UPDATE SET "
+                "workflow_json=excluded.workflow_json,updated_at=excluded.updated_at",
+                ("active", json.dumps(payload, ensure_ascii=False), timestamp),
+            )
+    return {"saved": True, "workflow_steps": data.workflow_steps, "updated_at": timestamp}
+
+
+def _assignment_by_invitation_token(connection: Any, invitation_token: str) -> dict[str, Any]:
+    token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT assignment_id,study_code,workflow_json FROM experiment_assignments "
+        "WHERE invitation_token_hash=" + marker + " AND active=1",
+        (token_hash,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(403, "لینک اختصاصی معتبر نیست.")
+    return dict(row)
+
+
+@app.post("/api/experiment/activity/open")
+def open_experiment_activity(data: ActivityOpenIn):
+    """Start a visit timer as soon as a valid invitation URL is opened."""
+    activity_session_id = str(uuid.uuid4())
+    timestamp = now()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = _assignment_by_invitation_token(connection, data.invitation_token)
+        connection.execute(
+            "INSERT INTO experiment_activity_sessions(activity_session_id,assignment_id,opened_at,"
+            "last_heartbeat_at,total_active_seconds,active) VALUES("
+            + ",".join([marker] * 6) + ")",
+            (activity_session_id, assignment["assignment_id"], timestamp, timestamp, 0, 1),
+        )
+    return {"activity_session_id": activity_session_id, "opened_at": timestamp}
+
+
+@app.post("/api/experiment/activity/event")
+def record_experiment_activity_event(data: ActivityEventIn):
+    """Accumulate visible-page time with a bounded heartbeat gap and per-step totals."""
+    timestamp = now()
+    now_epoch = datetime.now(timezone.utc).timestamp()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = _assignment_by_invitation_token(connection, data.invitation_token)
+        session = connection.execute(
+            "SELECT * FROM experiment_activity_sessions WHERE activity_session_id=" + marker
+            + " AND assignment_id=" + marker,
+            (data.activity_session_id, assignment["assignment_id"]),
+        ).fetchone()
+        if not session:
+            raise HTTPException(404, "جلسهٔ ثبت زمان پیدا نشد.")
+        if session["closed_at"]:
+            return {"saved": True, "closed": True, "added_seconds": 0}
+        previous = datetime.fromisoformat(str(session["last_heartbeat_at"]).replace("Z", "+00:00"))
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=timezone.utc)
+        delta = 0.0
+        if int(session["active"] or 0):
+            delta = max(0.0, min(60.0, now_epoch - previous.timestamp()))
+        current_step_id = session["current_step_id"]
+        current_module_code = session["current_module_code"]
+        if delta > 0 and current_step_id and current_module_code:
+            connection.execute(
+                "INSERT INTO experiment_activity_step_time(activity_session_id,step_id,module_code,active_seconds) "
+                "VALUES(" + ",".join([marker] * 4) + ") "
+                "ON CONFLICT(activity_session_id,step_id) DO UPDATE SET "
+                "active_seconds=experiment_activity_step_time.active_seconds+excluded.active_seconds",
+                (data.activity_session_id, current_step_id, current_module_code, delta),
+            )
+        active = int(session["active"] or 0)
+        closed_at = None
+        if data.event == "module":
+            if not data.step_id or not data.module_code:
+                raise HTTPException(422, "شناسه و نوع جایگاه آزمایش الزامی است.")
+            workflow = _workflow_steps_for_assignment(assignment)
+            if workflow is not None and not any(
+                step["step_id"] == data.step_id and step["stage_code"] == data.module_code
+                for step in workflow
+            ):
+                raise HTTPException(403, "جایگاه انتخاب‌شده متعلق به این لینک نیست.")
+            current_step_id = data.step_id
+            current_module_code = data.module_code
+            active = 1
+        elif data.event == "resume":
+            active = 1
+            if data.step_id is not None:
+                current_step_id = data.step_id
+            if data.module_code is not None:
+                current_module_code = data.module_code
+        elif data.event == "pause":
+            active = 0
+        elif data.event == "close":
+            active = 0
+            closed_at = timestamp
+        total_seconds = float(session["total_active_seconds"] or 0) + delta
+        connection.execute(
+            "UPDATE experiment_activity_sessions SET total_active_seconds=" + marker
+            + ",last_heartbeat_at=" + marker + ",active=" + marker
+            + ",current_step_id=" + marker + ",current_module_code=" + marker
+            + ",closed_at=COALESCE(" + marker + ",closed_at) WHERE activity_session_id=" + marker,
+            (total_seconds, timestamp, active, current_step_id, current_module_code, closed_at, data.activity_session_id),
+        )
+    return {"saved": True, "added_seconds": round(delta, 2), "total_active_seconds": round(total_seconds, 2)}
 
 
 @app.post("/api/admin/assignments")
