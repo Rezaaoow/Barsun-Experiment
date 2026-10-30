@@ -2541,7 +2541,8 @@ function utRenderBlockIntro() {
  ultimatumState.trialInBlock=1;
  const role=utRole(blockCode),condition=utCondition(blockCode);
  const s=utMakeScreen({condition:condition,progress:"بلوک "+utFa(blockOrder)+" از ۴",scrollable:true});
- utAddText(s.body,"p","ut-copy","در ۵ دور بعدی شما "+(role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده")+" هستید و "+(condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان":"بازیکن مقابل شما یکی از همکاران داخل سالن")+" خواهد بود.");
+ utMetricCard(s.body,"تعداد دورهای این بلوک","۵","total-points");
+ utAddText(s.body,"p","ut-copy","در این بلوک شما "+(role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده")+" هستید و "+(condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان":"بازیکن مقابل شما یکی از همکاران داخل سالن")+" خواهد بود.");
  const box=utNode("div","ut-rolebox");
  utAddText(box,"strong","",role==="proposer"?"شما پیشنهاددهنده هستید":"شما پاسخ‌دهنده هستید");
  utAddText(box,"span","",utOpponentText(condition));
@@ -2578,7 +2579,7 @@ function utRenderBlockSummary() {
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
  const s=utMakeScreen({header:true,progress:"پایان بلوک "+utFa(blockOrder)+" از ۴"});
  const box=utNode("div","ut-summary-box");
- utAddText(box,"div","ut-summary-label","در ۵ دور قبل شما:");
+ utAddText(box,"div","ut-summary-label","خلاصهٔ عملکرد شما در این بلوک:");
  const showLoss=utIsFrameGroup();
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
  const earnedMetric=utNode("div","ut-summary-metric earned");
