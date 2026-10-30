@@ -394,7 +394,7 @@ button{-webkit-tap-highlight-color:transparent}
 .welcome-panel,.ethics-panel{text-align:center;}
 .welcome-panel h1,.ethics-panel h1{text-align:center;}
 .welcome-panel>p,.ethics-panel>p{text-align:center;max-width:58ch;margin-inline:auto;}
-.welcome-steps{display:grid;gap:9px;width:100%;margin:20px 0 16px;text-align:right;}
+.welcome-steps{display:grid;gap:9px;width:100%;margin:20px 0 16px;padding:0;list-style:none;text-align:right;}
 .welcome-step{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e4e4e4;border-radius:13px;background:#fafafa;}
 .welcome-step>span{display:flex;align-items:center;justify-content:center;flex:0 0 32px;height:32px;border-radius:10px;background:#ededed;color:#222;font-size:.9rem;font-weight:800;}
 .welcome-step strong,.welcome-step small{display:block;}
@@ -1412,11 +1412,15 @@ async function startLegacyExperiment(){
  }
 }
 
-function exitExperiment(){
- const button=$('close'),paragraph=$('finish').querySelector('p');
- button.disabled=true;button.textContent='در حال خروج…';
+function exitExperiment(event){
+ const activeButton=event&&event.currentTarget&&event.currentTarget.tagName==='BUTTON'
+  ?event.currentTarget:$('close');
+ const paragraph=activeButton.id==='close'
+  ?$('finish').querySelector('p')
+  :(activeButton.closest('.ut-card')?.querySelector('.ut-copy')||null);
+ activeButton.disabled=true;activeButton.textContent='در حال خروج…';
  try{
-  if(workflow.timerActive)pauseStepTimer();
+  if(workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}
   if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});
   if(window.history&&window.history.replaceState)window.history.replaceState(null,'',window.location.pathname);
   document.title='پایان آزمایش بارسان';
@@ -1424,8 +1428,8 @@ function exitExperiment(){
  }catch(error){console.warn('Browser prevented closing this tab',error);}
  window.setTimeout(()=>{
   if(!document.hidden){
-   button.disabled=false;button.textContent='پایان';
-   paragraph.textContent='آزمایش شما پایان یافته است. مرورگر اجازهٔ بستن خودکار این برگه را نمی‌دهد؛ لطفاً این برگه را ببندید.';
+   activeButton.disabled=false;activeButton.textContent='پایان';
+   if(paragraph)paragraph.textContent='آزمایش شما پایان یافته است. مرورگر اجازهٔ بستن خودکار این برگه را نمی‌دهد؛ لطفاً این برگه را ببندید.';
   }
  },250);
 }
