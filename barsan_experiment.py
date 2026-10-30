@@ -1260,6 +1260,19 @@ def save_admin_workflow_template(
     return {"saved": True, "workflow_steps": data.workflow_steps, "updated_at": timestamp}
 
 
+def _default_workflow_codes(connection: Any) -> list[str]:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT workflow_json FROM experiment_workflow_templates WHERE template_id=" + marker,
+        ("active",),
+    ).fetchone()
+    if row:
+        payload = _json_value(row["workflow_json"])
+        if isinstance(payload, dict) and isinstance(payload.get("workflow_steps"), list):
+            return [code for code in payload["workflow_steps"] if code in STAGE_ORDER]
+    return list(STAGE_ORDER)
+
+
 def _assignment_by_invitation_token(connection: Any, invitation_token: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -1372,6 +1385,8 @@ def create_assignments(
     base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
+        workflow_codes = data.workflow_steps if data.workflow_steps is not None else _default_workflow_codes(connection)
+        workflow_payload = _new_workflow_definition(workflow_codes)
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
             condition = item.condition_code.strip().upper()
@@ -1393,18 +1408,19 @@ def create_assignments(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted,
+                Jsonb(workflow_payload) if DATABASE_URL else json.dumps(workflow_payload, ensure_ascii=False), 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1418,6 +1434,7 @@ def create_assignments(
 @app.post("/api/admin/test-links")
 def create_test_links(
     request: Request,
+    data: WorkflowTemplateIn | None = None,
     x_admin_token: str | None = Header(default=None),
 ):
     """Create two isolated, fresh test studies with the shared participant code TEST."""
@@ -1427,6 +1444,7 @@ def create_test_links(
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
+        workflow_codes = data.workflow_steps if data is not None else _default_workflow_codes(connection)
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
             group_slug = group_label.lower()
             study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
@@ -1449,19 +1467,21 @@ def create_test_links(
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
+            workflow_payload = _new_workflow_definition(workflow_codes)
             values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted,
+                Jsonb(workflow_payload) if DATABASE_URL else json.dumps(workflow_payload, ensure_ascii=False), 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
