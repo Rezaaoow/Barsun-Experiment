@@ -164,7 +164,7 @@ def test_test_links_use_code_test_and_create_separate_frame_control_studies(clie
     page = client.get("/admin/links")
     assert page.status_code == 200
     assert "پنل مدیریت آزمایش" in page.text
-    assert "ساخت دو لینک تست" in page.text
+    assert "ساخت لینک تست (Frame و Control)" in page.text
 
 
 def test_main_and_test_exports_are_separated_across_all_modules(client):
