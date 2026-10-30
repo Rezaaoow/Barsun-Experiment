@@ -1444,9 +1444,11 @@ async function startQuestionnaireRun(button){
   const started=await api('/api/experiment/stages/start',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:'questionnaire'
+   stage_code:'questionnaire',
+   step_id:workflow.workflowMode?workflow.currentStepId:null
   });
   workflow.stageRunId=started.run_id;
+  await startStepTimer();
   const serverDraft=started.draft_payload||{};
   if(serverDraft.answers&&typeof serverDraft.answers==='object'){
    workflow.questionnaireAnswers={...serverDraft.answers};
@@ -1467,6 +1469,7 @@ async function startQuestionnaireRun(button){
   console.error(error);
  }
 }
+
 
 function updateQuestionnaireSelection(){
  const current=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
@@ -1513,12 +1516,44 @@ async function chooseQuestionnaireAnswer(item,index,value){
  }
 }
 
+async function enterWorkflowStep(){
+ const step=workflow.workflowSteps[workflow.workflowStepIndex];
+ if(!step){
+  workflow.currentStepId=null;workflow.currentStage=null;
+  workflowMessage('برنامه پژوهشی تکمیل شد','همهٔ بخش‌های تعیین‌شده با موفقیت ثبت شدند. از وقتی که برای این پژوهش گذاشتید سپاسگزاریم.','پایان');
+  return;
+ }
+ workflow.currentStepId=step.step_id;
+ workflow.currentStage=step.module_code;
+ workflow.timerActive=false;
+ workflow.stageRunId=null;
+ workflow.stagedRunId=null;
+ if(step.module_code==='questionnaire'){
+  const draft=step.draft_payload||{};
+  workflow.questionnaireStageState=step;
+  workflow.questionnaireAnswers=(draft.answers&&typeof draft.answers==='object')?{...draft.answers}:{};
+  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+  workflow.questionIndex=Number.isInteger(draft.current_question_index)?Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,draft.current_question_index)):0;
+  showQuestionnaireIntro(0);
+ }else if(step.module_code==='dd_lifetrade'){
+  await startAssignedDDStage();
+ }else if(step.module_code==='ultimatum'){
+  await startUltimatumInstructions();
+ }
+}
+async function advanceWorkflowStep(){
+ if(!workflow.workflowMode)return;
+ workflow.workflowStepIndex+=1;
+ await enterWorkflowStep();
+}
+
 async function saveQuestionnairePosition(index){
  await api('/api/experiment/stages/draft',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   stage_code:'questionnaire',
   run_id:workflow.stageRunId,
+  step_id:workflow.workflowMode?workflow.currentStepId:null,
   draft_payload:{
    answers:{...workflow.questionnaireAnswers},
    current_question_index:index,
@@ -1527,6 +1562,7 @@ async function saveQuestionnairePosition(index){
  });
  workflow.questionIndex=index;
 }
+
 
 async function moveQuestionnaire(direction){
  const item=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
@@ -1617,18 +1653,23 @@ async function completeQuestionnaire(){
    participant_code:workflow.participantCode,
    stage_code:'questionnaire',
    run_id:workflow.stageRunId,
+   step_id:workflow.workflowMode?workflow.currentStepId:null,
    final_payload:{
     schema_version:1,
     answers:{...workflow.questionnaireAnswers},
     question_order:QUESTIONNAIRE_ITEMS.map(question=>question.code)
    }
   });
-  workflow.currentStage='dd_lifetrade';
+  await finishStepTimer();
   if(workflow.testModuleOnly==='questionnaire'){
    workflowMessage('تست پرسشنامه تکمیل شد','پاسخ‌های این ماژول در محدودهٔ داده‌های تست ثبت شده‌اند. این لینک به ماژول دیگری وارد نمی‌شود.','پایان');
    return;
   }
-  await startAssignedDDStage();
+  if(workflow.workflowMode)await advanceWorkflowStep();
+  else{
+   workflow.currentStage='dd_lifetrade';
+   await startAssignedDDStage();
+  }
  }catch(error){
   if(next){next.disabled=false;next.textContent='تلاش دوباره برای ثبت';}
   if(prev)prev.disabled=false;
@@ -1637,6 +1678,7 @@ async function completeQuestionnaire(){
   console.error(error);
  }
 }
+
 
 async function beginParticipantFlow(){
  const codeInput=$('participant-code-input');
@@ -1673,20 +1715,34 @@ async function beginParticipantFlow(){
   workflow.conditionCode=identity.condition_code;
   workflow.testModuleOnly=identity.test_module_only||null;
   workflow.currentStage=identity.current_stage;
-  const stages=identity.stages||[];
-  const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
-  workflow.questionnaireStageState=qstate||null;
-  workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
-  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
-  workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
-  if(identity.current_stage==='questionnaire'){
-   showQuestionnaireIntro(0);
-  }else if(identity.current_stage==='dd_lifetrade'){
-   await startAssignedDDStage();
-  }else if(identity.current_stage==='ultimatum'){
-   await startUltimatumInstructions();
+  workflow.workflowMode=Array.isArray(identity.workflow_steps)&&identity.workflow_steps.length>0;
+  workflow.workflowSteps=workflow.workflowMode?identity.workflow_steps:[];
+  workflow.workflowStepIndex=workflow.workflowMode
+   ?workflow.workflowSteps.findIndex(step=>step.status!=='completed'):-1;
+  workflow.currentStepId=null;
+  workflow.timerActive=false;
+  if(workflow.workflowMode){
+   if(workflow.workflowStepIndex<0){
+    workflowMessage('برنامه پژوهشی تکمیل شده است','طبق سوابق ثبت‌شده، همهٔ بخش‌های روند آزمایش تکمیل شده‌اند. از وقتی که برای این پژوهش گذاشتید سپاسگزاریم.','پایان');
+   }else{
+    await enterWorkflowStep();
+   }
   }else{
-   workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+   const stages=identity.stages||[];
+   const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
+   workflow.questionnaireStageState=qstate||null;
+   workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
+   workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+   workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
+   if(identity.current_stage==='questionnaire'){
+    showQuestionnaireIntro(0);
+   }else if(identity.current_stage==='dd_lifetrade'){
+    await startAssignedDDStage();
+   }else if(identity.current_stage==='ultimatum'){
+    await startUltimatumInstructions();
+   }else{
+    workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+   }
   }
  }catch(error){
   console.error(error);
@@ -1697,17 +1753,20 @@ async function beginParticipantFlow(){
  }
 }
 
+
 async function startAssignedDDStage(){
  const started=await api('/api/experiment/stages/start',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
-  stage_code:'dd_lifetrade'
+  stage_code:'dd_lifetrade',
+  step_id:workflow.workflowMode?workflow.currentStepId:null
  });
  workflow.stagedRunId=started.run_id;
  sessionId=started.run_id;
  participantCode=workflow.participantCode;
  participant={participant:participantCode,session:sessionId,date:nowISO()};
  rows=[];trialCount=0;stopped=false;
+ await startStepTimer();
  try{
   try{await recoverOrphanedPendingQueues()}catch(error){error.pendingRecovery=true;throw error}
   show();
@@ -1726,6 +1785,7 @@ async function startAssignedDDStage(){
    const unsent=await flushPending();
    await api('/api/complete',{session_id:sessionId,status:unsent?'error':'completed',trial_count:trialCount});
    if(unsent){
+    await pauseStepTimer();
     workflowMessage('ارسال پاسخ‌ها کامل نشد','تعدادی از پاسخ‌ها هنوز به سرور نرسیده‌اند؛ به همین دلیل این مرحله تکمیل‌شده علامت نخورد. اتصال را بررسی کنید و با تیم پژوهش هماهنگ کنید.','بازگشت');
     return;
    }
@@ -1733,17 +1793,23 @@ async function startAssignedDDStage(){
     invitation_token:workflow.invitationToken,
     participant_code:workflow.participantCode,
     stage_code:'dd_lifetrade',
-    run_id:sessionId
+    run_id:sessionId,
+    step_id:workflow.workflowMode?workflow.currentStepId:null
    });
+   await finishStepTimer();
    if(workflow.testModuleOnly==='dd_lifetrade'){
     workflowMessage('تست Life-Trade تکمیل شد','این لینک فقط برای تست همین ماژول ساخته شده است؛ داده‌ها در محدودهٔ تست باقی مانده‌اند.','پایان');
     return;
    }
-   workflow.currentStage='ultimatum';
-   await startUltimatumInstructions();
+   if(workflow.workflowMode)await advanceWorkflowStep();
+   else{
+    workflow.currentStage='ultimatum';
+    await startUltimatumInstructions();
+   }
   }else{
    await flushPending();
    await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
+   await pauseStepTimer();
    workflowMessage('تکلیف تصمیم‌گیری متوقف شد','این مرحله کامل نشده است. با ورود دوباره از لینک اختصاصی، این مرحله از ابتدا اجرا می‌شود و مراحل تکمیل‌شدهٔ قبلی تکرار نمی‌شوند.','بازگشت');
   }
  }catch(error){
@@ -1752,9 +1818,11 @@ async function startAssignedDDStage(){
    await flushPending().catch(()=>{});
    await api('/api/complete',{session_id:sessionId,status:'error',trial_count:trialCount}).catch(()=>{});
   }
+  await pauseStepTimer();
   workflowMessage('مشکل در اجرای مرحله','اتصال یا ثبت پاسخ‌ها با خطا روبه‌رو شد. مرحله تکمیل‌شده ثبت نشده است؛ اتصال را بررسی کنید و در صورت تکرار خطا با تیم پژوهش هماهنگ کنید.','بازگشت');
  }
 }
+
 
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
