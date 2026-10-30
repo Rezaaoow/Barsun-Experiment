@@ -1548,6 +1548,8 @@ def create_module_test_link(
             (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted,
              json.dumps([data.stage_code], ensure_ascii=False), 1, now()),
         )
+        for prerequisite in STAGE_ORDER[:stage_index]:
+            _seed_completed_test_stage(connection, participation_id, prerequisite)
     return {
         "participant_code": participant_code,
         "condition_code": data.condition_code,
@@ -1556,7 +1558,7 @@ def create_module_test_link(
         "study_code": study_code,
         "invitation_url": base_url + joiner + "invite=" + invitation_token,
         "test_code": "TEST",
-        "prerequisites_marked_synthetic": [],
+        "prerequisites_marked_synthetic": list(STAGE_ORDER[:stage_index]),
     }
 
 
@@ -2924,16 +2926,26 @@ def maintenance_preview(
         for name, (query, query_params) in queries.items():
             counts[name] = int(connection.execute(query, query_params).fetchone()["n"] or 0)
         condition_sp = condition.replace("study_code", "sp.study_code")
-        counts["completed_experiments"] = int(connection.execute(
-            "SELECT COUNT(*) AS n FROM (SELECT sp.participation_id "
-            "FROM study_participations sp JOIN experiment_stage_progress q "
-            "ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' AND q.status='completed' "
-            "JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id "
-            "AND d.stage_code='dd_lifetrade' AND d.status='completed' "
-            "JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id "
-            "AND u.stage_code='ultimatum' AND u.status='completed' WHERE " + condition_sp + ") completed",
+        assignment_rows = connection.execute(
+            "SELECT a.assignment_id,a.workflow_json,sp.participation_id FROM experiment_assignments a "
+            "LEFT JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+            "WHERE " + condition.replace("study_code", "a.study_code"),
             params,
-        ).fetchone()["n"] or 0)
+        ).fetchall()
+        counts["completed_experiments"] = 0
+        for assignment_row in assignment_rows:
+            participation_id = assignment_row["participation_id"]
+            if not participation_id:
+                continue
+            workflow = _assignment_workflow(dict(assignment_row))
+            _ensure_workflow_progress(connection, participation_id, workflow)
+            completed_count = connection.execute(
+                "SELECT COUNT(*) AS n FROM experiment_workflow_steps WHERE participation_id=" + marker
+                + " AND status='completed'",
+                (participation_id,),
+            ).fetchone()["n"]
+            if int(completed_count or 0) == len(workflow):
+                counts["completed_experiments"] += 1
     return {"scope": scope, "study_code": STUDY_CODE if scope == "main" else TEST_STUDY_PREFIX + "*",
             "counts": counts,
             "warning": "This action permanently deletes rows in the selected study scope; participant master codes and instrument definitions are retained."}
