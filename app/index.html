@@ -794,6 +794,7 @@ const workflow = {
  stagedRunId:null,
  testModuleOnly:null,
  workflowMode:false,
+ timeTrackingEnabled:false,
  workflowSteps:[],
  workflowStepIndex:-1,
  currentStepId:null,
@@ -1058,6 +1059,12 @@ async function api(path, body){
  return res.json();
 }
 let workflowTimerHeartbeat=null;
+const LEGACY_STEP_IDS={
+ questionnaire:"default-questionnaire",
+ dd_lifetrade:"default-dd-lifetrade",
+ ultimatum:"default-ultimatum"
+};
+function legacyStepId(moduleCode){return LEGACY_STEP_IDS[moduleCode]||null;}
 function stepTimePayload(event){
  return {
   invitation_token:workflow.invitationToken,
@@ -1068,7 +1075,7 @@ function stepTimePayload(event){
  };
 }
 async function postStepTime(event,keepalive=false){
- if(!workflow.workflowMode||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return;
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return;
  const payload=stepTimePayload(event);
  if(keepalive){
   try{
@@ -1082,7 +1089,7 @@ async function postStepTime(event,keepalive=false){
  return api('/api/experiment/time',payload);
 }
 async function startStepTimer(){
- if(!workflow.workflowMode||!workflow.currentStepId||workflow.timerActive)return;
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId||workflow.timerActive)return;
  workflow.timerActive=true;
  try{await postStepTime('start');}
  catch(error){workflow.timerActive=false;console.warn('Time tracking start failed',error);}
@@ -1098,16 +1105,16 @@ async function pauseStepTimer(){
  try{await postStepTime('pause');}catch(error){console.warn('Time tracking pause failed',error);}
 }
 async function finishStepTimer(){
- if(!workflow.workflowMode||!workflow.currentStepId)return;
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
  workflow.timerActive=false;
  try{await postStepTime('complete');}catch(error){console.warn('Time tracking completion failed',error);}
 }
 document.addEventListener('visibilitychange',()=>{
- if(!workflow.workflowMode||!workflow.currentStepId)return;
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
  if(document.hidden)pauseStepTimer();
  else startStepTimer();
 });
-window.addEventListener('pagehide',()=>{if(workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}});
+window.addEventListener('pagehide',()=>{if(workflow.timeTrackingEnabled&&workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}});
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function utApiWithRetry(path,payload,attempts=4){
  let lastError;
@@ -1526,6 +1533,7 @@ async function enterWorkflowStep(){
  workflow.currentStepId=step.step_id;
  workflow.currentStage=step.module_code;
  workflow.timerActive=false;
+ await startStepTimer();
  workflow.stageRunId=null;
  workflow.stagedRunId=null;
  if(step.module_code==='questionnaire'){
@@ -1716,6 +1724,7 @@ async function beginParticipantFlow(){
   workflow.testModuleOnly=identity.test_module_only||null;
   workflow.currentStage=identity.current_stage;
   workflow.workflowMode=Array.isArray(identity.workflow_steps)&&identity.workflow_steps.length>0;
+  workflow.timeTrackingEnabled=true;
   workflow.workflowSteps=workflow.workflowMode?identity.workflow_steps:[];
   workflow.workflowStepIndex=workflow.workflowMode
    ?workflow.workflowSteps.findIndex(step=>step.status!=='completed'):-1;
@@ -1735,6 +1744,8 @@ async function beginParticipantFlow(){
    workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
    workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
    if(identity.current_stage==='questionnaire'){
+    workflow.currentStepId=legacyStepId("questionnaire");
+    await startStepTimer();
     showQuestionnaireIntro(0);
    }else if(identity.current_stage==='dd_lifetrade'){
     await startAssignedDDStage();
@@ -1755,6 +1766,7 @@ async function beginParticipantFlow(){
 
 
 async function startAssignedDDStage(){
+ if(!workflow.workflowMode){workflow.currentStage="dd_lifetrade";workflow.currentStepId=legacyStepId("dd_lifetrade");}
  const started=await api('/api/experiment/stages/start',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
@@ -2012,6 +2024,7 @@ function utShowError(message,retry) {
 }
 async function startUltimatumInstructions() {
  try {
+  if(!workflow.workflowMode){workflow.currentStage="ultimatum";workflow.currentStepId=legacyStepId("ultimatum");}
   show();
   setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
   const started=await api("/api/experiment/stages/start",{
