@@ -3023,17 +3023,27 @@ def experiment_progress(
         time_rows = []
         if include_timing:
             time_query = (
-                "SELECT a.study_code,p.participant_code,t.stage_code,COALESCE(SUM(t.active_seconds),0) AS seconds,"
-                "MAX(t.last_seen_at) AS last_seen_at FROM experiment_time_tracking t "
+                "SELECT a.study_code,p.participant_code,t.stage_code,t.active_seconds,t.is_active,t.last_seen_at "
+                "FROM experiment_time_tracking t "
                 "JOIN experiment_assignments a ON a.assignment_id=t.assignment_id "
                 "JOIN participants p ON p.participant_id=a.participant_id WHERE " + condition
-                + " GROUP BY a.study_code,p.participant_code,t.stage_code"
             )
             time_rows = connection.execute(time_query, params).fetchall()
     for timed in time_rows:
         key = (str(timed["study_code"]), str(timed["participant_code"]))
         entry = timing_by_participant.setdefault(key, {"module_time_seconds": {}, "last_seen_at": None})
-        entry["module_time_seconds"][timed["stage_code"]] = round(float(timed["seconds"] or 0), 2)
+        seconds = float(timed["active_seconds"] or 0)
+        if int(timed["is_active"] or 0):
+            try:
+                last_seen = datetime.fromisoformat(str(timed["last_seen_at"]).replace("Z", "+00:00"))
+                if last_seen.tzinfo is None:
+                    last_seen = last_seen.replace(tzinfo=timezone.utc)
+                seconds += min(45.0, max(0.0, datetime.now(timezone.utc).timestamp() - last_seen.timestamp()))
+            except (TypeError, ValueError):
+                pass
+        module_code = timed["stage_code"]
+        entry["module_time_seconds"][module_code] = entry["module_time_seconds"].get(module_code, 0.0) + seconds
+        entry["module_time_seconds"][module_code] = round(entry["module_time_seconds"][module_code], 2)
         if timed["last_seen_at"] and (not entry["last_seen_at"] or str(timed["last_seen_at"]) > str(entry["last_seen_at"])):
             entry["last_seen_at"] = timed["last_seen_at"]
 
