@@ -38,6 +38,11 @@ STAGE_TO_INSTRUMENT = {
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
+DEFAULT_WORKFLOW = (
+    {"step_id": "default-questionnaire", "module_code": "questionnaire"},
+    {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
+    {"step_id": "default-ultimatum", "module_code": "ultimatum"},
+)
 ULTIMATUM_TOTAL_POINTS = 10
 ULTIMATUM_MAIN_BLOCK_TRIALS = 5
 ULTIMATUM_MAIN_BLOCK_COUNT = 4
@@ -256,6 +261,7 @@ if DATABASE_URL:
                 "UNIQUE(study_code, participant_id))"
             )
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
+            connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS workflow_json TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -273,6 +279,28 @@ if DATABASE_URL:
                 "draft_payload JSONB NOT NULL DEFAULT '{}'::jsonb, "
                 "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(participation_id, stage_code))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS study_workflows ("
+                "study_code TEXT PRIMARY KEY, workflow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_progress ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_instance_id TEXT NOT NULL, step_order INTEGER NOT NULL, stage_code TEXT NOT NULL, "
+                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload JSONB NOT NULL DEFAULT '{}'::jsonb, started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(assignment_id,step_instance_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_tracking ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, step_order INTEGER NOT NULL, stage_code TEXT NOT NULL, "
+                "active_seconds DOUBLE PRECISION NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 0, "
+                "started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, completed_at TEXT, "
+                "PRIMARY KEY(assignment_id,step_instance_id))"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
@@ -433,6 +461,8 @@ else:
             assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
             if "invitation_token_encrypted" not in assignment_columns:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
+            if "workflow_json" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN workflow_json TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -450,6 +480,28 @@ else:
                 "draft_payload TEXT NOT NULL DEFAULT '{}', "
                 "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(participation_id, stage_code))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS study_workflows ("
+                "study_code TEXT PRIMARY KEY, workflow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_progress ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_instance_id TEXT NOT NULL, step_order INTEGER NOT NULL, stage_code TEXT NOT NULL, "
+                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload TEXT NOT NULL DEFAULT '{}', started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(assignment_id,step_instance_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_tracking ("
+                "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, step_order INTEGER NOT NULL, stage_code TEXT NOT NULL, "
+                "active_seconds REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 0, "
+                "started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, completed_at TEXT, "
+                "PRIMARY KEY(assignment_id,step_instance_id))"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
@@ -603,8 +655,18 @@ class AssignmentItemIn(BaseModel):
     condition_code: str = Field(min_length=1, max_length=64)
 
 
+class WorkflowStepIn(BaseModel):
+    step_id: str = Field(min_length=1, max_length=80)
+    module_code: StageCode
+
+
+class WorkflowConfigIn(BaseModel):
+    steps: list[WorkflowStepIn] = Field(min_length=1, max_length=60)
+
+
 class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
+    steps: list[WorkflowStepIn] | None = Field(default=None, min_length=1, max_length=60)
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -649,12 +711,14 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
     run_id: str = Field(min_length=1, max_length=100)
-    draft_payload: dict[str, Any]
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
+    draft_payload: dict[str, Any>
 
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
@@ -667,7 +731,14 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
     final_payload: dict[str, Any] | None = None
+
+
+class ExperimentTimeIn(ExperimentIdentityIn):
+    step_id: str = Field(min_length=1, max_length=80)
+    stage_code: StageCode
+    event: Literal["start", "heartbeat", "pause", "complete"]
 
 
 class UltimatumPrepareIn(ExperimentIdentityIn):
@@ -1013,11 +1084,78 @@ def _scope_rows(connection: Any, scope: str, table: str, column: str = "study_co
     ).fetchall()]
 
 
+def _default_workflow_steps() -> list[dict[str, str]]:
+    return [dict(step) for step in DEFAULT_WORKFLOW]
+
+
+def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
+    if not isinstance(raw_steps, (list, tuple)) or not raw_steps or len(raw_steps) > 60:
+        raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۶۰ ماژول داشته باشد.")
+    normalized = []
+    seen_ids = set()
+    for raw in raw_steps:
+        item = raw.model_dump() if hasattr(raw, "model_dump") else raw
+        if not isinstance(item, dict):
+            raise HTTPException(422, "ساختار یکی از ماژول‌های روند آزمایش معتبر نیست.")
+        step_id = str(item.get("step_id") or "").strip()
+        module_code = str(item.get("module_code") or "").strip()
+        if (
+            not step_id or len(step_id) > 80
+            or any(not (character.isalnum() or character in "-_") for character in step_id)
+            or module_code not in STAGE_TO_INSTRUMENT
+            or step_id in seen_ids
+        ):
+            raise HTTPException(422, "شناسه یا نوع یکی از ماژول‌های روند آزمایش معتبر نیست.")
+        seen_ids.add(step_id)
+        normalized.append({"step_id": step_id, "module_code": module_code})
+    return normalized
+
+
+def _load_study_workflow(connection: Any, study_code: str) -> list[dict[str, str]]:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT workflow_json FROM study_workflows WHERE study_code=" + marker,
+        (study_code,),
+    ).fetchone()
+    if not row:
+        return _default_workflow_steps()
+    try:
+        return _normalize_workflow_steps(json.loads(row["workflow_json"]))
+    except (TypeError, ValueError, KeyError, HTTPException):
+        return _default_workflow_steps()
+
+
+def _workflow_for_assignment(assignment: dict[str, Any]) -> list[dict[str, str]]:
+    module_only = _test_module_from_study_code(str(assignment.get("study_code") or ""))
+    if module_only:
+        return [{"step_id": "module-test-" + module_only, "module_code": module_only}]
+    raw = assignment.get("workflow_json")
+    if raw:
+        try:
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+            return _normalize_workflow_steps(raw)
+        except (TypeError, ValueError, HTTPException):
+            pass
+    return _default_workflow_steps()
+
+
+def _workflow_progress_rows(connection: Any, assignment_id: str) -> dict[str, dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    rows = connection.execute(
+        "SELECT step_instance_id,step_order,stage_code,status,attempt_number,current_run_id,"
+        "draft_payload,started_at,completed_at,updated_at "
+        "FROM experiment_workflow_progress WHERE assignment_id=" + marker,
+        (assignment_id,),
+    ).fetchall()
+    return {row["step_instance_id"]: dict(row) for row in rows}
+
+
 def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
     row = connection.execute(
-        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
         "sp.participation_id,p.participant_code "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -1079,6 +1217,38 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
     return state
 
 
+@app.get("/api/admin/workflow")
+def get_admin_workflow(x_admin_token: str | None = Header(default=None)):
+    authorize(x_admin_token)
+    with conn() as connection:
+        return {"steps": _load_study_workflow(connection, STUDY_CODE)}
+
+
+@app.post("/api/admin/workflow")
+def save_admin_workflow(
+    data: WorkflowConfigIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    authorize(x_admin_token)
+    steps = _normalize_workflow_steps(data.steps)
+    workflow_json = json.dumps(steps, ensure_ascii=False, separators=(",", ":"))
+    timestamp = now()
+    with conn() as connection:
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO study_workflows(study_code,workflow_json,updated_at) VALUES(%s,%s,%s) "
+                "ON CONFLICT(study_code) DO UPDATE SET workflow_json=EXCLUDED.workflow_json,updated_at=EXCLUDED.updated_at",
+                (STUDY_CODE, workflow_json, timestamp),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO study_workflows(study_code,workflow_json,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(study_code) DO UPDATE SET workflow_json=excluded.workflow_json,updated_at=excluded.updated_at",
+                (STUDY_CODE, workflow_json, timestamp),
+            )
+    return {"saved": True, "steps": steps}
+
+
 @app.post("/api/admin/assignments")
 def create_assignments(
     data: AssignmentBatchIn,
@@ -1091,6 +1261,9 @@ def create_assignments(
     seen_codes = set()
     base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
+    with conn() as workflow_connection:
+        workflow_steps = _normalize_workflow_steps(data.steps) if data.steps else _load_study_workflow(workflow_connection, STUDY_CODE)
+    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
     with conn() as connection:
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
@@ -1113,18 +1286,18 @@ def create_assignments(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now(), workflow_json
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1138,6 +1311,7 @@ def create_assignments(
 @app.post("/api/admin/test-links")
 def create_test_links(
     request: Request,
+    data: WorkflowConfigIn | None = None,
     x_admin_token: str | None = Header(default=None),
 ):
     """Create two isolated, fresh test studies with the shared participant code TEST."""
@@ -1146,6 +1320,9 @@ def create_test_links(
     base_url = _invitation_base_url(request, "/api/admin/test-links")
     joiner = "&" if "?" in base_url else "?"
     created = []
+    with conn() as workflow_connection:
+        workflow_steps = _normalize_workflow_steps(data.steps) if data else _load_study_workflow(workflow_connection, STUDY_CODE)
+    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
     with conn() as connection:
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
             group_slug = group_label.lower()
@@ -1170,18 +1347,18 @@ def create_test_links(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now(), workflow_json
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1225,8 +1402,9 @@ def create_module_test_link(
         token_encrypted = _encrypt_invitation_token(invitation_token)
         connection.execute(
             "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-            "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(" + ",".join([marker] * 8) + ")",
-            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted, 1, now()),
+            "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(" + ",".join([marker] * 9) + ")",
+            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted, 1, now(),
+             json.dumps([{"step_id": "module-test-" + data.stage_code, "module_code": data.stage_code}])),
         )
         for prerequisite in STAGE_ORDER[:stage_index]:
             _seed_completed_test_stage(connection, participation_id, prerequisite)
