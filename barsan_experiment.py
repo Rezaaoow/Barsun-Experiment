@@ -2872,6 +2872,15 @@ def maintenance_preview(
 
     queries = {
         "assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition, params),
+        "opened_assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition + " AND first_opened_at IS NOT NULL", params),
+        "workflow_steps": (
+            "SELECT COUNT(*) AS n FROM experiment_workflow_steps s JOIN study_participations sp "
+            "ON sp.participation_id=s.participation_id WHERE " + condition.replace("study_code", "sp.study_code"), params,
+        ),
+        "activity_pings": (
+            "SELECT COUNT(*) AS n FROM experiment_activity_pings p JOIN experiment_assignments a "
+            "ON a.assignment_id=p.assignment_id WHERE " + condition.replace("study_code", "a.study_code"), params,
+        ),
         "participations": ("SELECT COUNT(*) AS n FROM study_participations WHERE " + condition, params),
         "runs": (
             "SELECT COUNT(*) AS n FROM instrument_runs ir JOIN study_participations sp "
@@ -2953,6 +2962,14 @@ def reset_study_data(
              "DELETE FROM experiment_stage_progress WHERE participation_id IN "
              "(SELECT sp.participation_id FROM study_participations sp WHERE "
              + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_workflow_steps",
+             "DELETE FROM experiment_workflow_steps WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_activity_pings",
+             "DELETE FROM experiment_activity_pings WHERE assignment_id IN "
+             "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
+             + condition.replace("study_code", "a.study_code") + ")"),
             ("experiment_consents",
              "DELETE FROM experiment_consents WHERE assignment_id IN "
              "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
