@@ -306,7 +306,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </select>
 </div>
 </div>
-<div class="actions"><button id="createModuleTest" type="button">ساخت لینک ماژول انتخاب‌شده</button><button id="createFullTestLinks" class="secondary" type="button">ساخت دو لینک تست کامل</button></div>
+<div class="actions"><button id="createModuleTest" type="button">ساخت لینک ماژول انتخاب‌شده</button><button id="createFullTestLinks" class="secondary" type="button">ساخت دو لینک تست کامل با روند ذخیره‌شده</button></div>
 <div id="moduleTestStatus" class="status" role="status" aria-live="polite"></div>
 <div id="moduleTestOutput"></div>
 <div id="fullTestOutput"></div>
@@ -355,6 +355,122 @@ const basePath=window.location.pathname.replace(/\/admin(?:\/links)?\/?$/,"").re
 const token=()=>$("adminToken").value.trim();
 let progressRows=[];
 let lastAssignmentLinks=[];
+let experimentFlowSteps=[
+ {step_id:"default-questionnaire",module_code:"questionnaire"},
+ {step_id:"default-lifetrade",module_code:"dd_lifetrade"},
+ {step_id:"default-ultimatum",module_code:"ultimatum"}
+];
+let flowDragging=null;
+const flowLabels={questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum"};
+function newFlowStepId(){
+ const random=(window.crypto&&window.crypto.randomUUID)?window.crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,9);
+ return "step-"+random;
+}
+function renderFlowTimeline(){
+ const root=$("flowTimeline");root.replaceChildren();
+ $("flowCount").textContent=experimentFlowSteps.length+" جایگاه در روند";
+ if(!experimentFlowSteps.length){
+  const empty=document.createElement("li");empty.className="flow-empty";empty.textContent="ماژول‌ها را از بالا اضافه کن تا روند آزمایش ساخته شود.";
+  root.appendChild(empty);return;
+ }
+ experimentFlowSteps.forEach((step,index)=>{
+  const card=document.createElement("li");card.className="flow-step-card";card.draggable=true;card.dataset.flowStepId=step.step_id;
+  card.addEventListener("dragstart",event=>{
+   flowDragging={kind:"step",stepId:step.step_id};
+   card.classList.add("dragging");
+   event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain","step:"+step.step_id);
+  });
+  card.addEventListener("dragend",()=>{card.classList.remove("dragging");flowDragging=null;});
+  const number=document.createElement("div");number.className="flow-step-number";number.textContent=String(index+1).replace(/[0-9]/g,d=>"۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+  const nameWrap=document.createElement("div");
+  const name=document.createElement("div");name.className="flow-step-name";name.textContent=flowLabels[step.module_code]||step.module_code;
+  const code=document.createElement("div");code.className="flow-step-code";code.textContent="جایگاه مستقل · "+(index+1);
+  nameWrap.append(name,code);
+  const actions=document.createElement("div");actions.className="flow-step-actions";
+  const up=document.createElement("button");up.type="button";up.className="secondary";up.textContent="↑";up.title="انتقال به بالا";up.setAttribute("aria-label","انتقال "+flowLabels[step.module_code]+" به بالا");
+  up.disabled=index===0;up.addEventListener("click",()=>moveFlowStep(step.step_id,index-1));
+  const down=document.createElement("button");down.type="button";down.className="secondary";down.textContent="↓";down.title="انتقال به پایین";down.setAttribute("aria-label","انتقال "+flowLabels[step.module_code]+" به پایین");
+  down.disabled=index===experimentFlowSteps.length-1;down.addEventListener("click",()=>moveFlowStep(step.step_id,index+1));
+  const remove=document.createElement("button");remove.type="button";remove.className="danger";remove.textContent="حذف";remove.title="حذف این جایگاه";
+  remove.addEventListener("click",()=>{experimentFlowSteps=experimentFlowSteps.filter(item=>item.step_id!==step.step_id);renderFlowTimeline();});
+  actions.append(up,down,remove);card.append(number,nameWrap,actions);root.appendChild(card);
+ });
+}
+function addFlowModule(moduleCode,index){
+ if(!flowLabels[moduleCode])return;
+ if(experimentFlowSteps.length>=100){setStatus("flowSaveStatus","حداکثر ۱۰۰ جایگاه در هر روند مجاز است.","error");return;}
+ const step={step_id:newFlowStepId(),module_code:moduleCode};
+ const at=Number.isInteger(index)?Math.max(0,Math.min(index,experimentFlowSteps.length)):experimentFlowSteps.length;
+ experimentFlowSteps.splice(at,0,step);renderFlowTimeline();clearStatus("flowSaveStatus");
+}
+function moveFlowStep(stepId,targetIndex){
+ const oldIndex=experimentFlowSteps.findIndex(item=>item.step_id===stepId);
+ if(oldIndex<0)return;
+ const [item]=experimentFlowSteps.splice(oldIndex,1);
+ const index=Math.max(0,Math.min(targetIndex,experimentFlowSteps.length));
+ experimentFlowSteps.splice(index,0,item);renderFlowTimeline();
+}
+async function loadFlowTemplate(){
+ const response=await adminFetch("/api/admin/flow",{method:"GET"});
+ const data=await response.json();
+ if(Array.isArray(data.steps)&&data.steps.length)experimentFlowSteps=data.steps.map(item=>({step_id:item.step_id,module_code:item.module_code}));
+ renderFlowTimeline();
+}
+async function persistExperimentFlow(showMessage=true){
+ if(!experimentFlowSteps.length)throw new Error("ابتدا حداقل یک ماژول به تایم‌لاین اضافه کن.");
+ if(experimentFlowSteps.length>100)throw new Error("حداکثر ۱۰۰ جایگاه در هر روند مجاز است.");
+ const response=await adminFetch("/api/admin/flow",{method:"PUT",body:JSON.stringify({steps:experimentFlowSteps})});
+ const data=await response.json();
+ experimentFlowSteps=data.steps;
+ renderFlowTimeline();
+ if(showMessage)setStatus("flowSaveStatus","روند آزمایش ذخیره شد. "+data.steps.length+" جایگاه برای لینک‌های جدید آماده است.","success");
+ return data;
+}
+function initFlowBuilder(){
+ document.querySelectorAll("[data-add-flow]").forEach(button=>{
+  button.addEventListener("click",()=>addFlowModule(button.dataset.addFlow));
+  button.addEventListener("dragstart",event=>{
+   flowDragging={kind:"module",moduleCode:button.dataset.addFlow};
+   event.dataTransfer.effectAllowed="copy";event.dataTransfer.setData("text/plain","module:"+button.dataset.addFlow);
+  });
+  button.addEventListener("dragend",()=>{flowDragging=null;});
+ });
+ const timeline=$("flowTimeline");
+ timeline.addEventListener("dragover",event=>{event.preventDefault();event.dataTransfer.dropEffect=flowDragging&&flowDragging.kind==="module"?"copy":"move";});
+ timeline.addEventListener("drop",event=>{
+  event.preventDefault();
+  const data=event.dataTransfer.getData("text/plain")||"";
+  const target=event.target.closest("[data-flow-step-id]");
+  const targetIndex=target?experimentFlowSteps.findIndex(item=>item.step_id===target.dataset.flowStepId):experimentFlowSteps.length;
+  if(data.startsWith("module:"))addFlowModule(data.slice(7),targetIndex<0?experimentFlowSteps.length:targetIndex);
+  else if(data.startsWith("step:")){
+   const fromId=data.slice(5);let insertion=targetIndex;
+   const fromIndex=experimentFlowSteps.findIndex(item=>item.step_id===fromId);
+   if(fromIndex>=0&&targetIndex>fromIndex)insertion-=1;
+   moveFlowStep(fromId,insertion<0?experimentFlowSteps.length:insertion);
+  }
+  flowDragging=null;
+ });
+ $("saveFlowTemplate").addEventListener("click",async()=>{
+  const button=$("saveFlowTemplate");button.disabled=true;
+  try{await persistExperimentFlow(true);}
+  catch(error){setStatus("flowSaveStatus",error.message,"error");}
+  finally{button.disabled=false;}
+ });
+ $("resetFlowDefault").addEventListener("click",async()=>{
+  if(!window.confirm("تایم‌لاین به ترتیب پیش‌فرض پرسشنامه، Life-Trade و Ultimatum بازگردد؟"))return;
+  experimentFlowSteps=[
+   {step_id:newFlowStepId(),module_code:"questionnaire"},
+   {step_id:newFlowStepId(),module_code:"dd_lifetrade"},
+   {step_id:newFlowStepId(),module_code:"ultimatum"}
+  ];
+  renderFlowTimeline();
+  try{await persistExperimentFlow(true);}
+  catch(error){setStatus("flowSaveStatus",error.message,"error");}
+ });
+ renderFlowTimeline();
+}
+initFlowBuilder();
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
 function clearStatus(id){const el=$(id);el.textContent="";el.className="status";}
 function escapeHtml(value){return String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
@@ -616,6 +732,7 @@ async function refreshProgress(){
   const scope=$("monitorScope").value;
   const response=await adminFetch("/api/admin/progress?scope="+scope,{method:"GET"});
   progressRows=await response.json();renderProgress();
+  await loadFlowTemplate();
   setStatus("monitorStatusMessage","پایش دریافت شد: "+progressRows.length+" لینک در محدودهٔ انتخاب‌شده.","success");
   setStatus("connectionStatus","اتصال مدیریتی برقرار است. آخرین به‌روزرسانی: "+new Date().toLocaleTimeString("fa-IR"),"success");
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
@@ -635,6 +752,7 @@ $("createAssignments").addEventListener("click",async()=>{
  clearStatus("assignmentStatus");$("assignmentOutput").replaceChildren();const button=$("createAssignments");button.disabled=true;
  try{
   const assignments=parseAssignments();
+  await persistExperimentFlow(false);
   const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
@@ -694,6 +812,7 @@ $("createModuleTest").addEventListener("click",async()=>{
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
+  await persistExperimentFlow(false);
   const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
   setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
