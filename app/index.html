@@ -1083,6 +1083,7 @@ function startParticipantActivityTracking(){
    participant_code:workflow.participantCode,
    ping_id:pingId,
    run_id:workflow.activeRunId||null,
+   workflow_step_index:workflow.currentStepIndex,
    active_seconds:delta
   }).catch(error=>console.warn('Activity time ping was not saved',error));
  },15000);
