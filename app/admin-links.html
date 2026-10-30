@@ -702,6 +702,14 @@ function stageStatusLabel(state){
  return ({not_started:"شروع نشده",in_progress:"در حال انجام",completed:"کامل"})[state]||state||"—";
 }
 function currentStageLabel(code){return code?stageLabel(code):"همهٔ مراحل کامل";}
+function formatActiveDuration(seconds){
+ const value=Math.max(0,Number(seconds)||0);
+ const hours=Math.floor(value/3600),minutes=Math.floor((value%3600)/60),secs=Math.floor(value%60);
+ const fa=n=>Number(n).toLocaleString("fa-IR");
+ if(hours)return fa(hours)+" ساعت و "+fa(minutes)+" دقیقه";
+ if(minutes)return fa(minutes)+" دقیقه و "+fa(secs)+" ثانیه";
+ return fa(secs)+" ثانیه";
+}
 function renderProgress(){
  const query=$("monitorSearch").value.trim().toUpperCase();
  const filter=$("monitorStatus").value;
@@ -715,11 +723,19 @@ function renderProgress(){
  const root=$("participantTable");root.replaceChildren();
  if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","زمان کل","زمان پرسشنامه","زمان Life-Trade","زمان Ultimatum","اولین ورود","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
-  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
+  const cells=[
+   r.participant_code,r.condition_code==="A"?"Frame":"Control",
+   progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),
+   stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),
+   formatActiveDuration(r.total_active_seconds),formatActiveDuration(r.questionnaire_active_seconds),
+   formatActiveDuration(r.dd_lifetrade_active_seconds),formatActiveDuration(r.ultimatum_active_seconds),
+   r.first_opened_at?new Date(r.first_opened_at).toLocaleString("fa-IR"):"—",
+   r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"
+  ];
   cells.forEach((value,i)=>{const td=document.createElement("td");if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}else td.textContent=value;tr.appendChild(td);});
   tbody.appendChild(tr);
  });
