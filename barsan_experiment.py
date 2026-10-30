@@ -3090,7 +3090,7 @@ def maintenance_preview(
             steps = _workflow_for_assignment(assignment)
             saved = saved_by_assignment.get(str(assignment["assignment_id"]), {})
             legacy = stages_by_participation.get(str(assignment.get("participation_id") or ""), {})
-            if not saved and (not assignment.get("workflow_json") or _test_module_from_study_code(str(assignment.get("study_code") or ""))):
+            if not saved:
                 statuses = [legacy.get(_canonical_workflow_stage(step["module_code"]), "not_started") for step in steps]
             else:
                 statuses = [saved.get(step["step_id"], {}).get("status", "not_started") for step in steps]
@@ -3268,9 +3268,7 @@ def experiment_progress(
             stage_code = _canonical_workflow_stage(code)
             saved = saved_steps.get(step["step_id"])
             # Pre-workflow and legacy module-only invitations have stage-level records only.
-            if saved is None and not saved_steps and (
-                not row.get("workflow_json") or _test_module_from_study_code(str(row.get("study_code") or ""))
-            ):
+            if saved is None and not saved_steps:
                 saved = legacy_stages.get(stage_code)
             status = str((saved or {}).get("status") or "not_started")
             attempts = int((saved or {}).get("attempt_number") or 0)
@@ -3307,8 +3305,9 @@ def experiment_progress(
         row["current_step_id"] = current_step["step_id"] if current_step else None
         row["current_stage"] = current_step["module_code"] if current_step else None
         row["current_stage_label"] = current_step["module_label"] if current_step else "روند کامل"
-        row["module_time_seconds"] = module_times if include_timing else {}
-        row["total_active_seconds"] = round(sum(module_times.values()), 2) if include_timing else None
+        if include_timing:
+            row["module_time_seconds"] = module_times
+            row["total_active_seconds"] = round(sum(module_times.values()), 2)
         for canonical in STAGE_ORDER:
             related = [item for item in progress_steps if item["stage_code"] == canonical]
             if related:
