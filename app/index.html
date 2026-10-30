@@ -2170,10 +2170,6 @@ function utAddRoleBox(body,role,condition) {
  utAddText(box,"span","",utOpponentText(condition));
  body.appendChild(box);
 }
-function utProgress(phase,blockOrder,trial) {
- if(phase==="practice")return "دور تمرینی";
- return "بلوک "+utFa(blockOrder)+" از ۴ · دور "+utFa(trial)+" از ۵";
-}
 function utWaitMs(condition) {
  return condition==="agent"?2000:3000+randomInt(3001);
 }
@@ -2275,7 +2271,6 @@ async function utStartPracticeProposer() {
 function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
  ultimatumState.currentEventTimestamps={proposer_screen_shown_at:nowISO()};
  const condition=utCondition(blockCode);
- const phase=isPractice?"practice":"main";
  const s=utMakeScreen({condition:condition,bodyClass:"ut-proposer-body"});
  s.card.classList.add("ut-proposer-screen");
  utAddRoleBox(s.body,"proposer",condition);
@@ -2335,7 +2330,7 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
  try {
   const condition=utCondition(blockCode);
   const delay=utWaitMs(condition);
-  utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+  utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…");
   ultimatumState.currentEventTimestamps.waiting_started_at=nowISO();
   const waitStart=performance.now();
   await new Promise(function(resolve){setTimeout(resolve,delay);});
@@ -2385,8 +2380,8 @@ async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
   ultimatumState.resolveInFlight=false;
  }
 }
-function utRenderWaiting(condition,message,progress) {
- const s=utMakeScreen({condition:condition,progress:progress});
+function utRenderWaiting(condition,message) {
+ const s=utMakeScreen({condition:condition});
  const center=utNode("div","ut-result");
  utAddText(center,"p","ut-result-main",message);
  utAddText(center,"p","ut-copy small","لطفاً تا نمایش مرحلهٔ بعد صبر کنید.");
@@ -2394,7 +2389,7 @@ function utRenderWaiting(condition,message,progress) {
 }
 async function utStartPracticeResponder() {
  try {
-  const s=utMakeScreen({condition:"coworker",progress:"دور تمرینی"});
+  const s=utMakeScreen({condition:"coworker"});
   utAddRoleBox(s.body,"responder","coworker");
   utAddText(s.body,"p","ut-copy","شما باید پیشنهاد بازیکن مقابل را قبول یا رد کنید.");
   const actions=utNode("div","ut-actions");s.body.appendChild(actions);
@@ -2416,7 +2411,7 @@ async function utStartPracticeResponder() {
 async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) {
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
- utRenderWaiting(condition,"لطفاً منتظر پیشنهاد بازیکن مقابل باشید…",utProgress(isPractice?"practice":"main",blockOrder,trial));
+ utRenderWaiting(condition,"لطفاً منتظر پیشنهاد بازیکن مقابل باشید…");
  ultimatumState.currentEventTimestamps={waiting_started_at:nowISO()};
  const waitStart=performance.now();
  await new Promise(function(resolve){setTimeout(resolve,delay);});
@@ -2428,7 +2423,7 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  const shownAt=nowISO();
  ultimatumState.currentEventTimestamps.responder_offer_shown_at=shownAt;
  const condition=utCondition(blockCode);
- const s=utMakeScreen({condition:condition,progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
+ const s=utMakeScreen({condition:condition});
  utAddRoleBox(s.body,"responder",condition);
  utMetricCard(s.body,"کل امتیاز این دور","۱۰","total-points");
  utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
@@ -2475,7 +2470,7 @@ function utRecordRoundEvents(roundId,eventTimestamps) {
 function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  const resultScreenShownAt=nowISO();
  const role=utRole(blockCode);
- const s=utMakeScreen({condition:utCondition(blockCode),progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
+ const s=utMakeScreen({condition:utCondition(blockCode)});
  const center=utNode("div","ut-result");
  let mainText, detailText;
  if(role==="proposer") {
@@ -2548,7 +2543,7 @@ function utRenderBlockIntro() {
  const roleLabel=role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده";
  const opponentLabel=condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان است":"بازیکن مقابل شما یکی از همکاران حاضر در سالن است";
  const s=utMakeScreen({condition:condition,scrollable:true,title:"شروع بخش بازی"});
- utAddText(s.body,"p","ut-copy ut-block-intro-copy","در ۵ دور پیشِ رو، شما در نقش "+roleLabel+" بازی می‌کنید. "+opponentLabel+".");
+ utAddText(s.body,"p","ut-copy ut-block-intro-copy","در ۵ دور بعدی، شما در نقش "+roleLabel+" بازی می‌کنید. "+opponentLabel+".");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع",function(){utStartMainTrial(1);},"");
 }
@@ -2580,7 +2575,7 @@ function utRenderBlockSummary() {
  const lost=Number(result.block_potential_lost||0);
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
  const s=utMakeScreen({header:true,title:"پایان این بخش"});
- utAddText(s.body,"p","ut-copy ut-block-summary-intro","خلاصهٔ عملکرد شما در ۵ دور گذشته:");
+ utAddText(s.body,"p","ut-copy ut-block-summary-intro","خلاصهٔ عملکرد شما در ۵ دور قبلی:");
  const box=utNode("div","ut-summary-box");
  const showLoss=utIsFrameGroup();
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
