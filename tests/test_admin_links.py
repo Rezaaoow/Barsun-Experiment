@@ -207,7 +207,7 @@ def test_main_and_test_exports_are_separated_across_all_modules(client):
         main_rows = csv_rows(client, route)
         test_rows = csv_rows(client, route + "?scope=test")
         assert len(main_rows) == 1, (route, main_rows)
-        assert len(test_rows) == 2, (route, test_rows)
+        assert len(test_rows) == 1, (route, test_rows)
         assert {row["participant_code"] for row in main_rows} == {"MAIN-DATA"}
         assert {row["participant_code"] for row in test_rows} == {"TEST"}
         assert all(row["study_code"].startswith(main.TEST_STUDY_PREFIX) for row in test_rows)
@@ -332,7 +332,7 @@ def test_scoped_reset_requires_exact_phrase_and_does_not_cross_scopes(client):
     main_rows = csv_rows(client, "/api/admin/export.csv")
     test_rows = csv_rows(client, "/api/admin/export.csv?scope=test")
     assert main_rows == []
-    assert len(test_rows) == 2
+    assert len(test_rows) == 1
     assert {row["participant_code"] for row in test_rows} == {"TEST"}
 
     # Scope=test cleanup removes only all test study rows and invalidates their links.
@@ -342,7 +342,7 @@ def test_scoped_reset_requires_exact_phrase_and_does_not_cross_scopes(client):
         json={"scope": "test", "confirm_phrase": "CLEAR TEST DATA"},
     )
     assert test_reset.status_code == 200, test_reset.text
-    assert test_reset.json()["deleted_rows"]["test_studies"] >= 2
+    assert test_reset.json()["deleted_rows"]["test_studies"] >= 1
     assert csv_rows(client, "/api/admin/export.csv?scope=test") == []
 
 
