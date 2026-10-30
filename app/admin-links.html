@@ -320,7 +320,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <button id="applyBulkLinkAction" class="secondary" type="button">اعمال عملیات</button>
  <button id="deleteInactiveLinks" class="danger" type="button">حذف لینک‌های غیرفعال</button>
 </div>
-<div class="link-manager-note">برای تغییر وضعیت یا صدور مجدد URL، ردیف‌ها را انتخاب کن و یک عملیات گروهی اعمال کن. لینک‌های قدیمیِ بدون URL قابل بازیابی را فقط در صورت نیاز دوباره صادر کن؛ URL قبلی آن‌ها باطل می‌شود. حذف لینک غیرفعال، داده‌های پژوهشی و پاسخ‌های ثبت‌شده را پاک نمی‌کند.</div>
+<div class="link-manager-note">برای تغییر وضعیت یا صدور مجدد URL، ردیف‌ها را انتخاب کن و یک عملیات گروهی اعمال کن. لینک‌های فاقد URL قابل بازیابی را فقط در صورت نیاز دوباره صادر کن؛ URL قبلی آن‌ها باطل می‌شود. حذف لینک غیرفعال، داده‌های پژوهشی و پاسخ‌های ثبت‌شده را پاک نمی‌کند.</div>
 <div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentManagementTable" class="table-wrap link-mgmt-table"><p class="hint" style="padding:12px">برای دیدن لینک‌ها، «بارگذاری لینک‌ها» را بزن.</p></div>
 </section>
@@ -562,7 +562,7 @@ function parseAssignments(){
 }
 function csvEscape(value){return '"'+String(value==null?"":value).replace(/"/g,'""')+'"';}
 function downloadCsv(rows,filename,headers){
- const head=headers||["participant_code","ultimatum_variant","condition_code","study_code","invitation_url"];
+ const head=headers||["participant_code","ultimatum_variant","study_code","invitation_url"];
  const csv=[head.join(","),...rows.map(r=>head.map(key=>csvEscape(r[key])).join(","))].join("\r\n");
  const blob=new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"});
  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
@@ -681,7 +681,7 @@ async function downloadActiveAssignmentsCsv(){
   const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;
   a.download=scope==="test"?"barsan_test_active_links.csv":"barsan_active_links.csv";
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  setStatus("linkManagementStatus","CSV لینک‌های فعال دانلود شد."+(unavailable?" توجه: "+unavailable+" لینک قدیمی URL قابل بازیابی نداشت؛ برای آن‌ها URL جدید صادر کن.":""),unavailable?"info":"success");
+  setStatus("linkManagementStatus","CSV لینک‌های فعال دانلود شد."+(unavailable?" توجه: "+unavailable+" لینک فاقد URL قابل بازیابی بود؛ برای آن‌ها URL جدید صادر کن.":""),unavailable?"info":"success");
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{button.disabled=false;}
 }
