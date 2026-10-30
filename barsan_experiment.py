@@ -661,12 +661,12 @@ class WorkflowStepIn(BaseModel):
 
 
 class WorkflowConfigIn(BaseModel):
-    steps: list[WorkflowStepIn] = Field(min_length=1, max_length=60)
+    steps: list[WorkflowStepIn] = Field(min_length=1)
 
 
 class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
-    steps: list[WorkflowStepIn] | None = Field(default=None, min_length=1, max_length=60)
+    steps: list[WorkflowStepIn] | None = Field(default=None, min_length=1)
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -1089,7 +1089,7 @@ def _default_workflow_steps() -> list[dict[str, str]]:
 
 
 def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
-    if not isinstance(raw_steps, (list, tuple)) or not raw_steps or len(raw_steps) > 60:
+    if not isinstance(raw_steps, (list, tuple)) or not raw_steps:
         raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۶۰ ماژول داشته باشد.")
     normalized = []
     seen_ids = set()
@@ -1731,7 +1731,9 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
         _require_consent(connection, assignment["assignment_id"])
         rows = _get_stage_rows(connection, assignment["participation_id"])
         saved_steps = _workflow_progress_rows(connection, assignment["assignment_id"])
-    steps = _workflow_for_assignment(assignment)
+    module_only = _test_module_from_study_code(assignment["study_code"])
+    configured_workflow = bool(assignment.get("workflow_json")) or bool(module_only)
+    steps = _workflow_for_assignment(assignment) if configured_workflow else []
     public_steps = []
     for index, step in enumerate(steps):
         saved = saved_steps.get(step["step_id"], {})
@@ -1752,7 +1754,7 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
         "participant_code": assignment["participant_code"],
         "condition_code": assignment["condition_code"],
         "study_code": assignment["study_code"],
-        "test_module_only": _test_module_from_study_code(assignment["study_code"]),
+        "test_module_only": module_only,
         "current_stage": current_step["module_code"] if current_step else current_stage,
         "current_step_id": current_step["step_id"] if current_step else None,
         "workflow_steps": public_steps,
