@@ -1954,7 +1954,7 @@ loadWelcomeWorkflow();
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
 $('start').addEventListener('click',beginParticipantFlow);
-$('close').addEventListener('click',exitExperiment);
+$('close').onclick=exitExperiment;
 </script><script>
 /* BarSan Ultimatum Game. All opponent decisions and offers are sampled on the server. */
 const utCss = [
