@@ -679,6 +679,12 @@ function stageStatusLabel(state){
  return ({not_started:"شروع نشده",in_progress:"در حال انجام",completed:"کامل"})[state]||state||"—";
 }
 function currentStageLabel(code){return code?stageLabel(code):"همهٔ مراحل کامل";}
+function formatDuration(seconds){
+ const value=Math.max(0,Math.floor(Number(seconds)||0));
+ const hours=Math.floor(value/3600),minutes=Math.floor((value%3600)/60),secs=value%60;
+ const pad=n=>String(n).padStart(2,"0");
+ return pad(hours)+":"+pad(minutes)+":"+pad(secs);
+}
 function renderProgress(){
  const query=$("monitorSearch").value.trim().toUpperCase();
  const filter=$("monitorStatus").value;
@@ -690,18 +696,42 @@ function renderProgress(){
  $("scopePill").textContent=$("monitorScope").value==="main"?"آزمایش اصلی":"همهٔ داده‌های تست";
  const rows=progressRows.filter(r=>(!query||String(r.participant_code).toUpperCase().includes(query))&&(filter==="all"||r.progress_state===filter));
  const root=$("participantTable");root.replaceChildren();
- if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
+ if(!rows.length){
+  root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";
+  p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";
+  root.appendChild(p);return;
+ }
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","اولین ورود","زمان فعال کل","مدت از ورود","زمان هر جایگاه","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});
+ thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
-  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
-  cells.forEach((value,i)=>{const td=document.createElement("td");if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}else td.textContent=value;tr.appendChild(td);});
+  const base=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),r.current_stage?stageLabel(r.current_stage)+" · "+(Number(r.current_step_index)+1):"تمام‌شده"];
+  base.forEach((value,i)=>{
+   const td=document.createElement("td");
+   if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}
+   else td.textContent=value;
+   tr.appendChild(td);
+  });
+  const opened=document.createElement("td");opened.textContent=r.first_opened_at?new Date(r.first_opened_at).toLocaleString("fa-IR"):"هنوز وارد نشده";tr.appendChild(opened);
+  const total=document.createElement("td");total.className="code";total.textContent=formatDuration(r.total_active_seconds);tr.appendChild(total);
+  const elapsed=document.createElement("td");elapsed.className="code";elapsed.textContent=r.elapsed_seconds_since_first_open==null?"—":formatDuration(r.elapsed_seconds_since_first_open);tr.appendChild(elapsed);
+  const times=document.createElement("td");times.className="monitor-times";
+  const timeList=document.createElement("div");timeList.className="monitor-time-list";
+  (r.workflow_steps||[]).forEach(step=>{
+   const line=document.createElement("div");line.className="monitor-time-line";
+   const name=document.createElement("span");name.textContent=(Number(step.step_index)+1)+". "+stageLabel(step.stage_code);
+   const duration=document.createElement("strong");duration.textContent=formatDuration(step.active_seconds);
+   line.append(name,duration);timeList.appendChild(line);
+  });
+  if(!(r.workflow_steps||[]).length){const empty=document.createElement("span");empty.textContent="هنوز مرحله‌ای ثبت نشده";timeList.appendChild(empty);}
+  times.appendChild(timeList);tr.appendChild(times);
+  const last=document.createElement("td");last.textContent=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—";tr.appendChild(last);
   tbody.appendChild(tr);
  });
  table.appendChild(tbody);root.className="table-wrap";root.appendChild(table);
- const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";footer.textContent="نمایش "+rows.length+" از "+progressRows.length+" لینک فعال.";root.appendChild(footer);
+ const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";footer.textContent="نمایش "+rows.length+" از "+progressRows.length+" لینک فعال. زمان فعال با حضور صفحه در پیش‌زمینه محاسبه می‌شود؛ زمان پس‌زمینه به آن افزوده نمی‌شود.";root.appendChild(footer);
 }
 async function refreshProgress(){
  clearStatus("monitorStatusMessage");$("refreshButton").disabled=true;$("connectButton").disabled=true;
