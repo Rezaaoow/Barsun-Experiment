@@ -716,6 +716,10 @@ class ExperimentConsentIn(ExperimentIdentityIn):
     accepted: bool
 
 
+class ActivityOpenIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+
+
 class ActivityPingIn(ExperimentIdentityIn):
     ping_id: str = Field(min_length=16, max_length=100)
     run_id: str | None = Field(default=None, max_length=100)
@@ -1223,7 +1227,7 @@ def _lookup_assignment(connection: Any, invitation_token: str, participant_code:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
     row = connection.execute(
-        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
         "sp.participation_id,p.participant_code "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -1330,7 +1334,7 @@ def save_admin_workflow(
 
 
 @app.post("/api/experiment/activity/open")
-def record_assignment_open(data: ExperimentIdentityIn):
+def record_assignment_open(data: ActivityOpenIn):
     """Record first/last landing time when the invitation URL is opened and identity is confirmed."""
     token_hash = hashlib.sha256(data.invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -1393,6 +1397,7 @@ def create_assignments(
     base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
+        workflow_json = json.dumps(_current_study_workflow(connection, STUDY_CODE), ensure_ascii=False, separators=(",", ":"))
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
             condition = item.condition_code.strip().upper()
@@ -1414,18 +1419,18 @@ def create_assignments(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, workflow_json, 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1448,6 +1453,7 @@ def create_test_links(
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
+        workflow_json = json.dumps(_current_study_workflow(connection, STUDY_CODE), ensure_ascii=False, separators=(",", ":"))
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
             group_slug = group_label.lower()
             study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
@@ -1471,18 +1477,18 @@ def create_test_links(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, workflow_json, 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1526,11 +1532,10 @@ def create_module_test_link(
         token_encrypted = _encrypt_invitation_token(invitation_token)
         connection.execute(
             "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-            "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(" + ",".join([marker] * 8) + ")",
-            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted, 1, now()),
+            "invitation_token_hash,invitation_token_encrypted,workflow_json,active,assigned_at) VALUES(" + ",".join([marker] * 9) + ")",
+            (str(uuid.uuid4()), study_code, participant_id, data.condition_code, token_hash, token_encrypted,
+             json.dumps([data.stage_code], ensure_ascii=False), 1, now()),
         )
-        for prerequisite in STAGE_ORDER[:stage_index]:
-            _seed_completed_test_stage(connection, participation_id, prerequisite)
     return {
         "participant_code": participant_code,
         "condition_code": data.condition_code,
@@ -1539,7 +1544,7 @@ def create_module_test_link(
         "study_code": study_code,
         "invitation_url": base_url + joiner + "invite=" + invitation_token,
         "test_code": "TEST",
-        "prerequisites_marked_synthetic": list(STAGE_ORDER[:stage_index]),
+        "prerequisites_marked_synthetic": [],
     }
 
 
