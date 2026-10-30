@@ -1,5 +1,6 @@
 import io
 import sys
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -162,6 +163,111 @@ def main_test():
             json={"session_id": session_id, "status": "completed", "trial_count": 2},
         )
         assert completed.status_code == 200, completed.text
+
+    # Validate workflow templates, duplicate module occurrences and visit timing on PostgreSQL.
+    admin_headers = {"x-admin-token": "ci-admin-token"}
+    workflow_codes = ["questionnaire", "dd_lifetrade", "questionnaire"]
+    saved_workflow = client.post(
+        "/api/admin/workflow",
+        headers=admin_headers,
+        json={"workflow_steps": workflow_codes},
+    )
+    assert saved_workflow.status_code == 200, saved_workflow.text
+    worker_link = client.post(
+        "/api/admin/assignments",
+        headers=admin_headers,
+        json={
+            "assignments": [{"participant_code": "PG-WORKFLOW-0001", "condition_code": "A"}],
+            "workflow_steps": workflow_codes,
+        },
+    )
+    assert worker_link.status_code == 200, worker_link.text
+    invitation = worker_link.json()["assignments"][0]["invitation_url"]
+    invite_token = invitation.split("invite=", 1)[1]
+    worker_identity = {
+        "invitation_token": invite_token,
+        "participant_code": "PG-WORKFLOW-0001",
+    }
+    opened_visit = client.post(
+        "/api/experiment/activity/open",
+        json={"invitation_token": invite_token},
+    )
+    assert opened_visit.status_code == 200, opened_visit.text
+    visit_id = opened_visit.json()["activity_session_id"]
+    consent = client.post(
+        "/api/experiment/consent",
+        json={**worker_identity, "accepted": True},
+    )
+    assert consent.status_code == 200, consent.text
+    identified = client.post("/api/experiment/identify", json=worker_identity)
+    assert identified.status_code == 200, identified.text
+    steps = identified.json()["workflow_steps"]
+    assert [step["stage_code"] for step in steps] == workflow_codes
+    assert steps[0]["step_id"] != steps[2]["step_id"]
+
+    module_event = client.post(
+        "/api/experiment/activity/event",
+        json={
+            "invitation_token": invite_token,
+            "activity_session_id": visit_id,
+            "event": "module",
+            "step_id": steps[0]["step_id"],
+            "module_code": "questionnaire",
+        },
+    )
+    assert module_event.status_code == 200, module_event.text
+    time.sleep(0.08)
+    heartbeat = client.post(
+        "/api/experiment/activity/event",
+        json={
+            "invitation_token": invite_token,
+            "activity_session_id": visit_id,
+            "event": "heartbeat",
+        },
+    )
+    assert heartbeat.status_code == 200, heartbeat.text
+    step_start = client.post(
+        "/api/experiment/stages/start",
+        json={**worker_identity, "stage_code": "questionnaire", "step_id": steps[0]["step_id"]},
+    )
+    assert step_start.status_code == 200, step_start.text
+
+    workflow_progress = client.get("/api/admin/progress?scope=main", headers=admin_headers)
+    assert workflow_progress.status_code == 200, workflow_progress.text
+    worker_row = next(
+        item for item in workflow_progress.json()
+        if item["participant_code"] == "PG-WORKFLOW-0001"
+    )
+    assert worker_row["workflow_total_steps"] == 3
+    assert len(worker_row["workflow_steps"]) == 3
+    assert worker_row["total_active_seconds"] >= 0
+    assert worker_row["module_active_seconds"].get("questionnaire", 0) >= 0
+
+    full_test_links = client.post(
+        "/api/admin/test-links",
+        headers=admin_headers,
+        json={"workflow_steps": ["ultimatum", "questionnaire", "ultimatum"]},
+    )
+    assert full_test_links.status_code == 200, full_test_links.text
+    assert full_test_links.json()["created_count"] == 2
+    test_token = full_test_links.json()["assignments"][0]["invitation_url"].split("invite=", 1)[1]
+    test_identity = {"invitation_token": test_token, "participant_code": "TEST"}
+    test_consent = client.post(
+        "/api/experiment/consent",
+        json={**test_identity, "accepted": True},
+    )
+    assert test_consent.status_code == 200, test_consent.text
+    test_identity_response = client.post("/api/experiment/identify", json=test_identity)
+    assert test_identity_response.status_code == 200, test_identity_response.text
+    assert [step["stage_code"] for step in test_identity_response.json()["workflow_steps"]] == [
+        "ultimatum", "questionnaire", "ultimatum"
+    ]
+
+    preview = client.get("/api/admin/maintenance/preview?scope=main", headers=admin_headers)
+    assert preview.status_code == 200, preview.text
+    assert "workflow_step_progress" in preview.json()["counts"]
+    assert "activity_sessions" in preview.json()["counts"]
+    assert "activity_step_time" in preview.json()["counts"]
 
     # Exercise concurrent session creation and batched trial writes using the same
     # bounded PostgreSQL pool used by the deployed API.
