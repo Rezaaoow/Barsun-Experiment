@@ -282,9 +282,10 @@ if DATABASE_URL:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_activity_pings ("
                 "ping_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
-                "run_id TEXT REFERENCES instrument_runs(run_id), active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
+                "run_id TEXT REFERENCES instrument_runs(run_id), workflow_step_index INTEGER, active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
                 "received_at TEXT NOT NULL)"
             )
+            connection.execute("ALTER TABLE experiment_activity_pings ADD COLUMN IF NOT EXISTS workflow_step_index INTEGER")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_assignment ON experiment_activity_pings(assignment_id,received_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_run ON experiment_activity_pings(run_id,received_at)")
             connection.execute(
@@ -487,9 +488,12 @@ else:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_activity_pings ("
                 "ping_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
-                "run_id TEXT REFERENCES instrument_runs(run_id), active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
+                "run_id TEXT REFERENCES instrument_runs(run_id), workflow_step_index INTEGER, active_seconds REAL NOT NULL CHECK(active_seconds BETWEEN 0 AND 60), "
                 "received_at TEXT NOT NULL)"
             )
+            activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_activity_pings)").fetchall()}
+            if "workflow_step_index" not in activity_columns:
+                connection.execute("ALTER TABLE experiment_activity_pings ADD COLUMN workflow_step_index INTEGER")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_assignment ON experiment_activity_pings(assignment_id,received_at)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_pings_run ON experiment_activity_pings(run_id,received_at)")
             connection.execute(
@@ -723,6 +727,7 @@ class ActivityOpenIn(BaseModel):
 class ActivityPingIn(ExperimentIdentityIn):
     ping_id: str = Field(min_length=16, max_length=100)
     run_id: str | None = Field(default=None, max_length=100)
+    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
     active_seconds: float = Field(ge=0, le=60)
 
 
@@ -1360,21 +1365,28 @@ def record_activity_ping(data: ActivityPingIn):
     """Idempotently accumulate visible/active time for the participant and optional module run."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        if data.run_id:
-            marker = "%s" if DATABASE_URL else "?"
-            run = connection.execute(
-                "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp "
-                "ON sp.participation_id=ir.participation_id WHERE ir.run_id=" + marker
-                + " AND sp.participation_id=" + marker,
-                (data.run_id, assignment["participation_id"]),
-            ).fetchone()
-            if not run:
-                raise HTTPException(409, "اجرای ماژول برای ثبت زمان پیدا نشد.")
         marker = "%s" if DATABASE_URL else "?"
+        step_index = data.workflow_step_index
+        if data.run_id:
+            step = connection.execute(
+                "SELECT step_index FROM experiment_workflow_steps WHERE participation_id="
+                + marker + " AND current_run_id=" + marker + " AND status='in_progress'",
+                (assignment["participation_id"], data.run_id),
+            ).fetchone()
+            if not step:
+                raise HTTPException(409, "اجرای ماژول برای ثبت زمان پیدا نشد.")
+            if step_index is not None and int(step["step_index"]) != step_index:
+                raise HTTPException(409, "جایگاه روند برای ثبت زمان با اجرای فعال مطابقت ندارد.")
+            step_index = int(step["step_index"])
+        if step_index is not None:
+            workflow = _assignment_workflow(assignment)
+            if step_index >= len(workflow):
+                raise HTTPException(409, "جایگاه روند برای ثبت زمان معتبر نیست.")
         connection.execute(
-            "INSERT INTO experiment_activity_pings(ping_id,assignment_id,run_id,active_seconds,received_at) "
-            "VALUES(" + ",".join([marker] * 5) + ") ON CONFLICT(ping_id) DO NOTHING",
-            (data.ping_id, assignment["assignment_id"], data.run_id, float(data.active_seconds), now()),
+            "INSERT INTO experiment_activity_pings(ping_id,assignment_id,run_id,workflow_step_index,active_seconds,received_at) "
+            "VALUES(" + ",".join([marker] * 6) + ") ON CONFLICT(ping_id) DO NOTHING",
+            (data.ping_id, assignment["assignment_id"], data.run_id, step_index,
+             float(data.active_seconds), now()),
         )
         connection.execute(
             "UPDATE experiment_assignments SET first_opened_at=COALESCE(first_opened_at,"
@@ -3046,9 +3058,9 @@ def experiment_progress(
                 continue
             placeholders = ",".join([marker] * len(batch))
             activity_rows.extend(dict(row) for row in connection.execute(
-                "SELECT assignment_id,run_id,SUM(active_seconds) AS active_seconds,MAX(received_at) AS last_ping_at "
+                "SELECT assignment_id,workflow_step_index,SUM(active_seconds) AS active_seconds,MAX(received_at) AS last_ping_at "
                 "FROM experiment_activity_pings WHERE assignment_id IN (" + placeholders + ") "
-                "GROUP BY assignment_id,run_id",
+                "GROUP BY assignment_id,workflow_step_index",
                 tuple(batch),
             ).fetchall())
 
@@ -3073,12 +3085,13 @@ def experiment_progress(
     activity_by_assignment: dict[str, dict[str, Any]] = {}
     for item in activity_rows:
         summary = activity_by_assignment.setdefault(item["assignment_id"], {
-            "total_active_seconds": 0.0, "per_run": {}, "last_ping_at": None,
+            "total_active_seconds": 0.0, "per_step": {}, "last_ping_at": None,
         })
         seconds = max(0.0, float(item["active_seconds"] or 0))
         summary["total_active_seconds"] += seconds
-        if item.get("run_id"):
-            summary["per_run"][item["run_id"]] = seconds
+        if item.get("workflow_step_index") is not None:
+            step_index = int(item["workflow_step_index"])
+            summary["per_step"][step_index] = summary["per_step"].get(step_index, 0.0) + seconds
         ping_epoch = parse_time(item.get("last_ping_at"))
         existing_epoch = parse_time(summary["last_ping_at"])
         if ping_epoch is not None and (existing_epoch is None or ping_epoch > existing_epoch):
@@ -3091,7 +3104,7 @@ def experiment_progress(
         participation_id = row.get("participation_id")
         raw_steps = steps_by_participation.get(participation_id, [])
         activity = activity_by_assignment.get(row["assignment_id"], {
-            "total_active_seconds": 0.0, "per_run": {}, "last_ping_at": None,
+            "total_active_seconds": 0.0, "per_step": {}, "last_ping_at": None,
         })
         steps = []
         module_times: dict[str, float] = {}
@@ -3102,7 +3115,7 @@ def experiment_progress(
             parse_time(activity.get("last_ping_at")),
         ]
         for raw in raw_steps:
-            seconds = float(activity["per_run"].get(raw.get("current_run_id"), 0.0))
+            seconds = float(activity["per_step"].get(int(raw["step_index"]), 0.0))
             item = {
                 "step_index": int(raw["step_index"]),
                 "stage_code": raw["module_code"],
