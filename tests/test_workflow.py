@@ -260,3 +260,47 @@ def test_active_time_is_aggregated_by_module_for_monitoring_only(client):
     ordinary_row = next(item for item in ordinary.json() if item["participant_code"] == "TIME-001")
     assert "module_time_seconds" not in ordinary_row
     assert "total_active_seconds" not in ordinary_row
+
+
+def test_preexisting_default_links_are_compatible_with_active_time_tracking(client):
+    response = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"assignments": [{"participant_code": "LEGACY-TIME-001", "condition_code": "B"}]},
+    )
+    assert response.status_code == 200, response.text
+    link = response.json()["assignments"][0]
+    identity = {"invitation_token": token_from_link(link), "participant_code": "LEGACY-TIME-001"}
+    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    assert consent.status_code == 200, consent.text
+
+    # Old assignments have no stored workflow snapshot, but the default step ids
+    # still allow the existing three-stage participant flow to report its time.
+    started = client.post(
+        "/api/experiment/time",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": "default-questionnaire",
+            "event": "start",
+        },
+    )
+    assert started.status_code == 200, started.text
+    time.sleep(0.05)
+    paused = client.post(
+        "/api/experiment/time",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": "default-questionnaire",
+            "event": "pause",
+        },
+    )
+    assert paused.status_code == 200, paused.text
+    monitor = client.get(
+        "/api/admin/progress?scope=main&include_timing=true",
+        headers={"x-admin-token": "test-admin-token"},
+    )
+    assert monitor.status_code == 200, monitor.text
+    row = next(item for item in monitor.json() if item["participant_code"] == "LEGACY-TIME-001")
+    assert row["module_time_seconds"]["questionnaire"] > 0
