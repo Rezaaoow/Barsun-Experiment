@@ -488,7 +488,7 @@ function moveWorkflowStep(from,to){
 }
 async function saveWorkflow(){
  if(!workflowSteps.length)throw new Error("برای روند آزمایش حداقل یک ماژول اضافه کن.");
- if(workflowSteps.length>60)throw new Error("حداکثر ۶۰ نوبت ماژول در هر روند مجاز است.");
+
  const response=await adminFetch("/api/admin/workflow",{method:"POST",body:JSON.stringify({steps:workflowSteps})});
  const data=await response.json();workflowSteps=data.steps||workflowSteps;workflowLoaded=true;renderWorkflowBuilder();
  setStatus("workflowStatus","روند آزمایش ذخیره شد؛ "+workflowSteps.length+" نوبت ماژول برای لینک‌های جدید استفاده می‌شود.","success");
