@@ -796,6 +796,12 @@ button{-webkit-tap-highlight-color:transparent}
  .trial-stage{height:auto;min-height:calc(100dvh - 12px);padding:10px 6px}
  .trial-layout .choice-card{min-height:112px}
 }
+@media(max-width:680px){
+ .questionnaire-screen .questionnaire-scale{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;align-items:stretch}
+ .questionnaire-screen .scale-option{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px;min-width:0;width:100%;height:auto;min-height:clamp(104px,14vh,124px);max-height:126px;padding:9px 3px;border-radius:12px;overflow:hidden}
+ .questionnaire-screen .scale-option .scale-number{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;min-width:36px;border-radius:10px;font-size:1.08rem!important;line-height:1!important}
+ .questionnaire-screen .scale-option .scale-label{display:block;-webkit-line-clamp:unset;overflow:visible;overflow-wrap:anywhere;min-width:0;max-height:none;white-space:normal;text-align:center;font-size:clamp(.76rem,2.35vw,.88rem)!important;line-height:1.38!important}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
@@ -857,6 +863,7 @@ const workflow = {
  workflowSteps:[],
  workflowStepIndex:-1,
  currentStepId:null,
+ currentModuleCode:null,
  timerActive:false
 };
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
@@ -1614,7 +1621,8 @@ async function enterWorkflowStep(){
   return;
  }
  workflow.currentStepId=step.step_id;
- workflow.currentStage=step.module_code;
+ workflow.currentModuleCode=step.module_code;
+ workflow.currentStage=(step.module_code==='ultimatum_frame'||step.module_code==='ultimatum_control')?'ultimatum':step.module_code;
  workflow.timerActive=false;
  await startStepTimer();
  workflow.stageRunId=null;
@@ -1628,7 +1636,7 @@ async function enterWorkflowStep(){
   showQuestionnaireIntro(0);
  }else if(step.module_code==='dd_lifetrade'){
   await startAssignedDDStage();
- }else if(step.module_code==='ultimatum'){
+ }else if(step.module_code==='ultimatum'||step.module_code==='ultimatum_frame'||step.module_code==='ultimatum_control'){
   await startUltimatumInstructions();
  }
 }
@@ -2015,6 +2023,35 @@ const utCss = [
 "@media(max-width:640px){.ut-card{height:calc(100dvh - 12px);padding:12px 11px;border-radius:17px}.ut-topbar{margin-bottom:8px}.ut-score{font-size:.86rem}.ut-opponent{font-size:1rem;gap:7px;padding:3px 7px}.ut-opponent-icon{font-size:1.75rem;width:42px;height:42px;border-radius:13px}.ut-opponent-label{font-size:.7rem}.ut-title{font-size:1.28rem;margin-bottom:8px}.ut-body{gap:10px}.ut-copy{font-size:.94rem;line-height:1.72}.ut-rolebox{padding:10px}.ut-rolebox strong{font-size:1.06rem}.ut-rolebox span{font-size:.86rem}.ut-total{font-size:.92rem}.ut-question{font-size:1.03rem}.ut-slider-wrap{padding-top:32px;padding-inline:8px}.ut-shares{gap:7px}.ut-share{padding:8px 4px;font-size:.82rem}.ut-btn{min-height:43px;padding:9px 8px;font-size:.9rem}.ut-result-main{font-size:1.28rem}.ut-result-detail{font-size:1rem}.ut-summary-box{padding:15px 12px}.ut-summary-metrics{gap:8px}.ut-summary-metric{padding:12px 6px}.ut-summary-metric-label{font-size:.78rem}.ut-summary-metric-value{font-size:1.65rem}}",
 "@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}.ut-summary-metric{padding:9px 5px}.ut-summary-metric-value{font-size:1.5rem}}",
 "@media(max-width:680px){.ut-card{height:auto;min-height:calc(100dvh - 8px);max-height:none;overflow-y:auto;padding:16px 13px;border-radius:17px}.ut-topbar{gap:8px;margin-bottom:10px}.ut-score{font-size:1rem;font-weight:900;padding:9px 12px}.ut-opponent{font-size:1.08rem;font-weight:850}.ut-opponent-icon{width:52px;height:52px;font-size:2.15rem}.ut-progress{font-size:.94rem;font-weight:750}.ut-title{font-size:1.48rem;line-height:1.55;font-weight:950;margin-bottom:10px}.ut-body{flex:auto;min-height:0;overflow:visible;gap:12px;padding-block:8px}.ut-copy{font-size:1.12rem;line-height:1.9;font-weight:700}.ut-copy.small{font-size:.98rem;font-weight:650}.ut-rolebox{padding:14px 12px}.ut-rolebox strong{font-size:1.22rem;font-weight:900}.ut-rolebox span{font-size:1.02rem;line-height:1.8;font-weight:650}.ut-total,.ut-question{font-size:1.1rem;font-weight:850}.ut-slider{height:42px}.ut-share{font-size:1rem;font-weight:850;padding:12px 8px}.ut-btn{min-height:56px;padding:12px 13px;font-size:1.08rem;font-weight:900}.ut-result-main{font-size:1.48rem;font-weight:950}.ut-result-detail{font-size:1.16rem;font-weight:850}.ut-result-note{font-size:1rem}.ut-summary-metric-label{font-size:.95rem;font-weight:850}.ut-summary-metric-value{font-size:2rem;font-weight:950}}"
+"/* Interaction refinements: only instruction pages scroll; active screens stay viewport-bound. */",
+".ut-card:not(.ut-scrollable){height:calc(100dvh - 12px);max-height:calc(100dvh - 12px);min-height:0;overflow:hidden}",
+".ut-card:not(.ut-scrollable) .ut-body{overflow:hidden;min-height:0;flex:1 1 auto}",
+".ut-card.ut-scrollable{height:auto;min-height:calc(100dvh - 12px);max-height:none;overflow-y:auto}",
+".ut-card.ut-scrollable .ut-body{overflow:visible;flex:0 0 auto}",
+".ut-score{display:flex;align-items:center;gap:9px;white-space:normal}",
+".ut-score-label{font-size:.88rem;font-weight:700;color:#647087}",
+".ut-score-value,.ut-progress-number{display:inline-grid;place-items:center;min-width:42px;min-height:34px;padding:3px 9px;border:1px solid #d8e2f0;border-radius:10px;background:#fff;font-size:1.1rem;font-weight:950;direction:ltr;font-variant-numeric:tabular-nums}",
+".ut-progress{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:7px}",
+".ut-progress-label,.ut-progress-separator{font-size:.92rem;font-weight:700;color:#58657a}",
+".ut-metric-card{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:10px 12px;border:1px solid #e0e7f1;border-radius:14px;background:#fff;text-align:center}",
+".ut-metric-label{font-size:.95rem;font-weight:750;color:#5c687c;line-height:1.6}",
+".ut-metric-value{display:grid;place-items:center;min-width:68px;min-height:46px;padding:4px 13px;border:1px solid #d8e2f0;border-radius:11px;background:#f7f9fc;color:#1f365a;font-size:1.55rem;font-weight:950;line-height:1.2;font-variant-numeric:tabular-nums}",
+".ut-metric-card.earned .ut-metric-value{background:#eaf7ef;border-color:#cde8d7;color:#176d42}",
+".ut-metric-card.mine .ut-metric-value{background:#eef5ff;border-color:#d3e2f7}",
+".ut-metric-card.other .ut-metric-value{background:#faf6ff;border-color:#e7dcf3}",
+".ut-shares .ut-metric-card{gap:6px}",
+".ut-slider-wrap{padding-top:48px;padding-inline:16px}",
+".ut-slider{height:60px;touch-action:pan-y}",
+".ut-slider::-webkit-slider-runnable-track{height:11px;border-radius:99px;background:#e3e8f0}",
+".ut-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:34px;height:34px;margin-top:-11px;border:4px solid #fff;border-radius:50%;background:#23375b;box-shadow:0 2px 7px rgba(20,35,60,.28)}",
+".ut-slider::-moz-range-track{height:11px;border-radius:99px;background:#e3e8f0}",
+".ut-slider::-moz-range-thumb{width:28px;height:28px;border:4px solid #fff;border-radius:50%;background:#23375b;box-shadow:0 2px 7px rgba(20,35,60,.28)}",
+".ut-bubble{min-width:54px;height:40px;font-size:1.25rem;border:2px solid #fff;box-shadow:0 3px 10px rgba(20,35,60,.16)}",
+".ut-summary-metric-value{display:grid;place-items:center;min-width:70px;min-height:45px;padding:5px 12px;border:1px solid #dce5f1;border-radius:11px;background:#f7f9fc;font-size:1.8rem!important;font-weight:950}",
+".ut-final-score{display:grid;place-items:center;min-width:110px;min-height:84px;padding:8px 20px;border:1px solid #d4e0f0;border-radius:16px;background:#f7f9fc}",
+".ut-opponent-icon{flex:0 0 auto;aspect-ratio:1}",
+"@media(max-width:680px){.ut-card:not(.ut-scrollable){height:calc(100dvh - 8px);max-height:calc(100dvh - 8px);padding:10px;overflow:hidden}.ut-card.ut-scrollable{min-height:calc(100dvh - 8px);padding:15px 12px}.ut-card:not(.ut-scrollable) .ut-body{gap:8px;padding-block:4px;overflow:hidden}.ut-card:not(.ut-scrollable) .ut-title{font-size:1.25rem;line-height:1.4;margin-bottom:4px}.ut-card:not(.ut-scrollable) .ut-copy{font-size:1rem!important;line-height:1.5!important}.ut-card:not(.ut-scrollable) .ut-rolebox{padding:9px 10px}.ut-card:not(.ut-scrollable) .ut-rolebox strong{font-size:1.05rem}.ut-card:not(.ut-scrollable) .ut-rolebox span{font-size:.9rem;line-height:1.55}.ut-slider-wrap{padding-top:46px;padding-inline:8px}.ut-slider{height:66px}.ut-slider::-webkit-slider-thumb{width:38px;height:38px;margin-top:-13px}.ut-slider::-moz-range-thumb{width:32px;height:32px}.ut-metric-card{padding:8px 7px;gap:5px}.ut-metric-label{font-size:.88rem}.ut-metric-value{min-width:58px;min-height:40px;font-size:1.35rem}.ut-shares{gap:7px}.ut-card:not(.ut-scrollable) .ut-actions{padding-top:4px}.ut-card:not(.ut-scrollable) .ut-btn{min-height:48px}.ut-card:not(.ut-scrollable) .ut-topbar{margin-bottom:5px}.ut-card:not(.ut-scrollable) .ut-progress{margin-bottom:4px}}",
+"@media(max-height:620px) and (max-width:680px){.ut-card:not(.ut-scrollable){padding-top:5px;padding-bottom:5px}.ut-card:not(.ut-scrollable) .ut-topbar{margin-bottom:2px}.ut-card:not(.ut-scrollable) .ut-opponent-icon{width:38px;height:38px;font-size:1.5rem}.ut-card:not(.ut-scrollable) .ut-score-value{min-height:31px;font-size:1rem}.ut-card:not(.ut-scrollable) .ut-title{font-size:1.12rem;line-height:1.3}.ut-card:not(.ut-scrollable) .ut-body{gap:5px}.ut-card:not(.ut-scrollable) .ut-copy{font-size:.96rem!important;line-height:1.42!important}.ut-card:not(.ut-scrollable) .ut-rolebox{padding:6px 8px}.ut-card:not(.ut-scrollable) .ut-rolebox span{font-size:.86rem}.ut-card:not(.ut-scrollable) .ut-slider-wrap{padding-top:39px}.ut-card:not(.ut-scrollable) .ut-slider{height:55px}.ut-card:not(.ut-scrollable) .ut-metric-value{min-height:35px;font-size:1.2rem}.ut-card:not(.ut-scrollable) .ut-actions{padding-top:2px}.ut-card:not(.ut-scrollable) .ut-btn{min-height:42px}}"
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
@@ -2033,6 +2070,8 @@ function utFa(value) {
  return String(value).replace(/[0-9]/g, function(d){return "۰۱۲۳۴۵۶۷۸۹"[Number(d)];});
 }
 function utIsFrameGroup() {
+ if(workflow.currentModuleCode==="ultimatum_frame")return true;
+ if(workflow.currentModuleCode==="ultimatum_control")return false;
  const c=String(workflow.conditionCode||"").trim().toUpperCase();
  return c==="A" || c==="FRAME" || c==="FRAMING";
 }
@@ -2064,6 +2103,13 @@ function utNode(tag, className, value) {
 function utAddText(parent,tag,className,value) {
  const el=utNode(tag,className,value);parent.appendChild(el);return el;
 }
+function utMetricCard(parent,label,value,kind) {
+ const card=utNode("div","ut-metric-card"+(kind?" "+kind:""));
+ utAddText(card,"span","ut-metric-label",label);
+ const number=utAddText(card,"strong","ut-metric-value",value);
+ parent.appendChild(card);
+ return number;
+}
 function utButton(parent,label,handler,kind) {
  const b=utNode("button","ut-btn"+(kind?" "+kind:""),label);
  b.type="button";
@@ -2079,12 +2125,14 @@ function utButton(parent,label,handler,kind) {
 }
 function utMakeScreen(options) {
  show();
- const card=utNode("section","ut-card");
+ const card=utNode("section","ut-card"+(options.scrollable?" ut-scrollable":""));
  card.dir="rtl";
  if(options.header!==false) {
   const top=utNode("div","ut-topbar");
   const visibleScore=ultimatumState?(ultimatumState.currentPhase==="practice"?ultimatumState.practiceScore:ultimatumState.score):0;
-  const score=utNode("div","ut-score","جمع امتیاز شما: "+utFa(visibleScore));
+  const score=utNode("div","ut-score");
+  utAddText(score,"span","ut-score-label","جمع امتیاز شما");
+  utAddText(score,"strong","ut-score-value",utFa(visibleScore));
   top.appendChild(score);
   if(options.condition) {
    const opponent=utNode("div","ut-opponent");
@@ -2097,8 +2145,24 @@ function utMakeScreen(options) {
   }
   card.appendChild(top);
  }
- // Participant-facing block/round counts are intentionally hidden; the block introduction remains visible.
  if(options.title)utAddText(card,"h1","ut-title",options.title);
+ if(options.progress){
+  const progress=utNode("div","ut-progress");
+  const match=String(options.progress).match(/^بلوک\\s+(.+?)\\s+از\\s+(.+?)(?:\\s+·\\s+دور\\s+(.+?)\\s+از\\s+(.+))?$/);
+  if(match){
+   utAddText(progress,"span","ut-progress-label","بلوک");
+   utAddText(progress,"strong","ut-progress-number",match[1]);
+   utAddText(progress,"span","ut-progress-label","از");
+   utAddText(progress,"strong","ut-progress-number",match[2]);
+   if(match[3]){
+    utAddText(progress,"span","ut-progress-separator","· دور");
+    utAddText(progress,"strong","ut-progress-number",match[3]);
+    utAddText(progress,"span","ut-progress-label","از");
+    utAddText(progress,"strong","ut-progress-number",match[4]);
+   }
+  }else utAddText(progress,"span","ut-progress-label",String(options.progress));
+  card.appendChild(progress);
+ }
  const body=utNode("div","ut-body"+(options.bodyClass?" "+options.bodyClass:""));
  card.appendChild(body);
  stimulus.replaceChildren(card);
@@ -2183,7 +2247,7 @@ async function startUltimatumInstructions() {
  }
 }
 function utRenderWelcome() {
- const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان"});
+ const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
   "شما در این بازی برای امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید. در حین بازی بازیکن مقابل شما ممکن است هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در همین سالن باشد که به شما اطلاع داده خواهد شد.",
   "در هر دور ۱۰ امتیاز وجود دارد که باید بین شما و بازیکن مقابل تقسیم شود. دو نقش در بازی وجود دارد: پیشنهاددهنده و پاسخ‌دهنده.",
@@ -2196,7 +2260,7 @@ function utRenderWelcome() {
  utButton(actions,"فهمیدم، شروع کنیم",utRenderPracticeIntro,"");
 }
 function utRenderPracticeIntro() {
- const s=utMakeScreen({header:false});
+ const s=utMakeScreen({header:false,scrollable:true});
  utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود تا قوانین بازی را کامل متوجه شوید. امتیازها و داده‌های این دو دور در امتیاز نهایی لحاظ نمی‌شوند.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",function(){utStartPracticeProposer();},"");
@@ -2218,7 +2282,7 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
  const phase=isPractice?"practice":"main";
  const s=utMakeScreen({condition:condition,progress:utProgress(phase,blockOrder,trial)});
  utAddRoleBox(s.body,"proposer",condition);
- utAddText(s.body,"p","ut-total","کل امتیاز این دور: ۱۰");
+ utMetricCard(s.body,"کل امتیاز این دور","۱۰","total-points");
  utAddText(s.body,"p","ut-question","می‌خواهید چند امتیاز به بازیکن مقابل بدهید؟");
  const wrap=utNode("div","ut-slider-wrap");
  const bubble=utNode("output","ut-bubble","۵");bubble.style.left="clamp(18px, 50%, calc(100% - 18px))";
@@ -2229,15 +2293,16 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
  for(let i=0;i<=10;i++)utAddText(ticks,"span","",utFa(i));
  wrap.append(bubble,slider,ticks);s.body.appendChild(wrap);
  const shares=utNode("div","ut-shares");
- const your=utNode("div","ut-share","سهم شما: ۵");const other=utNode("div","ut-share","سهم بازیکن مقابل: ۵");
- shares.append(your,other);s.body.appendChild(shares);
+ const your=utMetricCard(shares,"سهم شما","۵","mine");
+ const other=utMetricCard(shares,"سهم بازیکن مقابل","۵","other");
+ s.body.appendChild(shares);
  function update() {
   const toOther=Number(slider.value);
   const mine=10-toOther;
   bubble.textContent=utFa(toOther);
   bubble.style.left="clamp(18px, "+(toOther*10)+"%, calc(100% - 18px))";
-  your.textContent="سهم شما: "+utFa(mine);
-  other.textContent="سهم بازیکن مقابل: "+utFa(toOther);
+  your.textContent=utFa(mine);
+  other.textContent=utFa(toOther);
  }
  slider.addEventListener("input",function(){
   const changedAt=nowISO();
@@ -2359,13 +2424,11 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  const condition=utCondition(blockCode);
  const s=utMakeScreen({condition:condition,progress:utProgress(isPractice?"practice":"main",blockOrder,trial)});
  utAddRoleBox(s.body,"responder",condition);
- utAddText(s.body,"p","ut-total","کل امتیاز این دور: ۱۰");
+ utMetricCard(s.body,"کل امتیاز این دور","۱۰","total-points");
  utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
  const shares=utNode("div","ut-shares");
- shares.append(
-  utNode("div","ut-share","سهمی که شما دریافت خواهید کرد: "+utFa(round.participant_share)),
-  utNode("div","ut-share","سهمی که بازیکن مقابل دریافت خواهد کرد: "+utFa(round.opponent_share))
- );
+ utMetricCard(shares,"سهمی که شما دریافت می‌کنید",utFa(round.participant_share),"mine");
+ utMetricCard(shares,"سهمی که بازیکن مقابل دریافت می‌کند",utFa(round.opponent_share),"other");
  s.body.appendChild(shares);
  utAddText(s.body,"p","ut-copy small","اگر رد کنید، هیچ‌کس امتیازی دریافت نخواهد کرد.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
@@ -2418,7 +2481,8 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  }
  utAddText(center,"div","ut-result-icon "+(result.accepted?"accepted":"rejected"),result.accepted?"✓":"×");
  utAddText(center,"p","ut-result-main",mainText);
- utAddText(center,"p","ut-result-detail",detailText);
+ if(result.accepted)utMetricCard(center,"امتیاز دریافتی",utFa(result.points_earned),"earned");
+ else utAddText(center,"p","ut-result-detail",detailText);
  if(isPractice)utAddText(center,"p","ut-result-note","این دور تمرینی است و امتیاز آن در نتیجهٔ نهایی حساب نمی‌شود.");
  s.body.appendChild(center);
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
@@ -2476,7 +2540,7 @@ function utRenderBlockIntro() {
  ultimatumState.currentBlockCode=blockCode;
  ultimatumState.trialInBlock=1;
  const role=utRole(blockCode),condition=utCondition(blockCode);
- const s=utMakeScreen({condition:condition,progress:"بلوک "+utFa(blockOrder)+" از ۴"});
+ const s=utMakeScreen({condition:condition,progress:"بلوک "+utFa(blockOrder)+" از ۴",scrollable:true});
  utAddText(s.body,"p","ut-copy","در ۵ دور بعدی شما "+(role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده")+" هستید و "+(condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان":"بازیکن مقابل شما یکی از همکاران داخل سالن")+" خواهد بود.");
  const box=utNode("div","ut-rolebox");
  utAddText(box,"strong","",role==="proposer"?"شما پیشنهاددهنده هستید":"شما پاسخ‌دهنده هستید");
@@ -2518,13 +2582,13 @@ function utRenderBlockSummary() {
  const showLoss=utIsFrameGroup();
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
  const earnedMetric=utNode("div","ut-summary-metric earned");
- utAddText(earnedMetric,"div","ut-summary-metric-label","به دست آوردید");
- utAddText(earnedMetric,"div","ut-summary-metric-value",utFa(earned)+" امتیاز");
+ utAddText(earnedMetric,"div","ut-summary-metric-label","امتیاز به‌دست‌آمده");
+ utAddText(earnedMetric,"div","ut-summary-metric-value",utFa(earned));
  metrics.appendChild(earnedMetric);
  if(showLoss) {
   const lostMetric=utNode("div","ut-summary-metric lost");
-  utAddText(lostMetric,"div","ut-summary-metric-label","از دست دادید");
-  utAddText(lostMetric,"div","ut-summary-metric-value",utFa(lost)+" امتیاز");
+  utAddText(lostMetric,"div","ut-summary-metric-label","امتیاز ازدست‌رفته");
+  utAddText(lostMetric,"div","ut-summary-metric-value",utFa(lost));
   metrics.appendChild(lostMetric);
  }
  box.appendChild(metrics);
@@ -2563,7 +2627,7 @@ async function utFinishUltimatum() {
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
   const scoreBox=utNode("div","ut-summary-box");
-  utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
+  utMetricCard(scoreBox,"امتیاز نهایی",utFa(ultimatumState.score),"earned");
   end.body.appendChild(scoreBox);
   const hasNext=workflow.workflowMode&&workflow.workflowStepIndex<workflow.workflowSteps.length-1;
   let closingMessage;
