@@ -1400,8 +1400,7 @@ def create_assignments(
     base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
-        workflow_codes = data.workflow_steps if data.workflow_steps is not None else _default_workflow_codes(connection)
-        workflow_payload = _new_workflow_definition(workflow_codes)
+        workflow_payload = _new_workflow_definition(data.workflow_steps) if data.workflow_steps is not None else None
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
             condition = item.condition_code.strip().upper()
@@ -1424,7 +1423,7 @@ def create_assignments(
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
                 str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted,
-                Jsonb(workflow_payload) if DATABASE_URL else json.dumps(workflow_payload, ensure_ascii=False), 1, now()
+                Jsonb(workflow_payload) if DATABASE_URL and workflow_payload is not None else (json.dumps(workflow_payload, ensure_ascii=False) if workflow_payload is not None else None), 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
@@ -1459,7 +1458,7 @@ def create_test_links(
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
-        workflow_codes = data.workflow_steps if data is not None else _default_workflow_codes(connection)
+        workflow_payload = _new_workflow_definition(data.workflow_steps) if data is not None else None
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
             group_slug = group_label.lower()
             study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
@@ -1482,7 +1481,6 @@ def create_test_links(
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
-            workflow_payload = _new_workflow_definition(workflow_codes)
             values = (
                 str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted,
                 Jsonb(workflow_payload) if DATABASE_URL else json.dumps(workflow_payload, ensure_ascii=False), 1, now()
