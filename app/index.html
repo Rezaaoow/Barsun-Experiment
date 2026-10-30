@@ -786,14 +786,14 @@ button{-webkit-tap-highlight-color:transparent}
  .welcome-note,#welcome-plan-status{font-size:1.02rem;line-height:1.8;font-weight:700}
  .finish-actions{display:grid;grid-template-columns:1fr;gap:12px}
  .finish-actions .btn{width:100%}
- #screen small,#screen .small,#screen .eyebrow,#screen .hint,#screen .hintline,#screen .instruction-progress,#screen .step-count,#screen .example-note,#screen .example-title,#screen .choice-question,#screen .choice-detail,#screen .intro-scale-title,#screen .intro-scale-item span,#screen .intro-scale-na,#screen .questionnaire-meta,#screen .scale-label,#screen .questionnaire-save-status,#screen .participant-code-label,#screen .ut-copy.small,#screen .ut-progress,#screen .ut-opponent-label,#screen .ut-summary-metric-label,#screen .ut-result-note,#screen .ut-ticks,#screen .ut-bubble,#screen .ut-summary-label,#screen .ut-rolebox span,#screen .ut-share{font-size:1rem!important;line-height:1.75!important}
+ #screen small,#screen .small,#screen .eyebrow,#screen .hint,#screen .hintline,#screen .status,#screen .field label,#screen .consent-row,#screen .welcome-step strong,#screen .welcome-step small,#screen .welcome-note,#screen .instruction-progress,#screen .step-count,#screen .instruction-content .hintline,#screen .continue-note,#screen .example-note,#screen .example-title,#screen .example-choice,#screen .example-choice strong,#screen .example-callout,#screen .example-or,#screen .choice-label,#screen .choice-question,#screen .choice-detail,#screen .trial-instruction,#screen .intro-scale-title,#screen .intro-scale-item span,#screen .intro-scale-na,#screen .questionnaire-meta,#screen .scale-option .scale-number,#screen .scale-option .scale-label,#screen .scale-label,#screen .scale-na,#screen .questionnaire-save-status,#screen .questionnaire-actions .btn,#screen .instruction-example-page .instruction-progress,#screen .instruction-example-page .instruction-content>p:not(.instruction-explanation),#screen .instruction-example-page .example-title,#screen .instruction-example-page .example-choice,#screen .instruction-example-page .example-choice strong,#screen .finish-actions .participant-code-label,#screen .participant-code-label,#screen .participant-code-warning,#screen .ut-score,#screen .ut-copy.small,#screen .ut-progress,#screen .ut-opponent-label,#screen .ut-summary-metric-label,#screen .ut-result-note,#screen .ut-ticks,#screen .ut-bubble,#screen .ut-summary-label,#screen .ut-rolebox span,#screen .ut-share{font-size:1rem!important;line-height:1.75!important}
 }
 @media(max-height:520px) and (orientation:landscape) and (max-width:900px){
- .screen,.screen.trial-screen{padding:6px 8px}
- #stimulus{min-height:100dvh}
- .instruction-screen,.interstitial-screen,.questionnaire-screen{min-height:calc(100dvh - 12px);padding:12px 14px}
- .panel{padding:15px 18px}
- .trial-stage{min-height:calc(100dvh - 12px);padding:10px 6px}
+ .screen,.screen.trial-screen{height:auto;min-height:100dvh;overflow:visible;align-items:stretch;padding:6px 8px}
+ #stimulus{position:relative;inset:auto;width:100%;min-height:100dvh;overflow:visible}
+ .instruction-screen,.interstitial-screen,.questionnaire-screen{height:auto;min-height:calc(100dvh - 12px);max-height:none;overflow:visible;padding:12px 14px}
+ .panel{max-height:none;overflow:visible;padding:15px 18px}
+ .trial-stage{height:auto;min-height:calc(100dvh - 12px);padding:10px 6px}
  .trial-layout .choice-card{min-height:112px}
 }
 </style></head><body><main class="screen" id="screen">
