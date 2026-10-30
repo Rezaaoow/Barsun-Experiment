@@ -386,6 +386,234 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
     assert ultimatum.json()["attempt_number"] == 1
 
 
+def test_configurable_workflow_repeats_modules_tracks_time_and_resets(client, monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
+    headers = {"x-admin-token": "workflow-admin-token"}
+    modules = ["questionnaire", "questionnaire", "dd_lifetrade"]
+
+    saved_template = client.post(
+        "/api/admin/workflow",
+        headers=headers,
+        json={"workflow_steps": modules},
+    )
+    assert saved_template.status_code == 200, saved_template.text
+    assert saved_template.json()["workflow_steps"] == modules
+
+    loaded_template = client.get("/api/admin/workflow", headers=headers)
+    assert loaded_template.status_code == 200, loaded_template.text
+    assert loaded_template.json()["workflow_steps"] == modules
+
+    created = client.post(
+        "/api/admin/assignments",
+        headers=headers,
+        json={
+            "assignments": [{"participant_code": "BS-WORKFLOW-01", "condition_code": "A"}],
+            "workflow_steps": modules,
+        },
+    )
+    assert created.status_code == 200, created.text
+    invitation_url = created.json()["assignments"][0]["invitation_url"]
+    token = parse_qs(urlparse(invitation_url).query)["invite"][0]
+    identity = {"invitation_token": token, "participant_code": "BS-WORKFLOW-01"}
+
+    # The visit timer starts when the invitation URL is opened, before consent.
+    opened = client.post("/api/experiment/activity/open", json={"invitation_token": token})
+    assert opened.status_code == 200, opened.text
+    activity_id = opened.json()["activity_session_id"]
+
+    consent = client.post(
+        "/api/experiment/consent",
+        json={**identity, "accepted": True},
+    )
+    assert consent.status_code == 200, consent.text
+
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    flow = identified.json()
+    assert [item["stage_code"] for item in flow["workflow_steps"]] == modules
+    assert len({item["step_id"] for item in flow["workflow_steps"]}) == 3
+    first_step, second_step, third_step = flow["workflow_steps"]
+    assert first_step["step_id"] != second_step["step_id"]
+    assert flow["current_step_id"] == first_step["step_id"]
+
+    # Activity tracking accepts an individual workflow step and closes the visit cleanly.
+    module_event = client.post(
+        "/api/experiment/activity/event",
+        json={
+            "invitation_token": token,
+            "activity_session_id": activity_id,
+            "event": "module",
+            "step_id": first_step["step_id"],
+            "module_code": "questionnaire",
+        },
+    )
+    assert module_event.status_code == 200, module_event.text
+    paused = client.post(
+        "/api/experiment/activity/event",
+        json={"invitation_token": token, "activity_session_id": activity_id, "event": "pause"},
+    )
+    assert paused.status_code == 200, paused.text
+    resumed = client.post(
+        "/api/experiment/activity/event",
+        json={
+            "invitation_token": token,
+            "activity_session_id": activity_id,
+            "event": "resume",
+            "step_id": first_step["step_id"],
+            "module_code": "questionnaire",
+        },
+    )
+    assert resumed.status_code == 200, resumed.text
+    closed = client.post(
+        "/api/experiment/activity/event",
+        json={"invitation_token": token, "activity_session_id": activity_id, "event": "close"},
+    )
+    assert closed.status_code == 200, closed.text
+
+    # The same module can run twice because each timeline occurrence has independent state.
+    first_start = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": first_step["step_id"]},
+    )
+    assert first_start.status_code == 200, first_start.text
+    first_run = first_start.json()["run_id"]
+
+    blocked_second = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": second_step["step_id"]},
+    )
+    assert blocked_second.status_code == 409
+
+    answers = {}
+    for question_code in main.QUESTIONNAIRE_QUESTION_CODES:
+        response = client.post(
+            "/api/experiment/questionnaire/answer",
+            json={
+                **identity,
+                "step_id": first_step["step_id"],
+                "run_id": first_run,
+                "question_code": question_code,
+                "response_value": "4",
+                "current_question_index": len(answers),
+            },
+        )
+        assert response.status_code == 200, response.text
+        answers[question_code] = "4"
+    first_complete = client.post(
+        "/api/experiment/stages/complete",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": first_step["step_id"],
+            "run_id": first_run,
+            "final_payload": {"answers": answers},
+        },
+    )
+    assert first_complete.status_code == 200, first_complete.text
+
+    after_first = client.post("/api/experiment/identify", json=identity)
+    assert after_first.status_code == 200, after_first.text
+    assert after_first.json()["current_step_id"] == second_step["step_id"]
+    second_start = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": second_step["step_id"]},
+    )
+    assert second_start.status_code == 200, second_start.text
+    second_run = second_start.json()["run_id"]
+    assert second_run != first_run
+    assert second_start.json()["draft_payload"] == {}
+
+    # Complete the second occurrence and verify that the next module is now available.
+    second_answers = {}
+    for question_code in main.QUESTIONNAIRE_QUESTION_CODES:
+        response = client.post(
+            "/api/experiment/questionnaire/answer",
+            json={
+                **identity,
+                "step_id": second_step["step_id"],
+                "run_id": second_run,
+                "question_code": question_code,
+                "response_value": "2",
+                "current_question_index": len(second_answers),
+            },
+        )
+        assert response.status_code == 200, response.text
+        second_answers[question_code] = "2"
+    second_complete = client.post(
+        "/api/experiment/stages/complete",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": second_step["step_id"],
+            "run_id": second_run,
+            "final_payload": {"answers": second_answers},
+        },
+    )
+    assert second_complete.status_code == 200, second_complete.text
+    after_second = client.post("/api/experiment/identify", json=identity)
+    assert after_second.status_code == 200, after_second.text
+    assert after_second.json()["current_step_id"] == third_step["step_id"]
+    dd_start = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "dd_lifetrade", "step_id": third_step["step_id"]},
+    )
+    assert dd_start.status_code == 200, dd_start.text
+
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
+    monitored = client.get("/api/admin/progress", headers=headers)
+    assert monitored.status_code == 200, monitored.text
+    row = next(item for item in monitored.json() if item["participant_code"] == "BS-WORKFLOW-01")
+    assert row["workflow_total_steps"] == 3
+    assert [step["stage_code"] for step in row["workflow_steps"]] == modules
+    assert len({step["step_id"] for step in row["workflow_steps"]}) == 3
+    assert row["visit_count"] == 1
+    assert row["total_active_seconds"] >= 0
+    assert "questionnaire" in row["module_active_seconds"]
+
+    preview = client.get("/api/admin/maintenance/preview", headers=headers)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["counts"]["workflow_step_progress"] == 3
+    assert preview.json()["counts"]["activity_sessions"] == 1
+
+    # A scoped reset must remove new child tables as well as the existing experiment data.
+    reset = client.post(
+        "/api/admin/maintenance/reset",
+        headers=headers,
+        json={"scope": "main", "confirm_phrase": "CLEAR MAIN DATA"},
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["deleted_rows"]["workflow_step_progress"] == 3
+    assert reset.json()["deleted_rows"]["activity_sessions"] == 1
+    assert reset.json()["deleted_rows"]["activity_step_time"] >= 0
+    with main.conn() as connection:
+        assert connection.execute("SELECT COUNT(*) AS n FROM experiment_activity_sessions").fetchone()["n"] == 0
+        assert connection.execute("SELECT COUNT(*) AS n FROM experiment_workflow_step_progress").fetchone()["n"] == 0
+
+
+def test_full_test_links_capture_configured_workflow(client, monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
+    headers = {"x-admin-token": "workflow-admin-token"}
+    modules = ["ultimatum", "questionnaire", "ultimatum"]
+    created = client.post(
+        "/api/admin/test-links",
+        headers=headers,
+        json={"workflow_steps": modules},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["created_count"] == 2
+    for item in created.json()["assignments"]:
+        identity = {
+            "invitation_token": parse_qs(urlparse(item["invitation_url"]).query)["invite"][0],
+            "participant_code": "TEST",
+        }
+        consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+        assert consent.status_code == 200, consent.text
+        identified = client.post("/api/experiment/identify", json=identity)
+        assert identified.status_code == 200, identified.text
+        assert [step["stage_code"] for step in identified.json()["workflow_steps"]] == modules
+        assert len({step["step_id"] for step in identified.json()["workflow_steps"]}) == 3
+
+
 def test_questionnaire_answer_is_upserted_by_hidden_question_code(client, monkeypatch):
     token = _create_assignment(client, monkeypatch, code="BS-Q-0001", condition="B")
     identity = {"invitation_token": token, "participant_code": "BS-Q-0001"}
