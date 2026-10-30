@@ -3410,7 +3410,7 @@ def export_ultimatum_csv(
                 or ULTIMATUM_WORKFLOW_VARIANTS.get(run_metadata.get("workflow_module_code"))
                 or ""
             )
-            item["feedback_group"] = (
+            item["feedback_group"] = item["ultimatum_variant"] or (
                 "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
             )
             item["block_order_json"] = json.dumps(
