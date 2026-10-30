@@ -252,10 +252,11 @@ if DATABASE_URL:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, workflow_json JSONB, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
+            connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS workflow_json JSONB")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -274,6 +275,33 @@ if DATABASE_URL:
                 "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(participation_id, stage_code))"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_templates ("
+                "template_id TEXT PRIMARY KEY, workflow_json JSONB NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_step_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_id TEXT NOT NULL, stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload JSONB NOT NULL DEFAULT '{}'::jsonb, started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id,step_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_activity_sessions ("
+                "activity_session_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "opened_at TEXT NOT NULL, last_heartbeat_at TEXT NOT NULL, closed_at TEXT, "
+                "total_active_seconds DOUBLE PRECISION NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, "
+                "current_step_id TEXT, current_module_code TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_activity_step_time ("
+                "activity_session_id TEXT NOT NULL REFERENCES experiment_activity_sessions(activity_session_id), "
+                "step_id TEXT NOT NULL, module_code TEXT NOT NULL, active_seconds DOUBLE PRECISION NOT NULL DEFAULT 0, "
+                "PRIMARY KEY(activity_session_id,step_id))"
+            )
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_assignment ON experiment_activity_sessions(assignment_id)")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
                 "run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
@@ -427,12 +455,14 @@ else:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, workflow_json TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
             assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
             if "invitation_token_encrypted" not in assignment_columns:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
+            if "workflow_json" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN workflow_json TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -451,6 +481,33 @@ else:
                 "started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
                 "PRIMARY KEY(participation_id, stage_code))"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_templates ("
+                "template_id TEXT PRIMARY KEY, workflow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_workflow_step_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_id TEXT NOT NULL, stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN ('not_started','in_progress','completed')), "
+                "attempt_number INTEGER NOT NULL DEFAULT 0, current_run_id TEXT REFERENCES instrument_runs(run_id), "
+                "draft_payload TEXT NOT NULL DEFAULT '{}', started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id,step_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_activity_sessions ("
+                "activity_session_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "opened_at TEXT NOT NULL, last_heartbeat_at TEXT NOT NULL, closed_at TEXT, "
+                "total_active_seconds REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, "
+                "current_step_id TEXT, current_module_code TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_activity_step_time ("
+                "activity_session_id TEXT NOT NULL REFERENCES experiment_activity_sessions(activity_session_id), "
+                "step_id TEXT NOT NULL, module_code TEXT NOT NULL, active_seconds REAL NOT NULL DEFAULT 0, "
+                "PRIMARY KEY(activity_session_id,step_id))"
+            )
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_activity_assignment ON experiment_activity_sessions(assignment_id)")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
                 "run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
