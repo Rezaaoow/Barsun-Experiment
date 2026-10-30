@@ -470,10 +470,3 @@ def test_workflow_config_accepts_a_single_ultimatum_variant(client):
     assert response.status_code == 200, response.text
     assert [step["module_code"] for step in response.json()["steps"]] == ["ultimatum_frame"]
 
-def test_workflow_config_requires_both_ultimatum_variants(client):
-    response = client.post(
-        "/api/admin/workflow",
-        headers={"x-admin-token": "test-admin-token"},
-        json={"steps": [{"step_id": "frame-only", "module_code": "ultimatum_frame"}]},
-    )
-    assert response.status_code == 422
