@@ -1924,6 +1924,7 @@ async function utPrepare(phase,blockCode,blockOrder,trial,sequence) {
  return utApiWithRetry("/api/experiment/ultimatum/prepare",{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
+  step_id:workflow.activeStepId||null,
   run_id:ultimatumState.runId,
   phase:phase,
   block_code:blockCode,
@@ -1942,12 +1943,14 @@ function utShowError(message,retry) {
 }
 async function startUltimatumInstructions() {
  try {
+  if(!Array.isArray(workflow.workflowSteps))await setActivityModule({step_id:'legacy-ultimatum',stage_code:'ultimatum'});
   show();
   setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
   const started=await api("/api/experiment/stages/start",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:"ultimatum"
+   stage_code:"ultimatum",
+   step_id:workflow.activeStepId||null
   });
   if(started.already_completed) {
    workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، مراحل آزمایش برای این کد کامل شده‌اند.","بازگشت");
@@ -2197,6 +2200,7 @@ function utRecordRoundEvents(roundId,eventTimestamps) {
  return utApiWithRetry("/api/experiment/ultimatum/events",{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
+  step_id:workflow.activeStepId||null,
   run_id:ultimatumState.runId,
   round_id:roundId,
   event_timestamps:eventTimestamps
@@ -2357,12 +2361,16 @@ async function utFinishUltimatum() {
    }
   });
   ultimatumState.completed=true;
+  if(Array.isArray(workflow.workflowSteps)){
+   await advanceConfiguredWorkflow();
+   return;
+  }
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
+  utAddText(end.body,"p","ut-copy","بارسانی عزیز، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
  } catch(error) {
   console.error(error);
