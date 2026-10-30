@@ -2575,9 +2575,9 @@ def complete_experiment_stage(data: StageCompleteIn):
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
-            "SELECT status,current_run_id,attempt_number,draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], data.stage_code),
+            "SELECT status,current_run_id,attempt_number,draft_payload,step_index,module_code FROM experiment_workflow_steps "
+            "WHERE participation_id=" + marker + " AND current_run_id=" + marker + " AND module_code=" + marker,
+            (assignment["participation_id"], data.run_id, data.stage_code),
         ).fetchone()
         if not state:
             raise HTTPException(409, "این مرحله هنوز شروع نشده است.")
@@ -2686,11 +2686,28 @@ def complete_experiment_stage(data: StageCompleteIn):
                 + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
                 (timestamp, timestamp, assignment["participation_id"], data.stage_code),
             )
+        # Per-occurrence progress is authoritative; the legacy stage table remains a compatibility summary.
+        if data.stage_code in {"questionnaire", "ultimatum"} and data.final_payload is not None:
+            workflow_payload = _json_param(data.final_payload)
+            connection.execute(
+                "UPDATE experiment_workflow_steps SET status='completed',draft_payload=" + marker
+                + ",completed_at=" + marker + ",updated_at=" + marker
+                + " WHERE participation_id=" + marker + " AND current_run_id=" + marker,
+                (workflow_payload, timestamp, timestamp, assignment["participation_id"], data.run_id),
+            )
+        else:
+            connection.execute(
+                "UPDATE experiment_workflow_steps SET status='completed',completed_at=" + marker
+                + ",updated_at=" + marker
+                + " WHERE participation_id=" + marker + " AND current_run_id=" + marker,
+                (timestamp, timestamp, assignment["participation_id"], data.run_id),
+            )
         connection.execute(
             "UPDATE instrument_runs SET status='completed',completed_at=" + marker + " WHERE run_id=" + marker,
             (timestamp, data.run_id),
         )
-    return {"completed": True, "already_completed": False, "stage_code": data.stage_code}
+    return {"completed": True, "already_completed": False, "stage_code": data.stage_code,
+            "workflow_step_index": state["step_index"]}
 
 
 
