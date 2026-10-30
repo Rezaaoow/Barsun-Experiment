@@ -478,6 +478,86 @@ def test_admin_progress_and_questionnaire_csv(client, monkeypatch):
     assert all(row["condition_code"] == "B" and row["response_value"] == "5" for row in rows)
 
 
+def test_configured_workflow_repeats_modules_and_tracks_active_time(client, monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
+    headers = {"x-admin-token": "workflow-admin-token"}
+    configured = ["dd_lifetrade", "dd_lifetrade", "questionnaire"]
+    saved = client.put("/api/admin/workflow", headers=headers, json={"workflow": configured})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["workflow"] == configured
+
+    token = _create_assignment(client, monkeypatch, code="BS-WORKFLOW-REPEAT-01", condition="A")
+    opened = client.post("/api/experiment/activity/open", json={"invitation_token": token})
+    assert opened.status_code == 200, opened.text
+
+    identity = {"invitation_token": token, "participant_code": "BS-WORKFLOW-REPEAT-01"}
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    assert identified.json()["workflow"] == configured
+    assert identified.json()["current_step_index"] == 0
+    assert [step["step_index"] for step in identified.json()["workflow_steps"]] == [0, 1, 2]
+
+    first = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "dd_lifetrade", "workflow_step_index": 0},
+    )
+    assert first.status_code == 200, first.text
+    first_run = first.json()["run_id"]
+
+    blocked_second = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "dd_lifetrade", "workflow_step_index": 1},
+    )
+    assert blocked_second.status_code == 409
+
+    first_ping = client.post(
+        "/api/experiment/activity/ping",
+        json={**identity, "ping_id": "workflow-ping-step-0001", "run_id": first_run, "active_seconds": 20},
+    )
+    assert first_ping.status_code == 200, first_ping.text
+    completed_first = client.post(
+        "/api/experiment/stages/complete",
+        json={**identity, "stage_code": "dd_lifetrade", "workflow_step_index": 0, "run_id": first_run},
+    )
+    assert completed_first.status_code == 200, completed_first.text
+
+    second = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "dd_lifetrade", "workflow_step_index": 1},
+    )
+    assert second.status_code == 200, second.text
+    second_run = second.json()["run_id"]
+    second_ping = client.post(
+        "/api/experiment/activity/ping",
+        json={**identity, "ping_id": "workflow-ping-step-0002", "run_id": second_run, "active_seconds": 35},
+    )
+    assert second_ping.status_code == 200, second_ping.text
+    completed_second = client.post(
+        "/api/experiment/stages/complete",
+        json={**identity, "stage_code": "dd_lifetrade", "workflow_step_index": 1, "run_id": second_run},
+    )
+    assert completed_second.status_code == 200, completed_second.text
+
+    next_step = client.post("/api/experiment/identify", json=identity)
+    assert next_step.status_code == 200, next_step.text
+    assert next_step.json()["current_step_index"] == 2
+    assert next_step.json()["current_stage"] == "questionnaire"
+
+    progress = client.get("/api/admin/progress?scope=main", headers=headers)
+    assert progress.status_code == 200, progress.text
+    participant = next(row for row in progress.json() if row["participant_code"] == "BS-WORKFLOW-REPEAT-01")
+    assert participant["first_opened_at"]
+    assert participant["total_active_seconds"] == 55.0
+    assert participant["elapsed_seconds_since_first_open"] is not None
+    assert [step["stage_code"] for step in participant["workflow_steps"]] == configured
+    assert [step["active_seconds"] for step in participant["workflow_steps"]] == [20.0, 35.0, 0.0]
+    assert participant["workflow_steps"][0]["status"] == "completed"
+    assert participant["workflow_steps"][1]["status"] == "completed"
+    assert participant["workflow_steps"][2]["status"] == "not_started"
+    assert participant["module_times"] == [{"stage_code": "dd_lifetrade", "active_seconds": 55.0},
+                                            {"stage_code": "questionnaire", "active_seconds": 0.0}]
+
+
 def test_admin_test_scope_monitoring_and_exports(client, monkeypatch):
     # Create a main-study assignment and isolated test studies; each scope must stay separate.
     _create_assignment(client, monkeypatch, code="BS-MAIN-SCOPE-01", condition="A")
