@@ -1370,7 +1370,7 @@ def record_activity_ping(data: ActivityPingIn):
         if data.run_id:
             step = connection.execute(
                 "SELECT step_index FROM experiment_workflow_steps WHERE participation_id="
-                + marker + " AND current_run_id=" + marker + " AND status='in_progress'",
+                + marker + " AND current_run_id=" + marker,
                 (assignment["participation_id"], data.run_id),
             ).fetchone()
             if not step:
