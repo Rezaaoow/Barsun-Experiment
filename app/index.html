@@ -394,7 +394,7 @@ button{-webkit-tap-highlight-color:transparent}
 .welcome-panel,.ethics-panel{text-align:center;}
 .welcome-panel h1,.ethics-panel h1{text-align:center;}
 .welcome-panel>p,.ethics-panel>p{text-align:center;max-width:58ch;margin-inline:auto;}
-.welcome-steps{display:grid;gap:9px;width:100%;margin:20px 0 16px;text-align:right;}
+.welcome-steps{display:grid;gap:9px;width:100%;margin:20px 0 16px;padding:0;list-style:none;text-align:right;}
 .welcome-step{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e4e4e4;border-radius:13px;background:#fafafa;}
 .welcome-step>span{display:flex;align-items:center;justify-content:center;flex:0 0 32px;height:32px;border-radius:10px;background:#ededed;color:#222;font-size:.9rem;font-weight:800;}
 .welcome-step strong,.welcome-step small{display:block;}
@@ -735,18 +735,77 @@ button{-webkit-tap-highlight-color:transparent}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+@media(max-width:680px){
+ html,body{width:100%;min-height:100%;height:auto}
+ body{min-height:100dvh;display:block}
+ .screen,.screen.trial-screen{width:100%;height:auto;min-height:100dvh;max-height:none;overflow:visible;display:flex;align-items:stretch;justify-content:flex-start;padding:12px 10px max(18px,env(safe-area-inset-bottom))}
+ .screen.trial-screen{padding:8px 7px max(20px,env(safe-area-inset-bottom))}
+ .panel{width:100%;max-height:none;min-height:0;overflow:visible;padding:22px 17px;border-radius:18px}
+ .panel h1,#welcome h1,#finish h1{font-size:1.65rem;line-height:1.6;font-weight:900}
+ .panel p,#welcome p,#finish p{font-size:1.08rem;line-height:1.95;font-weight:650}
+ .field label,.consent-row,.field input,.field select{font-size:1.05rem}
+ .field input,.field select{min-height:56px}
+ .btn{width:100%;min-height:58px;padding:13px 16px;font-size:1.08rem;font-weight:850}
+ #stimulus{position:relative;inset:auto;width:100%;min-height:calc(100dvh - 16px);overflow:visible;display:flex;align-items:stretch;justify-content:flex-start;padding:8px 2px}
+ .instruction-screen,.interstitial-screen,.questionnaire-screen{width:100%;height:auto;min-height:calc(100dvh - 32px);max-height:none;overflow:visible;padding:19px 15px;border-radius:17px}
+ .instruction-progress,.step-count{font-size:1rem;font-weight:800}
+ .instruction-heading{font-size:1.55rem;line-height:1.65;font-weight:900}
+ .instruction-content,.instruction-content p{font-size:1.1rem;line-height:1.95;font-weight:650}
+ .instruction-content .hintline{font-size:1rem!important}
+ .page-actions{display:grid;grid-template-columns:1fr;gap:10px}
+ .page-actions .btn{width:100%;min-height:56px}
+ .questionnaire-screen{height:auto;min-height:calc(100dvh - 28px);padding:17px 13px}
+ .questionnaire-screen h2{font-size:1.2rem;line-height:1.8}
+ .questionnaire-meta{font-size:1rem;font-weight:800}
+ .questionnaire-statement{font-size:1.28rem;line-height:1.9;font-weight:850}
+ .questionnaire-question{overflow:visible}
+ .questionnaire-scale{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .scale-option{min-height:76px;padding:10px 8px}
+ .scale-number{font-size:1.35rem;font-weight:950}
+ .scale-label{font-size:1rem;line-height:1.6;font-weight:800}
+ .scale-na{grid-column:1/-1;min-height:58px;font-size:1rem;font-weight:850}
+ .questionnaire-actions{display:grid;grid-template-columns:1fr;gap:10px}
+ .questionnaire-actions .btn{min-height:56px;font-size:1.05rem}
+ .questionnaire-save-status{font-size:1rem;line-height:1.7}
+ .interstitial-screen .example-note{font-size:1rem!important;line-height:1.7!important}
+ .example-box{padding:14px 11px}
+ .example-choice{min-height:62px;padding:11px 8px;font-size:1rem}
+ .trial-stage{min-height:calc(100dvh - 20px);height:auto;justify-content:flex-start;gap:16px;padding:18px 6px}
+ .trial-question{font-size:1.35rem;line-height:1.65;font-weight:900}
+ .trial-layout{height:auto;min-height:0;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto auto;gap:9px}
+ .trial-layout .choice-card{height:auto;min-height:170px;padding:13px 8px;gap:10px}
+ .trial-layout .choice-amount{font-size:1.25rem;line-height:1.55}
+ .trial-layout .choice-detail{font-size:1rem;line-height:1.7}
+ .choice-question{font-size:1.05rem;font-weight:850;line-height:1.6}
+ .welcome-steps{gap:10px;margin:17px 0}
+ .welcome-step{padding:13px 12px;gap:12px;align-items:flex-start}
+ .welcome-step>span{flex-basis:36px;height:36px;font-size:1.05rem}
+ .welcome-step strong{font-size:1.08rem;line-height:1.6}
+ .welcome-step small{display:block;font-size:1rem;line-height:1.75;font-weight:650;margin-top:2px}
+ .welcome-note,#welcome-plan-status{font-size:1.02rem;line-height:1.8;font-weight:700}
+ .finish-actions{display:grid;grid-template-columns:1fr;gap:12px}
+ .finish-actions .btn{width:100%}
+ #screen small,#screen .small,#screen .eyebrow,#screen .hint,#screen .hintline,#screen .status,#screen .field label,#screen .consent-row,#screen .welcome-step strong,#screen .welcome-step small,#screen .welcome-note,#screen .instruction-progress,#screen .step-count,#screen .instruction-content .hintline,#screen .continue-note,#screen .example-note,#screen .example-title,#screen .example-choice,#screen .example-choice strong,#screen .example-callout,#screen .example-or,#screen .choice-label,#screen .choice-question,#screen .choice-detail,#screen .trial-instruction,#screen .intro-scale-title,#screen .intro-scale-item span,#screen .intro-scale-na,#screen .questionnaire-meta,#screen .scale-option .scale-number,#screen .scale-option .scale-label,#screen .scale-label,#screen .scale-na,#screen .questionnaire-save-status,#screen .questionnaire-actions .btn,#screen .instruction-example-page .instruction-progress,#screen .instruction-example-page .instruction-content>p:not(.instruction-explanation),#screen .instruction-example-page .example-title,#screen .instruction-example-page .example-choice,#screen .instruction-example-page .example-choice strong,#screen .finish-actions .participant-code-label,#screen .participant-code-label,#screen .participant-code-warning,#screen .ut-score,#screen .ut-total,#screen .ut-copy.small,#screen .ut-progress,#screen .ut-opponent-label,#screen .ut-summary-metric-label,#screen .ut-result-note,#screen .ut-ticks,#screen .ut-bubble,#screen .ut-summary-label,#screen .ut-rolebox span,#screen .ut-share{font-size:1rem!important;line-height:1.75!important}
+}
+@media(max-height:520px) and (orientation:landscape) and (max-width:900px){
+ .screen,.screen.trial-screen{height:auto;min-height:100dvh;overflow:visible;align-items:stretch;padding:6px 8px}
+ #stimulus{position:relative;inset:auto;width:100%;min-height:100dvh;overflow:visible}
+ .instruction-screen,.interstitial-screen,.questionnaire-screen{height:auto;min-height:calc(100dvh - 12px);max-height:none;overflow:visible;padding:12px 14px}
+ .panel{max-height:none;overflow:visible;padding:15px 18px}
+ .trial-stage{height:auto;min-height:calc(100dvh - 12px);padding:10px 6px}
+ .trial-layout .choice-card{min-height:112px}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
   <p class="eyebrow">پژوهش میدانی بارسان</p>
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <p>در این برنامه، بر اساس روندی که برای شما در نظر گرفته شده، یک یا چند بخش کوتاه شامل پرسشنامه، تکلیف تصمیم‌گیری یا بازی تعاملی را انجام خواهید داد.</p>
-  <div class="welcome-steps" aria-label="مراحل برنامه">
-    <div class="welcome-step"><span>۱</span><div><strong>پرسشنامه</strong><small>تجربه و دیدگاه‌های شما</small></div></div>
-    <div class="welcome-step"><span>۲</span><div><strong>تکلیف تصمیم‌گیری</strong><small>انتخاب بین دو گزینه</small></div></div>
-    <div class="welcome-step"><span>۳</span><div><strong>بازی تعاملی</strong><small>تصمیم‌گیری در یک موقعیت ساده</small></div></div>
-  </div>
-  <p class="welcome-note">لطفاً مراحل را به‌ترتیب انجام دهید و در صورت امکان برنامه را در یک نوبت کامل کنید.</p>
+  <p>بخش‌های برنامهٔ شما در ادامه، دقیقاً به همان ترتیبی که نمایش داده شده‌اند اجرا می‌شوند.</p>
+  <ol class="welcome-steps" id="welcome-steps" aria-label="ترتیب ماژول‌های آزمایش">
+    <li class="welcome-step welcome-loading">در حال دریافت ترتیب ماژول‌های اختصاصی شما…</li>
+  </ol>
+  <p class="welcome-note" id="welcome-plan-status" role="status" aria-live="polite">ترتیب ماژول‌ها در حال بارگذاری است.</p>
   <button class="btn" id="welcome-continue" type="button">مطالعهٔ توضیحات و ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
@@ -773,7 +832,7 @@ button{-webkit-tap-highlight-color:transparent}
 <section class="panel hidden" id="finish" dir="rtl">
 <h1>ممنون از وقتی که گذاشتید.</h1>
 <p>پاسخ‌های شما ثبت شده‌اند. کد شرکت‌کنندهٔ شما در پایین نمایش داده می‌شود.</p>
-<div class="finish-actions"><p id="participant-code" class="hint"></p><button class="btn" id="close">خروج از حالت تمام‌صفحه</button></div>
+<div class="finish-actions"><p id="participant-code" class="hint"></p><button class="btn" id="close" type="button">پایان و بستن برگه</button></div>
 </section>
 <div class="status hidden" id="status"></div></main>
 <script>
@@ -1052,7 +1111,9 @@ async function api(path, body){
  const url=APP_BASE_PATH+(path.startsWith('/')?path:'/'+path);
  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'});
  if(!res.ok){
-  const error=new Error('Server save failed ('+res.status+')');
+  let detail='';
+  try{const errorBody=await res.json();detail=errorBody.detail||errorBody.message||'';}catch(_){}
+  const error=new Error(detail?String(detail):'درخواست به سرور ناموفق بود ('+res.status+').');
   error.status=res.status;
   throw error;
  }
@@ -1301,7 +1362,7 @@ async function startLegacyExperiment(){
   sessionId=created.session_id;
   participantCode=created.participant_code;
   participant={participant:participantCode,session:sessionId,date:nowISO()};
-  if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});
+
   // Independently randomize order for each new run. Either order may legitimately repeat.
   const taskOrder=shuffle(['LT','KT']);
   for(let i=0;i<taskOrder.length;i++){
@@ -1351,6 +1412,28 @@ async function startLegacyExperiment(){
  }
 }
 
+function exitExperiment(event){
+ const activeButton=event&&event.currentTarget&&event.currentTarget.tagName==='BUTTON'
+  ?event.currentTarget:$('close');
+ const paragraph=activeButton.id==='close'
+  ?$('finish').querySelector('p')
+  :(activeButton.closest('.ut-card')?.querySelector('.ut-copy')||null);
+ activeButton.disabled=true;activeButton.textContent='در حال خروج…';
+ try{
+  if(workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}
+  if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});
+  if(window.history&&window.history.replaceState)window.history.replaceState(null,'',window.location.pathname);
+  document.title='پایان آزمایش بارسان';
+  window.close();
+ }catch(error){console.warn('Browser prevented closing this tab',error);}
+ window.setTimeout(()=>{
+  if(!document.hidden){
+   activeButton.disabled=false;activeButton.textContent='پایان';
+   if(paragraph)paragraph.textContent='آزمایش شما پایان یافته است. مرورگر اجازهٔ بستن خودکار این برگه را نمی‌دهد؛ لطفاً این برگه را ببندید.';
+  }
+ },250);
+}
+
 function workflowMessage(title, paragraphs, buttonLabel='بازگشت به پایان'){
  showPanel('finish');
  const h=$('finish').querySelector('h1');
@@ -1360,7 +1443,7 @@ function workflowMessage(title, paragraphs, buttonLabel='بازگشت به پا�
  renderParticipantCode(workflow.participantCode||participantCode||'');
  const close=$('close');
  close.textContent=buttonLabel;
- close.onclick=()=>{showPanel('welcome');close.onclick=()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})};};
+ close.onclick=()=>{if(buttonLabel==='پایان'){exitExperiment();}else{showPanel('welcome');}};
 }
 
 function countAnswered(answers){
@@ -1757,7 +1840,7 @@ async function beginParticipantFlow(){
   }
  }catch(error){
   console.error(error);
-  codeError.textContent='کد شرکت‌کننده یا لینک اختصاصی معتبر نیست، یا اتصال به سرور برقرار نشد. کد و لینک دریافت‌شده را بررسی کنید.';
+  codeError.textContent=(error&&error.message?String(error.message):'شروع آزمایش ناموفق بود.')+' اگر مشکل ادامه داشت، از مسئول پژوهش کمک بگیرید.';
   codeError.classList.remove('hidden');
  }finally{
   startButton.disabled=false;startButton.textContent=original;
@@ -1782,7 +1865,7 @@ async function startAssignedDDStage(){
  try{
   try{await recoverOrphanedPendingQueues()}catch(error){error.pendingRecovery=true;throw error}
   show();
-  if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen().catch(()=>{});
+
   const taskOrder=shuffle(['LT','KT']);
   for(let i=0;i<taskOrder.length;i++){
    if(stopped)break;
@@ -1836,10 +1919,42 @@ async function startAssignedDDStage(){
 }
 
 
+async function loadWelcomeWorkflow(){
+ const list=$('welcome-steps'),status=$('welcome-plan-status');
+ if(!workflow.invitationToken){
+  list.replaceChildren();status.textContent='برای مشاهدهٔ برنامهٔ اختصاصی، از لینک دعوتی که برای شما ارسال شده وارد شوید.';return;
+ }
+ try{
+  const url=APP_BASE_PATH+'/api/experiment/workflow?invite='+encodeURIComponent(workflow.invitationToken);
+  const response=await fetch(url,{method:'GET',cache:'no-store',headers:{'Accept':'application/json'}});
+  let payload={};try{payload=await response.json();}catch(_){}
+  if(!response.ok)throw new Error(payload.detail||'دریافت برنامهٔ اختصاصی ناموفق بود.');
+  const steps=Array.isArray(payload.steps)?payload.steps:[];
+  if(!steps.length)throw new Error('برای این لینک هنوز ماژولی تعریف نشده است. با مسئول پژوهش تماس بگیرید.');
+  list.replaceChildren();
+  steps.forEach((step,index)=>{
+   const item=document.createElement('li');item.className='welcome-step';
+   const number=document.createElement('span');number.textContent=String(index+1).toLocaleString('fa-IR');
+   const content=document.createElement('div');content.className='welcome-step-content';
+   const title=document.createElement('strong');
+   const repeated=Number(step.repeat_total)>1;
+   title.textContent=String(step.title||step.module_code||'ماژول')+(repeated?' · نوبت '+String(step.repeat_number).toLocaleString('fa-IR')+' از '+String(step.repeat_total).toLocaleString('fa-IR'):'');
+   const description=document.createElement('small');description.textContent=step.description||'';
+   content.append(title,description);item.append(number,content);list.appendChild(item);
+  });
+  status.textContent=String(payload.total_steps||steps.length).toLocaleString('fa-IR')+' مرحله برای شما در نظر گرفته شده است. مراحل به همین ترتیب اجرا می‌شوند.';
+ }catch(error){
+  list.replaceChildren();
+  const item=document.createElement('li');item.className='welcome-step welcome-plan-error';
+  item.textContent='برنامهٔ این لینک بارگذاری نشد. لطفاً اتصال را بررسی کنید یا لینک را از مسئول پژوهش دوباره دریافت کنید.';
+  list.appendChild(item);status.textContent=error.message||'خطا در دریافت برنامهٔ آزمایش.';
+ }
+}
+loadWelcomeWorkflow();
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
 $('start').addEventListener('click',beginParticipantFlow);
-$('close').addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})});
+$('close').onclick=exitExperiment;
 </script><script>
 /* BarSan Ultimatum Game. All opponent decisions and offers are sampled on the server. */
 const utCss = [
@@ -2466,6 +2581,8 @@ async function utFinishUltimatum() {
    utButton(actions,"ادامه به مرحله بعد",function(){advanceWorkflowStep();},"");
   }else{
    utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+   const actions=utNode("div","ut-actions");end.body.appendChild(actions);
+   utButton(actions,"پایان و بستن برگه",exitExperiment,"");
   }
  } catch(error) {
   console.error(error);

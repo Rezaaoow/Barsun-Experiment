@@ -304,3 +304,62 @@ def test_preexisting_default_links_are_compatible_with_active_time_tracking(clie
     assert monitor.status_code == 200, monitor.text
     row = next(item for item in monitor.json() if item["participant_code"] == "LEGACY-TIME-001")
     assert row["module_time_seconds"]["questionnaire"] > 0
+
+
+
+def test_public_welcome_outline_matches_invite_workflow_and_hides_participant_data(client):
+    steps = [
+        {"step_id": "welcome-q", "module_code": "questionnaire"},
+        {"step_id": "welcome-dd-one", "module_code": "dd_lifetrade"},
+        {"step_id": "welcome-dd-two", "module_code": "dd_lifetrade"},
+        {"step_id": "welcome-ult", "module_code": "ultimatum"},
+    ]
+    link, _identity = create_workflow_assignment(
+        client, steps, code="WELCOME-PLAN-001"
+    )
+    invite = token_from_link(link)
+    response = client.get(
+        "/api/experiment/workflow",
+        params={"invite": invite},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["total_steps"] == 4
+    assert [step["module_code"] for step in payload["steps"]] == [
+        "questionnaire", "dd_lifetrade", "dd_lifetrade", "ultimatum"
+    ]
+    assert payload["steps"][1]["repeat_number"] == 1
+    assert payload["steps"][1]["repeat_total"] == 2
+    assert payload["steps"][2]["repeat_number"] == 2
+    assert payload["steps"][2]["repeat_total"] == 2
+    assert payload["steps"][0]["title"] == "پرسشنامه"
+    assert payload["steps"][3]["title"] == "بازی اولتیماتوم"
+    assert "participant_code" not in payload
+    assert "condition_code" not in payload
+    assert "study_code" not in payload
+
+
+def test_public_welcome_outline_rejects_invalid_or_inactive_invites(client):
+    invalid = client.get(
+        "/api/experiment/workflow",
+        params={"invite": "not-a-valid-invitation-token"},
+    )
+    assert invalid.status_code == 404
+    assert invalid.json()["detail"]
+
+    link, _identity = create_workflow_assignment(
+        client,
+        [{"step_id": "welcome-only", "module_code": "questionnaire"}],
+        code="WELCOME-INACTIVE-001",
+    )
+    invite = token_from_link(link)
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_assignments SET active=0 WHERE invitation_token_hash=?",
+            (main.hashlib.sha256(invite.encode("utf-8")).hexdigest(),),
+        )
+    inactive = client.get(
+        "/api/experiment/workflow",
+        params={"invite": invite},
+    )
+    assert inactive.status_code == 404
