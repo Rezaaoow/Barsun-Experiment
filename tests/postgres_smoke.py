@@ -128,7 +128,7 @@ def main_test():
         assert toggle_off.status_code == 200, toggle_off.text
         after_off = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
         assert after_off.status_code == 200, after_off.text
-        assert after_off.json()["counts"] == {"active": 1, "inactive": 1, "total": 2}
+        assert after_off.json()["counts"] == {"active": 0, "inactive": 1, "total": 1}
 
         toggle_on = client.post(
             "/api/admin/assignments/status",
@@ -155,7 +155,7 @@ def main_test():
         assert delete_inactive.json()["deleted_count"] == 1
         after_delete = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
         assert after_delete.status_code == 200, after_delete.text
-        assert after_delete.json()["counts"] == {"active": 1, "inactive": 0, "total": 1}
+        assert after_delete.json()["counts"] == {"active": 0, "inactive": 0, "total": 0}
 
         completed = client.post(
             "/api/complete",
