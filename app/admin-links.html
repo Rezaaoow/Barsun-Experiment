@@ -98,6 +98,70 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
 @media(max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){body{padding:13px 9px 30px}header{display:block}.header-mark{display:inline-block;margin-top:12px}.grid,.grid-3,.module-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border-radius:16px}.export-grid{grid-template-columns:1fr}.card-head{display:block}.card-head .actions{margin-top:10px}}
+
+/* Configurable workflow builder */
+.workflow-builder{margin:16px 0 20px;padding:16px;border:1px solid #dfe7f2;border-radius:18px;background:linear-gradient(145deg,#f9fbff,#f4f7fc)}
+.workflow-builder-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.workflow-builder-head h3{font-size:1.08rem;font-weight:900;margin:0 0 4px}
+.workflow-builder-head p{margin:0;color:#65738a;font-size:.88rem;line-height:1.8}
+.workflow-builder-grid{display:grid;grid-template-columns:minmax(220px,.78fr) minmax(0,1.5fr);gap:14px}
+.workflow-palette,.workflow-timeline-panel{min-width:0;border:1px solid #e2e8f2;border-radius:14px;background:#fff;padding:13px}
+.workflow-section-title{font-size:.91rem;font-weight:900;color:#304461;margin-bottom:9px}
+.workflow-palette-items{display:grid;gap:8px}
+.workflow-module-chip{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px 11px;border:1px solid #dce5f2;border-radius:12px;background:#f9fbff;cursor:grab;user-select:none}
+.workflow-module-chip strong{font-size:.91rem;font-weight:850;color:#243d62}
+.workflow-module-chip span{font-size:.75rem;color:#71819a}
+.workflow-module-chip button{min-height:38px;padding:5px 11px;font-size:.8rem;white-space:nowrap}
+.workflow-dropzone{min-height:142px;padding:10px;border:2px dashed #c7d5e8;border-radius:13px;background:#fbfdff;transition:background .12s,border-color .12s}
+.workflow-dropzone.drag-over{background:#edf4ff;border-color:#5d83c4}
+.workflow-empty{text-align:center;color:#8190a5;font-size:.87rem;padding:27px 10px;line-height:1.9}
+.workflow-steps{display:grid;gap:8px}
+.workflow-step{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px;border:1px solid #dfe7f1;border-radius:12px;background:#fff}
+.workflow-step.dragging{opacity:.45;border-style:dashed}
+.workflow-step-number{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:#eaf0fb;color:#2c528c;font-size:.9rem;font-weight:900;font-variant-numeric:tabular-nums}
+.workflow-step-main{min-width:0}
+.workflow-step-main strong{display:block;font-size:.91rem;font-weight:900;color:#253c60}
+.workflow-step-main small{display:block;color:#78869b;font-size:.74rem;margin-top:2px;direction:ltr;text-align:right}
+.workflow-step-actions{display:flex;gap:5px;align-items:center}
+.workflow-step-actions button{min-height:34px;min-width:36px;padding:4px 8px;font-size:.78rem}
+.workflow-step-actions .remove-step{background:#fff2ef;color:#9d3328;border-color:#f0d0ca}
+.workflow-builder-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.workflow-save-state{font-size:.82rem;color:#697991;line-height:1.7}
+.workflow-save-state.dirty{color:#99601c;font-weight:800}
+.workflow-save-state.saved{color:#207044;font-weight:800}
+.workflow-count{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:#edf3ff;color:#365a91;padding:5px 10px;font-size:.78rem;font-weight:850}
+.workflow-timeline-tip{margin-top:9px;color:#77869b;font-size:.77rem;line-height:1.8}
+.workflow-admin-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.workflow-save-button{min-width:150px}
+.workflow-step-pill{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border-radius:10px;background:#f1f5fb;border:1px solid #e0e8f2;font-size:.8rem;font-weight:800}
+.workflow-step-pill small{font-size:.72rem;color:#677891;font-weight:700}
+.progress-workflow-cell{display:flex;flex-wrap:wrap;gap:6px;max-width:560px;white-space:normal}
+.progress-time{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:plaintext;font-weight:850;color:#284875}
+.progress-time-summary{font-size:.9rem;line-height:1.8;white-space:normal;min-width:100px}
+.progress-opened{font-size:.78rem;color:#78869b;line-height:1.65;white-space:normal}
+.link-manager-toolbar{display:grid;grid-template-columns:minmax(170px,1fr) minmax(160px,.7fr) auto;gap:10px;align-items:end}
+.link-manager-toolbar .field{margin:0}
+.link-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px;border:1px solid #e2e8f1;border-radius:13px;background:#f8faff;margin-top:10px}
+.link-bulk-actions button{min-height:40px;font-size:.85rem}
+.link-bulk-actions .danger{margin-right:auto}
+.link-manager-toolbar .actions{margin:0;display:flex;gap:8px}
+.link-manager-toolbar .actions button{white-space:nowrap}
+@media(max-width:760px){
+ .workflow-builder-grid{grid-template-columns:1fr}
+ .workflow-palette-items{grid-template-columns:1fr}
+ .workflow-step{grid-template-columns:32px minmax(0,1fr)}
+ .workflow-step-actions{grid-column:2;justify-content:flex-start}
+ .workflow-step-actions button{min-width:40px}
+ .workflow-builder-head{display:block}
+ .workflow-builder-footer{align-items:stretch}
+ .workflow-admin-actions{width:100%}
+ .workflow-save-button{flex:1}
+ .link-manager-toolbar{grid-template-columns:1fr}
+ .link-manager-toolbar .actions{display:grid;grid-template-columns:1fr 1fr}
+ .link-bulk-actions{align-items:stretch}
+ .link-bulk-actions button{flex:1 1 45%}
+ .link-bulk-actions .danger{margin-right:0;flex-basis:100%}
+}
 </style>
 </head>
 <body>
@@ -151,8 +215,44 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </section>
 
 <section class="card" aria-labelledby="linkTitle">
-<h2 id="linkTitle">۲. ساخت لینک اختصاصی کارکنان</h2>
-<p class="hint">یک کد در هر خط بنویس یا فایل CSV بارگذاری کن. قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
+<h2 id="linkTitle">۲. روند آزمایش و ساخت لینک</h2>
+<p class="hint">ابتدا ترتیب ماژول‌های آزمایش را در تایم‌لاین مشخص کن. می‌توانی هر ماژول را چند بار اضافه کنی و بعد از ذخیره، همان روند برای همهٔ لینک‌های جدید کارکنان استفاده می‌شود. لینک‌های ساخته‌شدهٔ قبلی روند خودشان را حفظ می‌کنند.</p>
+<div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
+ <div class="workflow-builder-head">
+  <div>
+   <h3 id="workflowBuilderTitle">طراحی روند آزمایش</h3>
+   <p>ماژول‌ها را بکش و در تایم‌لاین رها کن؛ یا با دکمهٔ «افزودن» وارد روند کن. تکرار ماژول‌ها آزاد است.</p>
+  </div>
+  <span class="workflow-count"><span id="workflowStepCount">۰</span> جایگاه در روند</span>
+ </div>
+ <div class="workflow-builder-grid">
+  <div class="workflow-palette">
+   <div class="workflow-section-title">ماژول‌های در دسترس</div>
+   <div class="workflow-palette-items" id="workflowPalette">
+    <div class="workflow-module-chip" draggable="true" data-module="questionnaire"><div><strong>پرسشنامه</strong><span>Questionnaire</span></div><button type="button" class="tertiary" data-add-module="questionnaire">افزودن</button></div>
+    <div class="workflow-module-chip" draggable="true" data-module="dd_lifetrade"><div><strong>DD / Life-Trade</strong><span>Delay Discounting</span></div><button type="button" class="tertiary" data-add-module="dd_lifetrade">افزودن</button></div>
+    <div class="workflow-module-chip" draggable="true" data-module="ultimatum"><div><strong>بازی اولتیماتوم</strong><span>Ultimatum Game</span></div><button type="button" class="tertiary" data-add-module="ultimatum">افزودن</button></div>
+   </div>
+   <p class="workflow-timeline-tip">با هر بار افزودن، یک جایگاه مستقل ساخته می‌شود. مثلاً می‌توانی پرسشنامه را در ابتدای روند و دوباره در انتهای آن قرار بدهی.</p>
+  </div>
+  <div class="workflow-timeline-panel">
+   <div class="workflow-section-title">تایم‌لاین اجرای آزمایش</div>
+   <div id="workflowDropzone" class="workflow-dropzone" aria-label="تایم‌لاین روند آزمایش">
+    <div id="workflowSteps" class="workflow-steps"></div>
+    <div id="workflowEmpty" class="workflow-empty">ماژول‌ها را از سمت راست/بالا به اینجا اضافه کن.<br>ترتیب کارت‌ها، ترتیب اجرای آزمایش است.</div>
+   </div>
+   <div class="workflow-builder-footer">
+    <span id="workflowSaveState" class="workflow-save-state">در حال بارگذاری روند ذخیره‌شده…</span>
+    <div class="workflow-admin-actions">
+     <button id="clearWorkflow" type="button" class="secondary">خالی‌کردن تایم‌لاین</button>
+     <button id="saveWorkflow" type="button" class="workflow-save-button">ذخیرهٔ روند آزمایش</button>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+<p class="hint">پس از ذخیرهٔ روند، کد کارکنان را وارد یا CSV را بارگذاری کن و گروه پیش‌فرض را تعیین کن. گروه هر ردیف در CSV در صورت وجود بر گروه پیش‌فرض اولویت دارد.</p>
+<p class="hint">یک کد در هر خط بنویس یا فایل CSV بارگذاری کن. قالب پذیرفته‌شده: قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
 <div class="grid">
 <div class="field">
 <label for="defaultGroup">گروه پیش‌فرض</label>
