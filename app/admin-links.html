@@ -88,8 +88,6 @@ a{color:#245fc0;overflow-wrap:anywhere}
 .link-state{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;font-weight:800;font-size:.76rem}
 .link-state.active{background:#e9f8ef;color:#217044}.link-state.inactive{background:#fff1e9;color:#98501e}
 .link-state::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.link-row-actions{display:flex;gap:6px;align-items:center}
-.link-row-actions button{min-height:32px;padding:5px 9px;font-size:.78rem;white-space:nowrap}
 .link-manager-note{padding:11px 13px;border:1px solid #dce6f6;background:#f5f8ff;border-radius:12px;color:#4e607e;font-size:.83rem;line-height:1.9;margin:12px 0}
 .link-selection{display:inline-flex;align-items:center;gap:7px;font-size:.83rem;color:#56647a;font-weight:650}
 .link-selection input{width:auto}
@@ -123,8 +121,6 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 .workflow-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
 .workflow-note{margin:10px 0 0}
 .link-manager-tools .actions{gap:8px}
-.link-row-actions{flex-wrap:wrap}
-.link-row-actions button{min-height:40px;padding:7px 11px;font-size:.85rem}
 .link-manager-note{font-size:.91rem}
 @media(max-width:680px){
  body{font-size:17px}
@@ -146,9 +142,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  .link-manager-tools .field{min-width:100%}
  .link-manager-tools .actions{width:100%;display:grid;grid-template-columns:1fr}
  .link-manager-tools .actions button{width:100%}
- .link-row-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
- .link-row-actions button{min-height:45px;font-size:.9rem}
- .link-count-label,.kpi-label{font-size:.9rem}
+  .link-count-label,.kpi-label{font-size:.9rem}
  .kpi-value{font-size:2rem}
  table{font-size:.95rem}
  th,td{padding:13px 11px}
@@ -450,7 +444,8 @@ function csvToTextarea(text){
   const row=dataRows[i];const code=String(row[cIdx]||"").trim();
   if(!code)continue;
   const group=String(row[gIdx]||"").trim();
-  lines.push(group?code+","+groupLabel(group):code);
+  if(!group)throw new Error("گروه شرکت‌کننده در ردیف "+(i+1)+" خالی است؛ هر ردیف باید Frame یا Control داشته باشد.");
+  lines.push(code+","+groupLabel(group));
  }
  if(!lines.length)throw new Error("ستون کد شرکت‌کننده در فایل پیدا نشد یا داده‌ای در آن نیست.");
  $("codes").value=lines.join("\n");
