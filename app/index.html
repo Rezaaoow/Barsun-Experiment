@@ -734,6 +734,11 @@ const workflow = {
  questionIndex:0,
  questionnaireStageState:null,
  currentStage:null,
+ currentStepIndex:0,
+ workflowTemplate:['questionnaire','dd_lifetrade','ultimatum'],
+ workflowSteps:[],
+ activeRunId:null,
+ activityTimer:null,
  stagedRunId:null,
  testModuleOnly:null
 };
@@ -994,6 +999,56 @@ async function api(path, body){
   throw error;
  }
  return res.json();
+}
+if(invitationToken){
+ api('/api/experiment/activity/open',{invitation_token:invitationToken})
+  .catch(error=>console.warn('Invitation open time was not saved',error));
+}
+
+function startParticipantActivityTracking(){
+ if(workflow.activityTimer)clearInterval(workflow.activityTimer);
+ let previous=performance.now();
+ workflow.activityTimer=setInterval(()=>{
+  const current=performance.now();
+  const delta=Math.min(60,Math.max(0,(current-previous)/1000));
+  previous=current;
+  if(document.hidden||!workflow.participantCode||!workflow.invitationToken||delta<=0)return;
+  const pingId=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():
+   ("ping-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+  api('/api/experiment/activity/ping',{
+   invitation_token:workflow.invitationToken,
+   participant_code:workflow.participantCode,
+   ping_id:pingId,
+   run_id:workflow.activeRunId||null,
+   active_seconds:delta
+  }).catch(error=>console.warn('Activity time ping was not saved',error));
+ },15000);
+ document.addEventListener('visibilitychange',()=>{previous=performance.now();});
+}
+async function launchWorkflowStep(index){
+ if(!Number.isInteger(index)||index<0||index>=workflow.workflowTemplate.length){
+  workflow.activeRunId=null;
+  workflowMessage('ممنون از وقتی که گذاشتید','تمام مراحل برنامهٔ انتخاب‌شده برای شما به پایان رسیده است.','پایان');
+  return;
+ }
+ workflow.currentStepIndex=index;
+ workflow.currentStage=workflow.workflowTemplate[index];
+ if(workflow.currentStage==='questionnaire')showQuestionnaireIntro(0);
+ else if(workflow.currentStage==='dd_lifetrade')await startAssignedDDStage(index);
+ else if(workflow.currentStage==='ultimatum')await startUltimatumInstructions(index);
+}
+async function continueWorkflow(){
+ workflow.activeRunId=null;
+ const nextIndex=workflow.currentStepIndex+1;
+ if(nextIndex<workflow.workflowTemplate.length){
+  await launchWorkflowStep(nextIndex);
+ }else{
+  workflowMessage('ممنون از وقتی که گذاشتید','تمام مراحل برنامهٔ انتخاب‌شده برای شما به پایان رسیده است.','پایان');
+ }
+}
+function workflowStepsCompletedLocally(){
+ const row=workflow.workflowSteps.find(step=>Number(step.step_index)===workflow.currentStepIndex);
+ if(row)row.status='completed';
 }
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function utApiWithRetry(path,payload,attempts=4){
@@ -1331,7 +1386,8 @@ async function startQuestionnaireRun(button){
   const started=await api('/api/experiment/stages/start',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:'questionnaire'
+   stage_code:'questionnaire',
+   workflow_step_index:workflow.currentStepIndex
   });
   workflow.stageRunId=started.run_id;
   const serverDraft=started.draft_payload||{};
@@ -1382,6 +1438,7 @@ async function chooseQuestionnaireAnswer(item,index,value){
   await api('/api/experiment/questionnaire/answer',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
+   workflow_step_index:workflow.currentStepIndex,
    run_id:workflow.stageRunId,
    question_code:item.code,
    response_value:value,
@@ -1405,6 +1462,7 @@ async function saveQuestionnairePosition(index){
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   stage_code:'questionnaire',
+  workflow_step_index:workflow.currentStepIndex,
   run_id:workflow.stageRunId,
   draft_payload:{
    answers:{...workflow.questionnaireAnswers},
@@ -1503,6 +1561,7 @@ async function completeQuestionnaire(){
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    stage_code:'questionnaire',
+   workflow_step_index:workflow.currentStepIndex,
    run_id:workflow.stageRunId,
    final_payload:{
     schema_version:1,
@@ -1510,12 +1569,8 @@ async function completeQuestionnaire(){
     question_order:QUESTIONNAIRE_ITEMS.map(question=>question.code)
    }
   });
-  workflow.currentStage='dd_lifetrade';
-  if(workflow.testModuleOnly==='questionnaire'){
-   workflowMessage('تست پرسشنامه تکمیل شد','پاسخ‌های این ماژول در محدودهٔ داده‌های تست ثبت شده‌اند. این لینک به ماژول دیگری وارد نمی‌شود.','پایان');
-   return;
-  }
-  await startAssignedDDStage();
+  workflowStepsCompletedLocally();
+  await continueWorkflow();
  }catch(error){
   if(next){next.disabled=false;next.textContent='تلاش دوباره برای ثبت';}
   if(prev)prev.disabled=false;
@@ -1584,13 +1639,16 @@ async function beginParticipantFlow(){
  }
 }
 
-async function startAssignedDDStage(){
+async function startAssignedDDStage(stepIndex=workflow.currentStepIndex){
  const started=await api('/api/experiment/stages/start',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
-  stage_code:'dd_lifetrade'
+  stage_code:'dd_lifetrade',
+  workflow_step_index:stepIndex
  });
  workflow.stagedRunId=started.run_id;
+ workflow.activeRunId=started.run_id;
+ workflow.currentStepIndex=stepIndex;
  sessionId=started.run_id;
  participantCode=workflow.participantCode;
  participant={participant:participantCode,session:sessionId,date:nowISO()};
@@ -1620,14 +1678,11 @@ async function startAssignedDDStage(){
     invitation_token:workflow.invitationToken,
     participant_code:workflow.participantCode,
     stage_code:'dd_lifetrade',
+    workflow_step_index:stepIndex,
     run_id:sessionId
    });
-   if(workflow.testModuleOnly==='dd_lifetrade'){
-    workflowMessage('تست Life-Trade تکمیل شد','این لینک فقط برای تست همین ماژول ساخته شده است؛ داده‌ها در محدودهٔ تست باقی مانده‌اند.','پایان');
-    return;
-   }
-   workflow.currentStage='ultimatum';
-   await startUltimatumInstructions();
+   workflowStepsCompletedLocally();
+   await continueWorkflow();
   }else{
    await flushPending();
    await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
@@ -1828,20 +1883,24 @@ function utShowError(message,retry) {
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"تلاش دوباره",retry,"");
 }
-async function startUltimatumInstructions() {
+async function startUltimatumInstructions(stepIndex=workflow.currentStepIndex) {
  try {
   show();
   setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
   const started=await api("/api/experiment/stages/start",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:"ultimatum"
+   stage_code:"ultimatum",
+   workflow_step_index:stepIndex
   });
   if(started.already_completed) {
    workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، مراحل آزمایش برای این کد کامل شده‌اند.","بازگشت");
    return;
   }
+  workflow.currentStepIndex=stepIndex;
+  workflow.activeRunId=started.run_id;
   ultimatumState={
+   workflowStepIndex:stepIndex,
    runId:started.run_id,
    score:0,
    totalPotentialLost:0,
