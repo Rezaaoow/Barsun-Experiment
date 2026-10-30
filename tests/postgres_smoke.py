@@ -66,8 +66,28 @@ def main_test():
         # tuple alongside a literal LIKE pattern containing '%' previously raised a
         # psycopg formatting error, so all scope-specific admin queries are checked here.
         admin_headers = {"x-admin-token": "ci-admin-token"}
+        configured_workflow = ["dd_lifetrade", "dd_lifetrade", "questionnaire"]
+        workflow_saved = client.put(
+            "/api/admin/workflow",
+            headers=admin_headers,
+            json={"workflow": configured_workflow},
+        )
+        assert workflow_saved.status_code == 200, workflow_saved.text
+
         test_links = client.post("/api/admin/test-links", headers=admin_headers)
         assert test_links.status_code == 200, test_links.text
+        full_test_token = test_links.json()["assignments"][0]["invitation_url"].split("invite=", 1)[1].split("&", 1)[0]
+        full_test_consent = client.post(
+            "/api/experiment/consent",
+            json={"invitation_token": full_test_token, "participant_code": "TEST", "accepted": True},
+        )
+        assert full_test_consent.status_code == 200, full_test_consent.text
+        full_test_identity = client.post(
+            "/api/experiment/identify",
+            json={"invitation_token": full_test_token, "participant_code": "TEST"},
+        )
+        assert full_test_identity.status_code == 200, full_test_identity.text
+        assert full_test_identity.json()["workflow"] == configured_workflow
 
         test_progress = client.get("/api/admin/progress?scope=test", headers=admin_headers)
         assert test_progress.status_code == 200, test_progress.text
@@ -93,14 +113,6 @@ def main_test():
             assert {"questionnaire.csv", "lifetrade.csv", "ultimatum.csv", "participant_progress.csv", "README.txt"} <= set(archive.namelist())
 
         # Configurable workflow, repeated module instances and active-time aggregation on PostgreSQL.
-        configured_workflow = ["dd_lifetrade", "dd_lifetrade", "questionnaire"]
-        workflow_saved = client.put(
-            "/api/admin/workflow",
-            headers=admin_headers,
-            json={"workflow": configured_workflow},
-        )
-        assert workflow_saved.status_code == 200, workflow_saved.text
-
         assignment_response = client.post(
             "/api/admin/assignments",
             headers=admin_headers,
