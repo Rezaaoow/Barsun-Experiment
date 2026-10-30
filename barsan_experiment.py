@@ -672,6 +672,10 @@ class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
 
 
+class WorkflowConfigIn(BaseModel):
+    workflow: list[StageCode] = Field(min_length=1, max_length=40)
+
+
 class AssignmentStatusBatchIn(BaseModel):
     scope: Literal["main", "test"] = "main"
     assignment_ids: list[str] = Field(min_length=1, max_length=5000)
@@ -712,17 +716,26 @@ class ExperimentConsentIn(ExperimentIdentityIn):
     accepted: bool
 
 
+class ActivityPingIn(ExperimentIdentityIn):
+    ping_id: str = Field(min_length=16, max_length=100)
+    run_id: str | None = Field(default=None, max_length=100)
+    active_seconds: float = Field(ge=0, le=60)
+
+
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
+    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
 
 
 class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
+    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
     run_id: str = Field(min_length=1, max_length=100)
     draft_payload: dict[str, Any]
 
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
+    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
     run_id: str = Field(min_length=1, max_length=100)
     question_code: str = Field(min_length=1, max_length=16)
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
@@ -731,6 +744,7 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
 
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
+    workflow_step_index: int | None = Field(default=None, ge=0, le=39)
     run_id: str = Field(min_length=1, max_length=100)
     final_payload: dict[str, Any] | None = None
 
@@ -999,6 +1013,133 @@ def _ensure_participation(
     return participant["participant_id"], participation["participation_id"]
 
 
+
+
+def _normalize_workflow(value: Any) -> list[str]:
+    if not isinstance(value, list) or not value or len(value) > 40:
+        raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۴۰ ماژول داشته باشد.")
+    allowed = set(STAGE_TO_INSTRUMENT)
+    workflow: list[str] = []
+    for item in value:
+        module = str(item).strip()
+        if module not in allowed:
+            raise HTTPException(422, "یکی از ماژول‌های روند آزمایش معتبر نیست.")
+        workflow.append(module)
+    return workflow
+
+
+def _current_study_workflow(connection: Any, study_code: str = STUDY_CODE) -> list[str]:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT workflow_json FROM study_workflow_configs WHERE study_code=" + marker,
+        (study_code,),
+    ).fetchone()
+    if not row:
+        return list(STAGE_ORDER)
+    raw = _json_value(row["workflow_json"])
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            raw = None
+    try:
+        return _normalize_workflow(raw)
+    except HTTPException:
+        return list(STAGE_ORDER)
+
+
+def _assignment_workflow(assignment: dict[str, Any]) -> list[str]:
+    raw = assignment.get("workflow_json")
+    if not raw:
+        return list(STAGE_ORDER)
+    parsed = _json_value(raw)
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except (TypeError, ValueError):
+            parsed = None
+    try:
+        return _normalize_workflow(parsed)
+    except HTTPException:
+        return list(STAGE_ORDER)
+
+
+def _ensure_workflow_progress(connection: Any, participation_id: str, workflow: list[str]) -> list[dict[str, Any]]:
+    """Create per-position progress rows; map old single-module progress to its first occurrence."""
+    marker = "%s" if DATABASE_URL else "?"
+    existing = connection.execute(
+        "SELECT step_index,module_code,status,attempt_number,current_run_id,draft_payload,started_at,completed_at,updated_at "
+        "FROM experiment_workflow_steps WHERE participation_id=" + marker + " ORDER BY step_index",
+        (participation_id,),
+    ).fetchall()
+    present = {int(row["step_index"]): dict(row) for row in existing}
+    legacy_rows = _get_stage_rows(connection, participation_id)
+    first_occurrence: set[str] = set()
+    for index, module_code in enumerate(workflow):
+        if index not in present:
+            legacy = legacy_rows.get(module_code) if module_code not in first_occurrence else None
+            values = (
+                participation_id, index, module_code,
+                legacy["status"] if legacy else "not_started",
+                int(legacy["attempt_number"] or 0) if legacy else 0,
+                legacy.get("current_run_id") if legacy else None,
+                _json_param(_json_value(legacy.get("draft_payload")) if legacy else {}),
+                legacy.get("started_at") if legacy else None,
+                legacy.get("completed_at") if legacy else None,
+                legacy.get("updated_at") if legacy else now(),
+            )
+            query = (
+                "INSERT INTO experiment_workflow_steps(participation_id,step_index,module_code,status,attempt_number,"
+                "current_run_id,draft_payload,started_at,completed_at,updated_at) VALUES("
+                + ",".join([marker] * 10) + ") ON CONFLICT(participation_id,step_index) DO NOTHING"
+            )
+            connection.execute(query, values)
+        first_occurrence.add(module_code)
+    rows = connection.execute(
+        "SELECT step_index,module_code,status,attempt_number,current_run_id,draft_payload,started_at,completed_at,updated_at "
+        "FROM experiment_workflow_steps WHERE participation_id=" + marker + " ORDER BY step_index",
+        (participation_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _resolve_workflow_step(
+    workflow: list[str], rows: list[dict[str, Any]], stage_code: str, requested_index: int | None
+) -> tuple[int, dict[str, Any]]:
+    if requested_index is not None:
+        if requested_index >= len(workflow) or workflow[requested_index] != stage_code:
+            raise HTTPException(409, "این جایگاه با ماژول درخواستی در روند آزمایش مطابقت ندارد.")
+        index = requested_index
+    else:
+        index = next(
+            (i for i, row in enumerate(rows) if row["module_code"] == stage_code and row["status"] != "completed"),
+            -1,
+        )
+        if index < 0:
+            raise HTTPException(409, "جایگاه تکمیل‌نشده‌ای برای این ماژول در روند آزمایش وجود ندارد.")
+    row = next((item for item in rows if int(item["step_index"]) == index), None)
+    if row is None:
+        raise HTTPException(409, "جایگاه موردنظر در روند آزمایش پیدا نشد.")
+    if any(item["status"] != "completed" for item in rows if int(item["step_index"]) < index):
+        raise HTTPException(409, "ابتدا باید ماژول قبلی را تکمیل کنید.")
+    return index, row
+
+
+def _public_workflow_step(row: dict[str, Any]) -> dict[str, Any]:
+    state = {
+        "step_index": int(row["step_index"]),
+        "stage_code": row["module_code"],
+        "status": row["status"],
+        "attempt_number": int(row["attempt_number"] or 0),
+        "current_run_id": row["current_run_id"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+    }
+    if row["module_code"] == "questionnaire":
+        state["draft_payload"] = _json_value(row.get("draft_payload"))
+    return state
+
+
 def _test_module_from_study_code(study_code: str) -> str | None:
     prefix = TEST_STUDY_PREFIX + "module-"
     if not study_code.startswith(prefix):
@@ -1142,6 +1283,101 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
     if stage_code == "questionnaire":
         state["draft_payload"] = _json_value(row.get("draft_payload"))
     return state
+
+
+
+
+@app.get("/api/admin/workflow")
+def get_admin_workflow(x_admin_token: str | None = Header(default=None)):
+    authorize(x_admin_token)
+    with conn() as connection:
+        workflow = _current_study_workflow(connection)
+    return {
+        "workflow": workflow,
+        "modules": [
+            {"code": "questionnaire", "label": "پرسشنامه", "description": "پرسشنامهٔ تجربهٔ همکاری"},
+            {"code": "dd_lifetrade", "label": "DD / Life-Trade", "description": "تکلیف تصمیم‌گیری و ترجیح زمانی"},
+            {"code": "ultimatum", "label": "بازی اولتیماتوم", "description": "بازی تقسیم امتیاز"},
+        ],
+        "max_steps": 40,
+    }
+
+
+@app.put("/api/admin/workflow")
+def save_admin_workflow(
+    data: WorkflowConfigIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Save the workflow template for future links; existing assignments keep their snapshots."""
+    authorize(x_admin_token)
+    workflow = _normalize_workflow(data.workflow)
+    encoded = json.dumps(workflow, ensure_ascii=False, separators=(",", ":"))
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO study_workflow_configs(study_code,workflow_json,updated_at) VALUES(%s,%s,%s) "
+                "ON CONFLICT(study_code) DO UPDATE SET workflow_json=EXCLUDED.workflow_json,updated_at=EXCLUDED.updated_at",
+                (STUDY_CODE, encoded, now()),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO study_workflow_configs(study_code,workflow_json,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(study_code) DO UPDATE SET workflow_json=excluded.workflow_json,updated_at=excluded.updated_at",
+                (STUDY_CODE, encoded, now()),
+            )
+    return {"saved": True, "workflow": workflow, "future_links_only": True}
+
+
+@app.post("/api/experiment/activity/open")
+def record_assignment_open(data: ExperimentIdentityIn):
+    """Record first/last landing time when the invitation URL is opened and identity is confirmed."""
+    token_hash = hashlib.sha256(data.invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    timestamp = now()
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT assignment_id,participant_id FROM experiment_assignments WHERE invitation_token_hash="
+            + marker + " AND active=1",
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(403, "لینک اختصاصی معتبر نیست.")
+        connection.execute(
+            "UPDATE experiment_assignments SET first_opened_at=COALESCE(first_opened_at,"
+            + marker + "),last_opened_at=" + marker + " WHERE assignment_id=" + marker,
+            (timestamp, timestamp, row["assignment_id"]),
+        )
+    return {"recorded": True, "opened_at": timestamp}
+
+
+@app.post("/api/experiment/activity/ping")
+def record_activity_ping(data: ActivityPingIn):
+    """Idempotently accumulate visible/active time for the participant and optional module run."""
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        if data.run_id:
+            marker = "%s" if DATABASE_URL else "?"
+            run = connection.execute(
+                "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp "
+                "ON sp.participation_id=ir.participation_id WHERE ir.run_id=" + marker
+                + " AND sp.participation_id=" + marker,
+                (data.run_id, assignment["participation_id"]),
+            ).fetchone()
+            if not run:
+                raise HTTPException(409, "اجرای ماژول برای ثبت زمان پیدا نشد.")
+        marker = "%s" if DATABASE_URL else "?"
+        connection.execute(
+            "INSERT INTO experiment_activity_pings(ping_id,assignment_id,run_id,active_seconds,received_at) "
+            "VALUES(" + ",".join([marker] * 5) + ") ON CONFLICT(ping_id) DO NOTHING",
+            (data.ping_id, assignment["assignment_id"], data.run_id, float(data.active_seconds), now()),
+        )
+        connection.execute(
+            "UPDATE experiment_assignments SET first_opened_at=COALESCE(first_opened_at,"
+            + marker + "),last_opened_at=" + marker + " WHERE assignment_id=" + marker,
+            (now(), now(), assignment["assignment_id"]),
+        )
+    return {"recorded": True}
 
 
 @app.post("/api/admin/assignments")
