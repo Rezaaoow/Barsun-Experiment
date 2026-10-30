@@ -156,6 +156,50 @@ def normalize_participant_code(value: str) -> str:
     return normalized
 
 
+FLOW_STAGE_CODES = frozenset(STAGE_ORDER)
+DEFAULT_FLOW = list(STAGE_ORDER)
+
+
+def _normalise_flow(raw: Any) -> list[str]:
+    if not isinstance(raw, list) or not raw:
+        raise HTTPException(422, "روند آزمایش باید حداقل یک ماژول داشته باشد.")
+    if len(raw) > 30 or any(item not in FLOW_STAGE_CODES for item in raw):
+        raise HTTPException(422, "روند آزمایش فقط می‌تواند شامل ماژول‌های معتبر و حداکثر ۳۰ گام باشد.")
+    return list(raw)
+
+
+def _study_flow(connection: Any, study_code: str) -> list[str]:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT flow_json FROM experiment_flow_definitions WHERE study_code=" + marker,
+        (study_code,),
+    ).fetchone()
+    if not row:
+        return list(DEFAULT_FLOW)
+    try:
+        return _normalise_flow(_json_value(row["flow_json"]))
+    except HTTPException:
+        return list(DEFAULT_FLOW)
+
+
+def _snapshot_assignment_flow(connection: Any, assignment_id: str, study_code: str) -> list[str]:
+    flow = _study_flow(connection, study_code)
+    marker = "%s" if DATABASE_URL else "?"
+    flow_json = _json_param(flow)
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO experiment_assignment_flows(assignment_id,flow_json,created_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(assignment_id) DO NOTHING",
+            (assignment_id, flow_json, now()),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO experiment_assignment_flows(assignment_id,flow_json,created_at) VALUES(?,?,?)",
+            (assignment_id, flow_json, now()),
+        )
+    return flow
+
+
 def _invitation_base_url(request: Request, api_route: str) -> str:
     """Use an explicit public URL when configured, otherwise derive the mounted app path."""
     if PUBLIC_EXPERIMENT_URL:
@@ -256,6 +300,15 @@ if DATABASE_URL:
                 "UNIQUE(study_code, participant_id))"
             )
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_definitions ("
+                "study_code TEXT PRIMARY KEY, flow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_assignment_flows ("
+                "assignment_id TEXT PRIMARY KEY REFERENCES experiment_assignments(assignment_id), "
+                "flow_json TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -434,6 +487,15 @@ else:
             if "invitation_token_encrypted" not in assignment_columns:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_definitions ("
+                "study_code TEXT PRIMARY KEY, flow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_assignment_flows ("
+                "assignment_id TEXT PRIMARY KEY REFERENCES experiment_assignments(assignment_id), "
+                "flow_json TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
@@ -596,6 +658,10 @@ class CompleteIn(BaseModel):
     trial_count: int = Field(default=0, ge=0)
 
 StageCode = Literal["questionnaire", "dd_lifetrade", "ultimatum"]
+
+
+class ExperimentFlowIn(BaseModel):
+    stages: list[StageCode] = Field(min_length=1, max_length=30)
 
 
 class AssignmentItemIn(BaseModel):
@@ -1079,6 +1145,40 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
     return state
 
 
+@app.get("/api/admin/experiment-flow")
+def get_experiment_flow(x_admin_token: str | None = Header(default=None)):
+    """Return the editable default flow; it affects only assignments created after a save."""
+    authorize(x_admin_token)
+    with conn() as connection:
+        flow = _study_flow(connection, STUDY_CODE)
+    return {"stages": flow, "affects": "new_links_only"}
+
+
+@app.put("/api/admin/experiment-flow")
+def update_experiment_flow(
+    data: ExperimentFlowIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Save the default flow used to snapshot future invitation links."""
+    authorize(x_admin_token)
+    flow = _normalise_flow(data.stages)
+    timestamp = now()
+    with conn() as connection:
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO experiment_flow_definitions(study_code,flow_json,updated_at) VALUES(%s,%s,%s) "
+                "ON CONFLICT(study_code) DO UPDATE SET flow_json=EXCLUDED.flow_json,updated_at=EXCLUDED.updated_at",
+                (STUDY_CODE, _json_param(flow), timestamp),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO experiment_flow_definitions(study_code,flow_json,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(study_code) DO UPDATE SET flow_json=excluded.flow_json,updated_at=excluded.updated_at",
+                (STUDY_CODE, _json_param(flow), timestamp),
+            )
+    return {"stages": flow, "updated_at": timestamp, "affects": "new_links_only"}
+
+
 @app.post("/api/admin/assignments")
 def create_assignments(
     data: AssignmentBatchIn,
@@ -1112,8 +1212,9 @@ def create_assignments(
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
+            assignment_id = str(uuid.uuid4())
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
+                assignment_id, STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
@@ -1127,9 +1228,11 @@ def create_assignments(
                     "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
                     values,
                 )
+            flow = _snapshot_assignment_flow(connection, assignment_id, STUDY_CODE)
             created.append({
                 "participant_code": code,
                 "condition_code": condition,
+                "flow": flow,
                 "invitation_url": base_url + joiner + "invite=" + invitation_token,
             })
     return {"created_count": len(created), "assignments": created}
