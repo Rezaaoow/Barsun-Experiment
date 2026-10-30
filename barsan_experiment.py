@@ -1094,7 +1094,9 @@ def _default_workflow_steps() -> list[dict[str, str]]:
     return [dict(step) for step in DEFAULT_WORKFLOW]
 
 
-def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
+def _normalize_workflow_steps(
+    raw_steps: Any, *, require_variant_pair: bool = True
+) -> list[dict[str, str]]:
     if not isinstance(raw_steps, (list, tuple)) or not raw_steps:
         raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۶۰ ماژول داشته باشد.")
     normalized = []
@@ -1115,7 +1117,7 @@ def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
         seen_ids.add(step_id)
         normalized.append({"step_id": step_id, "module_code": module_code})
     variants = {step["module_code"] for step in normalized} & set(ULTIMATUM_WORKFLOW_VARIANTS)
-    if variants and variants != set(ULTIMATUM_WORKFLOW_VARIANTS):
+    if require_variant_pair and variants and variants != set(ULTIMATUM_WORKFLOW_VARIANTS):
         raise HTTPException(
             422,
             "برای استفاده از اولتیماتوم گروهی، هر دو ماژول Ultimatum — Frame و Ultimatum — Control را به روند اضافه کن.",
@@ -1181,7 +1183,7 @@ def _workflow_for_assignment(assignment: dict[str, Any]) -> list[dict[str, str]]
         try:
             if isinstance(raw, str):
                 raw = json.loads(raw)
-            normalized = _normalize_workflow_steps(raw)
+            normalized = _normalize_workflow_steps(raw, require_variant_pair=False)
             return _workflow_steps_for_condition(normalized, assignment.get("condition_code"))
         except (TypeError, ValueError, HTTPException):
             pass
@@ -1715,7 +1717,7 @@ def export_admin_active_assignments_csv(
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(scope, "a.study_code", marker)
     query = (
-        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,"
         "a.assigned_at,a.invitation_token_encrypted "
         "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
         "WHERE a.active=1 AND " + scope_condition
@@ -1727,7 +1729,7 @@ def export_admin_active_assignments_csv(
     output = io.StringIO(newline="")
     output.write("\ufeff")
     fields = [
-        "participant_code", "group", "condition_code", "active", "study_code",
+        "participant_code", "group", "condition_code", "ultimatum_variant", "active", "study_code",
         "assigned_at", "invitation_url", "url_available", "link_id",
     ]
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
@@ -1735,10 +1737,17 @@ def export_admin_active_assignments_csv(
     for raw in rows:
         item = dict(raw)
         token = _decrypt_invitation_token(item.get("invitation_token_encrypted"))
+        saved_steps = _workflow_for_assignment(item)
+        variant = next(
+            (ULTIMATUM_WORKFLOW_VARIANTS[step["module_code"]] for step in saved_steps
+             if step["module_code"] in ULTIMATUM_WORKFLOW_VARIANTS),
+            "Legacy" if any(step["module_code"] == "ultimatum" for step in saved_steps) else "",
+        )
         writer.writerow({
             "participant_code": item["participant_code"],
             "group": "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
             "condition_code": item["condition_code"],
+            "ultimatum_variant": variant,
             "active": True,
             "study_code": item["study_code"],
             "assigned_at": item["assigned_at"],
@@ -1814,7 +1823,7 @@ def get_public_experiment_workflow(invite: str):
             if isinstance(raw, str):
                 raw = json.loads(raw)
             steps = _workflow_steps_for_condition(
-                _normalize_workflow_steps(raw), assignment["condition_code"]
+                _normalize_workflow_steps(raw, require_variant_pair=False), assignment["condition_code"]
             )
         except (TypeError, ValueError, HTTPException):
             steps = _workflow_steps_for_condition(_default_workflow_steps(), assignment["condition_code"])
