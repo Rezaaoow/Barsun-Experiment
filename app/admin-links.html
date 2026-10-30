@@ -794,6 +794,16 @@ function stageStatusLabel(state){
  return ({not_started:"شروع نشده",in_progress:"در حال انجام",completed:"کامل"})[state]||state||"—";
 }
 function currentStageLabel(code){return code?stageLabel(code):"همهٔ مراحل کامل";}
+function formatActiveDuration(seconds){
+ const total=Math.max(0,Math.round(Number(seconds)||0));
+ const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),secs=total%60;
+ if(hours)return hours+" ساعت و "+minutes+" دقیقه";
+ if(minutes)return minutes+" دقیقه و "+secs+" ثانیه";
+ return secs+" ثانیه";
+}
+function workflowStepStatusClass(status){
+ return status==="completed"?"done":status==="in_progress"?"active":"pending";
+}
 function renderProgress(){
  const query=$("monitorSearch").value.trim().toUpperCase();
  const filter=$("monitorStatus").value;
@@ -807,16 +817,42 @@ function renderProgress(){
  const root=$("participantTable");root.replaceChildren();
  if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","زمان فعال کل","زمان هر جایگاه در روند","اولین ورود","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
-  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
-  cells.forEach((value,i)=>{const td=document.createElement("td");if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}else td.textContent=value;tr.appendChild(td);});
+  [r.participant_code,r.condition_code==="A"?"Frame":"Control"].forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.appendChild(td);});
+  const stateCell=document.createElement("td"),badge=document.createElement("span");
+  badge.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");
+  badge.textContent=progressStateLabel(r.progress_state);stateCell.appendChild(badge);tr.appendChild(stateCell);
+  const currentCell=document.createElement("td");currentCell.textContent=r.current_stage?stageLabel(r.current_stage):"همهٔ مراحل کامل";tr.appendChild(currentCell);
+  const totalCell=document.createElement("td");totalCell.className="progress-time-summary";
+  const total=document.createElement("strong");total.className="progress-time";total.textContent=formatActiveDuration(r.total_active_seconds||0);
+  const visits=document.createElement("div");visits.className="progress-opened";visits.textContent=(r.visit_count||0)+" بازدید";
+  totalCell.append(total,visits);tr.appendChild(totalCell);
+  const workflowCell=document.createElement("td");workflowCell.className="progress-workflow-cell";
+  const stepRows=Array.isArray(r.workflow_steps)&&r.workflow_steps.length?r.workflow_steps:[
+   {step_id:"legacy-q",stage_code:"questionnaire",step_order:1,status:r.questionnaire_status,active_seconds:(r.module_active_seconds||{}).questionnaire||0},
+   {step_id:"legacy-dd",stage_code:"dd_lifetrade",step_order:2,status:r.dd_lifetrade_status,active_seconds:(r.module_active_seconds||{}).dd_lifetrade||0},
+   {step_id:"legacy-ut",stage_code:"ultimatum",step_order:3,status:r.ultimatum_status,active_seconds:(r.module_active_seconds||{}).ultimatum||0}
+  ];
+  stepRows.forEach(step=>{
+   const pill=document.createElement("span");pill.className="workflow-step-pill "+workflowStepStatusClass(step.status);
+   const text=document.createElement("span");text.textContent=faDigits(step.step_order)+". "+stageLabel(step.stage_code);
+   const time=document.createElement("small");time.textContent=formatActiveDuration(step.active_seconds||0);
+   pill.append(text,time);workflowCell.appendChild(pill);
+  });
+  tr.appendChild(workflowCell);
+  const openedCell=document.createElement("td");openedCell.className="progress-opened";
+  openedCell.textContent=r.first_opened_at?new Date(r.first_opened_at).toLocaleString("fa-IR"):"هنوز وارد لینک نشده";tr.appendChild(openedCell);
+  const lastCell=document.createElement("td");lastCell.className="progress-opened";
+  lastCell.textContent=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—";tr.appendChild(lastCell);
   tbody.appendChild(tr);
  });
  table.appendChild(tbody);root.className="table-wrap";root.appendChild(table);
- const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";footer.textContent="نمایش "+rows.length+" از "+progressRows.length+" لینک فعال.";root.appendChild(footer);
+ const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";
+ footer.textContent="نمایش "+rows.length+" از "+progressRows.length+" لینک فعال. زمان فعال فقط هنگام نمایش صفحه و دریافت heartbeat محاسبه می‌شود.";
+ root.appendChild(footer);
 }
 async function refreshProgress(){
  clearStatus("monitorStatusMessage");$("refreshButton").disabled=true;$("connectButton").disabled=true;
@@ -824,6 +860,7 @@ async function refreshProgress(){
   const scope=$("monitorScope").value;
   const response=await adminFetch("/api/admin/progress?scope="+scope,{method:"GET"});
   progressRows=await response.json();renderProgress();
+  if(!workflowTemplateLoaded)await loadWorkflowTemplate();
   setStatus("monitorStatusMessage","پایش دریافت شد: "+progressRows.length+" لینک در محدودهٔ انتخاب‌شده.","success");
   setStatus("connectionStatus","اتصال مدیریتی برقرار است. آخرین به‌روزرسانی: "+new Date().toLocaleTimeString("fa-IR"),"success");
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
@@ -843,7 +880,12 @@ $("createAssignments").addEventListener("click",async()=>{
  clearStatus("assignmentStatus");$("assignmentOutput").replaceChildren();const button=$("createAssignments");button.disabled=true;
  try{
   const assignments=parseAssignments();
-  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
+  if(!workflowSteps.length)throw new Error("برای ساخت لینک، حداقل یک ماژول را به تایم‌لاین اضافه کن.");
+  await saveWorkflowTemplate();
+  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({
+   assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code})),
+   workflow_steps:workflowSteps.map(step=>step.module_code)
+  })});
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
   setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. URLها به‌صورت رمزنگاری‌شده نگه‌داری می‌شوند و از مدیریت لینک‌ها یا CSV لینک‌های فعال قابل دریافت‌اند؛ فایل خروجی را محرمانه نگه‌دار.","success");
@@ -902,8 +944,11 @@ $("createModuleTest").addEventListener("click",async()=>{
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
-  const response=await adminFetch("/api/admin/test-links",{method:"POST"});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
-  setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
+  if(!workflowSteps.length)throw new Error("برای ساخت لینک تست کامل، حداقل یک ماژول را در تایم‌لاین قرار بده.");
+  await saveWorkflowTemplate();
+  const response=await adminFetch("/api/admin/test-links",{method:"POST",body:JSON.stringify({workflow_steps:workflowSteps.map(step=>step.module_code)})});
+  const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
+  setStatus("moduleTestStatus","دو لینک تست کامل بر اساس روند فعلی ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
