@@ -487,6 +487,7 @@ def test_configured_workflow_repeats_modules_and_tracks_active_time(client, monk
     assert saved.json()["workflow"] == configured
 
     token = _create_assignment(client, monkeypatch, code="BS-WORKFLOW-REPEAT-01", condition="A")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
     opened = client.post("/api/experiment/activity/open", json={"invitation_token": token})
     assert opened.status_code == 200, opened.text
 
