@@ -38,10 +38,13 @@ STAGE_TO_INSTRUMENT = {
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
+ULTIMATUM_WORKFLOW_VARIANTS = {"ultimatum_frame": "Frame", "ultimatum_control": "Control"}
+WORKFLOW_MODULE_CODES = frozenset((*STAGE_ORDER, *ULTIMATUM_WORKFLOW_VARIANTS))
 DEFAULT_WORKFLOW = (
     {"step_id": "default-questionnaire", "module_code": "questionnaire"},
     {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
-    {"step_id": "default-ultimatum", "module_code": "ultimatum"},
+    {"step_id": "default-ultimatum-frame", "module_code": "ultimatum_frame"},
+    {"step_id": "default-ultimatum-control", "module_code": "ultimatum_control"},
 )
 ULTIMATUM_TOTAL_POINTS = 10
 ULTIMATUM_MAIN_BLOCK_TRIALS = 5
@@ -648,6 +651,9 @@ class CompleteIn(BaseModel):
     trial_count: int = Field(default=0, ge=0)
 
 StageCode = Literal["questionnaire", "dd_lifetrade", "ultimatum"]
+WorkflowModuleCode = Literal[
+    "questionnaire", "dd_lifetrade", "ultimatum", "ultimatum_frame", "ultimatum_control"
+]
 
 
 class AssignmentItemIn(BaseModel):
@@ -657,7 +663,7 @@ class AssignmentItemIn(BaseModel):
 
 class WorkflowStepIn(BaseModel):
     step_id: str = Field(min_length=1, max_length=80)
-    module_code: StageCode
+    module_code: WorkflowModuleCode
 
 
 class WorkflowConfigIn(BaseModel):
@@ -1102,13 +1108,54 @@ def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
         if (
             not step_id or len(step_id) > 80
             or any(not (character.isalnum() or character in "-_") for character in step_id)
-            or module_code not in STAGE_TO_INSTRUMENT
+            or module_code not in WORKFLOW_MODULE_CODES
             or step_id in seen_ids
         ):
             raise HTTPException(422, "شناسه یا نوع یکی از ماژول‌های روند آزمایش معتبر نیست.")
         seen_ids.add(step_id)
         normalized.append({"step_id": step_id, "module_code": module_code})
+    variants = {step["module_code"] for step in normalized} & set(ULTIMATUM_WORKFLOW_VARIANTS)
+    if variants and variants != set(ULTIMATUM_WORKFLOW_VARIANTS):
+        raise HTTPException(
+            422,
+            "برای استفاده از اولتیماتوم گروهی، هر دو ماژول Ultimatum — Frame و Ultimatum — Control را به روند اضافه کن.",
+        )
     return normalized
+
+
+def _canonical_workflow_stage(module_code: str) -> str:
+    return "ultimatum" if module_code in ULTIMATUM_WORKFLOW_VARIANTS else module_code
+
+
+def _condition_group(condition_code: Any) -> str:
+    value = str(condition_code or "").strip().upper()
+    if value in {"A", "FRAME", "FRAMING"}:
+        return "A"
+    if value in {"B", "CONTROL"}:
+        return "B"
+    raise HTTPException(422, "گروه هر شرکت‌کننده باید به‌صورت Frame یا Control مشخص شود.")
+
+
+def _workflow_steps_for_condition(
+    steps: list[dict[str, str]], condition_code: Any
+) -> list[dict[str, str]]:
+    group = _condition_group(condition_code)
+    selected_variant = "ultimatum_frame" if group == "A" else "ultimatum_control"
+    return [
+        dict(step) for step in steps
+        if step["module_code"] not in ULTIMATUM_WORKFLOW_VARIANTS
+        or step["module_code"] == selected_variant
+    ]
+
+
+def _workflow_module_label(module_code: str) -> str:
+    return {
+        "questionnaire": "پرسشنامه",
+        "dd_lifetrade": "DD / Life-Trade",
+        "ultimatum": "Ultimatum (نسخهٔ قدیمی)",
+        "ultimatum_frame": "Ultimatum — Frame",
+        "ultimatum_control": "Ultimatum — Control",
+    }.get(module_code, module_code)
 
 
 def _load_study_workflow(connection: Any, study_code: str) -> list[dict[str, str]]:
@@ -1134,10 +1181,11 @@ def _workflow_for_assignment(assignment: dict[str, Any]) -> list[dict[str, str]]
         try:
             if isinstance(raw, str):
                 raw = json.loads(raw)
-            return _normalize_workflow_steps(raw)
+            normalized = _normalize_workflow_steps(raw)
+            return _workflow_steps_for_condition(normalized, assignment.get("condition_code"))
         except (TypeError, ValueError, HTTPException):
             pass
-    return _default_workflow_steps()
+    return _workflow_steps_for_condition(_default_workflow_steps(), assignment.get("condition_code"))
 
 
 def _workflow_progress_rows(connection: Any, assignment_id: str) -> dict[str, dict[str, Any]]:
@@ -1263,13 +1311,12 @@ def create_assignments(
     joiner = "&" if "?" in base_url else "?"
     with conn() as workflow_connection:
         workflow_steps = _normalize_workflow_steps(data.steps) if data.steps else _load_study_workflow(workflow_connection, STUDY_CODE)
-    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
     with conn() as connection:
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
-            condition = item.condition_code.strip().upper()
-            if not condition:
-                raise HTTPException(422, "Condition code is required")
+            condition = _condition_group(item.condition_code)
+            assignment_steps = _workflow_steps_for_condition(workflow_steps, condition)
+            workflow_json = json.dumps(assignment_steps, ensure_ascii=False, separators=(",", ":"))
             if code in seen_codes:
                 raise HTTPException(422, "Each participant code may appear only once in a batch")
             seen_codes.add(code)
@@ -1322,9 +1369,10 @@ def create_test_links(
     created = []
     with conn() as workflow_connection:
         workflow_steps = _normalize_workflow_steps(data.steps) if data else _load_study_workflow(workflow_connection, STUDY_CODE)
-    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
     with conn() as connection:
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
+            assignment_steps = _workflow_steps_for_condition(workflow_steps, condition)
+            workflow_json = json.dumps(assignment_steps, ensure_ascii=False, separators=(",", ":"))
             group_slug = group_label.lower()
             study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
             study_name = f"BarSan isolated test — {generation} — {group_label}"
@@ -1443,7 +1491,7 @@ def list_admin_assignments(
         where.append("LOWER(p.participant_code) LIKE " + marker)
         params.append("%" + normalized_search + "%")
     query = (
-        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,"
         "a.active,a.assigned_at,a.invitation_token_encrypted "
         "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
         "WHERE " + " AND ".join(where) + " ORDER BY a.assigned_at DESC,p.participant_code"
@@ -1463,6 +1511,14 @@ def list_admin_assignments(
         token = _decrypt_invitation_token(item.pop("invitation_token_encrypted", None))
         item["active"] = bool(item["active"])
         item["group"] = "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control"
+        saved_workflow = _workflow_for_assignment(item)
+        item["workflow_modules"] = [step["module_code"] for step in saved_workflow]
+        item["ultimatum_variant"] = next(
+            (ULTIMATUM_WORKFLOW_VARIANTS[step["module_code"]] for step in saved_workflow
+             if step["module_code"] in ULTIMATUM_WORKFLOW_VARIANTS),
+            "Legacy" if any(step["module_code"] == "ultimatum" for step in saved_workflow) else None,
+        )
+        item.pop("workflow_json", None)
         item["url_available"] = bool(token)
         item["invitation_url"] = (
             base_url + ("&" if "?" in base_url else "?") + "invite=" + token if token else ""
@@ -1619,6 +1675,18 @@ def delete_inactive_admin_assignments(
                 "scope": data.scope,
                 "message": "در محدودهٔ انتخاب‌شده لینک غیرفعالی برای حذف وجود ندارد.",
             }
+        # Remove assignment-owned progress/timing rows before the parent assignment.
+        # Instrument runs and collected responses/trials are intentionally retained.
+        connection.execute(
+            "DELETE FROM experiment_time_tracking WHERE assignment_id IN "
+            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
+            scope_params,
+        )
+        connection.execute(
+            "DELETE FROM experiment_workflow_progress WHERE assignment_id IN "
+            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
+            scope_params,
+        )
         connection.execute(
             "DELETE FROM experiment_consents WHERE assignment_id IN "
             "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
@@ -1733,7 +1801,7 @@ def get_public_experiment_workflow(invite: str):
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
         assignment = connection.execute(
-            "SELECT study_code,workflow_json FROM experiment_assignments "
+            "SELECT study_code,condition_code,workflow_json FROM experiment_assignments "
             "WHERE invitation_token_hash=" + marker + " AND active=1",
             (token_hash,),
         ).fetchone()
@@ -1745,15 +1813,17 @@ def get_public_experiment_workflow(invite: str):
         try:
             if isinstance(raw, str):
                 raw = json.loads(raw)
-            steps = _normalize_workflow_steps(raw)
+            steps = _workflow_steps_for_condition(
+                _normalize_workflow_steps(raw), assignment["condition_code"]
+            )
         except (TypeError, ValueError, HTTPException):
-            steps = _default_workflow_steps()
+            steps = _workflow_steps_for_condition(_default_workflow_steps(), assignment["condition_code"])
         is_legacy = False
     elif module_only:
         steps = [{"step_id": "module-test-" + module_only, "module_code": module_only}]
         is_legacy = False
     else:
-        steps = _default_workflow_steps()
+        steps = _workflow_steps_for_condition(_default_workflow_steps(), assignment["condition_code"])
         is_legacy = True
     module_details = {
         "questionnaire": (
@@ -1767,6 +1837,14 @@ def get_public_experiment_workflow(invite: str):
         "ultimatum": (
             "بازی اولتیماتوم",
             "تقسیم امتیاز و تصمیم‌گیری در تعامل با بازیکن مقابل",
+        ),
+        "ultimatum_frame": (
+            "بازی اولتیماتوم — Frame",
+            "نسخهٔ Frame بازی اولتیماتوم؛ تقسیم امتیاز و تصمیم‌گیری در تعامل با بازیکن مقابل",
+        ),
+        "ultimatum_control": (
+            "بازی اولتیماتوم — Control",
+            "نسخهٔ Control بازی اولتیماتوم؛ تقسیم امتیاز و تصمیم‌گیری در تعامل با بازیکن مقابل",
         ),
     }
     totals: dict[str, int] = {}
@@ -1840,7 +1918,7 @@ def track_experiment_time(data: ExperimentTimeIn):
         _require_consent(connection, assignment["assignment_id"])
         steps = _workflow_for_assignment(assignment)
         step_index = next((i for i, step in enumerate(steps) if step["step_id"] == data.step_id), None)
-        if step_index is None or steps[step_index]["module_code"] != data.stage_code:
+        if step_index is None or _canonical_workflow_stage(steps[step_index]["module_code"]) != data.stage_code:
             raise HTTPException(422, "این ماژول در روند آزمایش این لینک وجود ندارد.")
         marker = "%s" if DATABASE_URL else "?"
         row = connection.execute(
@@ -1915,7 +1993,7 @@ def start_experiment_stage(data: StageStartIn):
                 (index for index, step in enumerate(workflow_steps) if step["step_id"] == data.step_id),
                 None,
             )
-            if workflow_step_index is None or workflow_steps[workflow_step_index]["module_code"] != data.stage_code:
+            if workflow_step_index is None or _canonical_workflow_stage(workflow_steps[workflow_step_index]["module_code"]) != data.stage_code:
                 raise HTTPException(422, "این ماژول در روند آزمایش این لینک وجود ندارد.")
             workflow_step = workflow_steps[workflow_step_index]
             saved_steps = _workflow_progress_rows(connection, assignment["assignment_id"])
@@ -2000,13 +2078,18 @@ def start_experiment_stage(data: StageStartIn):
 
         run_id = str(uuid.uuid4())
         stage_draft: dict[str, Any] = {}
+        workflow_module_code = workflow_step["module_code"] if workflow_step else data.stage_code
         if data.stage_code == "ultimatum":
+            stage_draft["workflow_module_code"] = workflow_module_code
+            stage_draft["ultimatum_variant"] = ULTIMATUM_WORKFLOW_VARIANTS.get(workflow_module_code)
             # Randomize block order server-side and persist it with this attempt.
             stage_draft["block_order"] = random.sample(
                 list(ULTIMATUM_BLOCKS.keys()), k=ULTIMATUM_MAIN_BLOCK_COUNT
             )
         metadata = {
             "stage_code": data.stage_code,
+            "workflow_module_code": workflow_module_code,
+            "ultimatum_variant": ULTIMATUM_WORKFLOW_VARIANTS.get(workflow_module_code),
             "condition_code": assignment["condition_code"],
             "attempt_number": attempt_number,
             "block_order": stage_draft.get("block_order"),
@@ -2970,17 +3053,40 @@ def maintenance_preview(
     with conn() as connection:
         for name, (query, query_params) in queries.items():
             counts[name] = int(connection.execute(query, query_params).fetchone()["n"] or 0)
-        condition_sp = condition.replace("study_code", "sp.study_code")
-        counts["completed_experiments"] = int(connection.execute(
-            "SELECT COUNT(*) AS n FROM (SELECT sp.participation_id "
-            "FROM study_participations sp JOIN experiment_stage_progress q "
-            "ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' AND q.status='completed' "
-            "JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id "
-            "AND d.stage_code='dd_lifetrade' AND d.status='completed' "
-            "JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id "
-            "AND u.stage_code='ultimatum' AND u.status='completed' WHERE " + condition_sp + ") completed",
+        condition_a = condition.replace("study_code", "a.study_code")
+        assignments = [dict(row) for row in connection.execute(
+            "SELECT a.assignment_id,a.study_code,a.condition_code,a.workflow_json,sp.participation_id "
+            "FROM experiment_assignments a LEFT JOIN study_participations sp "
+            "ON sp.study_code=a.study_code AND sp.participant_id=a.participant_id WHERE " + condition_a,
             params,
-        ).fetchone()["n"] or 0)
+        ).fetchall()]
+        counts["completed_experiments"] = 0
+        saved_by_assignment: dict[str, dict[str, dict[str, Any]]] = {}
+        for saved in connection.execute(
+            "SELECT w.assignment_id,w.step_instance_id,w.status FROM experiment_workflow_progress w "
+            "JOIN experiment_assignments a ON a.assignment_id=w.assignment_id WHERE " + condition_a,
+            params,
+        ).fetchall():
+            saved_by_assignment.setdefault(str(saved["assignment_id"]), {})[str(saved["step_instance_id"])] = dict(saved)
+        stages_by_participation: dict[str, dict[str, str]] = {}
+        for saved in connection.execute(
+            "SELECT sp.participation_id,g.stage_code,g.status FROM experiment_stage_progress g "
+            "JOIN study_participations sp ON sp.participation_id=g.participation_id "
+            "JOIN experiment_assignments a ON a.study_code=sp.study_code AND a.participant_id=sp.participant_id "
+            "WHERE " + condition_a,
+            params,
+        ).fetchall():
+            stages_by_participation.setdefault(str(saved["participation_id"]), {})[str(saved["stage_code"])] = str(saved["status"])
+        for assignment in assignments:
+            steps = _workflow_for_assignment(assignment)
+            saved = saved_by_assignment.get(str(assignment["assignment_id"]), {})
+            legacy = stages_by_participation.get(str(assignment.get("participation_id") or ""), {})
+            if not saved and (not assignment.get("workflow_json") or _test_module_from_study_code(str(assignment.get("study_code") or ""))):
+                statuses = [legacy.get(_canonical_workflow_stage(step["module_code"]), "not_started") for step in steps]
+            else:
+                statuses = [saved.get(step["step_id"], {}).get("status", "not_started") for step in steps]
+            if statuses and all(status == "completed" for status in statuses):
+                counts["completed_experiments"] += 1
     return {"scope": scope, "study_code": STUDY_CODE if scope == "main" else TEST_STUDY_PREFIX + "*",
             "counts": counts,
             "warning": "This action permanently deletes rows in the selected study scope; participant master codes and instrument definitions are retained."}
@@ -3062,71 +3168,74 @@ def experiment_progress(
     scope: Literal["main", "test"] = "main",
     include_timing: bool = False,
 ):
-    """One row per assignment, with module position and stale-incomplete indicator."""
+    """Report completion against each invitation's exact ordered workflow snapshot."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
     condition, params = _scope_filter(scope, "a.study_code", marker)
-    query = (
-        "SELECT a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
-        "COALESCE(q.status,'not_started') AS questionnaire_status,"
-        "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
-        "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
-        "q.updated_at AS questionnaire_updated_at,"
-        "COALESCE(d.status,'not_started') AS dd_lifetrade_status,"
-        "COALESCE(d.attempt_number,0) AS dd_lifetrade_attempts,"
-        "d.started_at AS dd_lifetrade_started_at,d.completed_at AS dd_lifetrade_completed_at,"
-        "d.updated_at AS dd_lifetrade_updated_at,"
-        "COALESCE(u.status,'not_started') AS ultimatum_status,"
-        "COALESCE(u.attempt_number,0) AS ultimatum_attempts,"
-        "u.started_at AS ultimatum_started_at,u.completed_at AS ultimatum_completed_at,"
-        "u.updated_at AS ultimatum_updated_at "
+    base_query = (
+        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
+        "a.workflow_json,sp.participation_id "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
         "LEFT JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
-        "LEFT JOIN experiment_stage_progress q ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' "
-        "LEFT JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id AND d.stage_code='dd_lifetrade' "
-        "LEFT JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id AND u.stage_code='ultimatum' "
         "WHERE " + condition + " AND a.active=1 ORDER BY a.assigned_at,p.participant_code"
     )
-    timing_by_participant: dict[tuple[str, str], dict[str, Any]] = {}
+    workflow_query = (
+        "SELECT w.assignment_id,w.step_instance_id,w.step_order,w.stage_code,w.status,w.attempt_number,"
+        "w.started_at,w.completed_at,w.updated_at "
+        "FROM experiment_workflow_progress w JOIN experiment_assignments a ON a.assignment_id=w.assignment_id "
+        "WHERE " + condition.replace("a.study_code", "a.study_code") + " AND a.active=1 "
+        "ORDER BY w.assignment_id,w.step_order"
+    )
+    stage_query = (
+        "SELECT sp.participation_id,g.stage_code,g.status,g.attempt_number,g.started_at,g.completed_at,g.updated_at "
+        "FROM experiment_stage_progress g JOIN study_participations sp ON sp.participation_id=g.participation_id "
+        "JOIN experiment_assignments a ON a.study_code=sp.study_code AND a.participant_id=sp.participant_id "
+        "WHERE " + condition + " AND a.active=1"
+    )
+    time_query = (
+        "SELECT t.assignment_id,t.step_instance_id,t.stage_code,t.active_seconds,t.is_active,t.last_seen_at "
+        "FROM experiment_time_tracking t JOIN experiment_assignments a ON a.assignment_id=t.assignment_id "
+        "WHERE " + condition + " AND a.active=1"
+    )
     with conn() as connection:
-        raw_rows = connection.execute(query, params).fetchall()
-        time_rows = []
-        if include_timing:
-            time_query = (
-                "SELECT a.study_code,p.participant_code,t.stage_code,t.active_seconds,t.is_active,t.last_seen_at "
-                "FROM experiment_time_tracking t "
-                "JOIN experiment_assignments a ON a.assignment_id=t.assignment_id "
-                "JOIN participants p ON p.participant_id=a.participant_id WHERE " + condition
-            )
-            time_rows = connection.execute(time_query, params).fetchall()
+        raw_rows = [dict(row) for row in connection.execute(base_query, params).fetchall()]
+        workflow_rows = [dict(row) for row in connection.execute(workflow_query, params).fetchall()]
+        stage_rows = [dict(row) for row in connection.execute(stage_query, params).fetchall()]
+        time_rows = [dict(row) for row in connection.execute(time_query, params).fetchall()] if include_timing else []
+
+    workflow_by_assignment: dict[str, dict[str, dict[str, Any]]] = {}
+    for saved in workflow_rows:
+        workflow_by_assignment.setdefault(str(saved["assignment_id"]), {})[str(saved["step_instance_id"])] = saved
+    stage_by_participation: dict[str, dict[str, dict[str, Any]]] = {}
+    for saved in stage_rows:
+        stage_by_participation.setdefault(str(saved["participation_id"]), {})[str(saved["stage_code"])] = saved
+    time_by_assignment: dict[str, dict[str, dict[str, Any]]] = {}
+    current_time = datetime.now(timezone.utc)
     for timed in time_rows:
-        key = (str(timed["study_code"]), str(timed["participant_code"]))
-        entry = timing_by_participant.setdefault(key, {"module_time_seconds": {}, "last_seen_at": None})
+        assignment_id = str(timed["assignment_id"])
         seconds = float(timed["active_seconds"] or 0)
         if int(timed["is_active"] or 0):
             try:
                 last_seen = datetime.fromisoformat(str(timed["last_seen_at"]).replace("Z", "+00:00"))
                 if last_seen.tzinfo is None:
                     last_seen = last_seen.replace(tzinfo=timezone.utc)
-                seconds += min(45.0, max(0.0, datetime.now(timezone.utc).timestamp() - last_seen.timestamp()))
+                seconds += min(45.0, max(0.0, current_time.timestamp() - last_seen.timestamp()))
             except (TypeError, ValueError):
                 pass
-        module_code = timed["stage_code"]
-        entry["module_time_seconds"][module_code] = entry["module_time_seconds"].get(module_code, 0.0) + seconds
-        entry["module_time_seconds"][module_code] = round(entry["module_time_seconds"][module_code], 2)
-        if timed["last_seen_at"] and (not entry["last_seen_at"] or str(timed["last_seen_at"]) > str(entry["last_seen_at"])):
-            entry["last_seen_at"] = timed["last_seen_at"]
+        time_by_assignment.setdefault(assignment_id, {})[str(timed["step_instance_id"])] = {
+            "stage_code": timed["stage_code"],
+            "active_seconds": round(seconds, 2),
+            "last_seen_at": timed["last_seen_at"],
+        }
 
-    current_time = datetime.now(timezone.utc)
     stale_cutoff = current_time.timestamp() - 24 * 60 * 60
 
     def parse_time(value: Any) -> float | None:
         if value is None:
             return None
         try:
-            normalized = str(value).replace("Z", "+00:00")
-            parsed = datetime.fromisoformat(normalized)
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
             return parsed.timestamp()
@@ -3134,53 +3243,98 @@ def experiment_progress(
             return None
 
     output = []
-    for raw in raw_rows:
-        row = dict(raw)
-        stage_statuses = [row["questionnaire_status"], row["dd_lifetrade_status"], row["ultimatum_status"]]
-        stages = [
-            ("questionnaire", "questionnaire"),
-            ("dd_lifetrade", "dd_lifetrade"),
-            ("ultimatum", "ultimatum"),
-        ]
-        completed_stages = sum(status == "completed" for status in stage_statuses)
-        row["completed_stages"] = completed_stages
-        row["current_stage"] = next(
-            (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
-            None,
-        )
-        has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
+    for row in raw_rows:
+        assignment_id = str(row["assignment_id"])
+        participation_id = str(row.get("participation_id") or "")
+        steps = _workflow_for_assignment(row)
+        saved_steps = workflow_by_assignment.get(assignment_id, {})
+        legacy_stages = stage_by_participation.get(participation_id, {})
+        timings = time_by_assignment.get(assignment_id, {})
+        module_times: dict[str, float] = {}
+        progress_steps = []
         last_activity_candidates = [parse_time(row.get("assigned_at"))]
-        if include_timing:
-            timing = timing_by_participant.get((str(row.get("study_code")), str(row.get("participant_code"))), {})
-            module_times = timing.get("module_time_seconds", {})
-            row["module_time_seconds"] = module_times
-            row["total_active_seconds"] = round(sum(float(value or 0) for value in module_times.values()), 2)
+        has_started = False
+        for index, step in enumerate(steps):
+            code = step["module_code"]
+            stage_code = _canonical_workflow_stage(code)
+            saved = saved_steps.get(step["step_id"])
+            # Pre-workflow and legacy module-only invitations have stage-level records only.
+            if saved is None and not saved_steps and (
+                not row.get("workflow_json") or _test_module_from_study_code(str(row.get("study_code") or ""))
+            ):
+                saved = legacy_stages.get(stage_code)
+            status = str((saved or {}).get("status") or "not_started")
+            attempts = int((saved or {}).get("attempt_number") or 0)
+            timing = timings.get(step["step_id"], {})
+            seconds = float(timing.get("active_seconds") or 0)
+            module_times[code] = round(module_times.get(code, 0.0) + seconds, 2)
+            has_started = has_started or attempts > 0 or status != "not_started"
+            progress_steps.append({
+                "step_id": step["step_id"],
+                "step_order": index + 1,
+                "module_code": code,
+                "stage_code": stage_code,
+                "module_label": _workflow_module_label(code),
+                "status": status,
+                "attempt_number": attempts,
+                "started_at": (saved or {}).get("started_at"),
+                "completed_at": (saved or {}).get("completed_at"),
+                "updated_at": (saved or {}).get("updated_at"),
+                "active_seconds": round(seconds, 2) if include_timing else None,
+            })
+            for field in ("started_at", "completed_at", "updated_at"):
+                last_activity_candidates.append(parse_time((saved or {}).get(field)))
             last_activity_candidates.append(parse_time(timing.get("last_seen_at")))
-        for stage_code, _ in stages:
-            last_activity_candidates.extend([
-                parse_time(row.get(stage_code + "_started_at")),
-                parse_time(row.get(stage_code + "_completed_at")),
-                parse_time(row.get(stage_code + "_updated_at")),
-            ])
+
+        total_steps = len(progress_steps)
+        completed_steps = sum(item["status"] == "completed" for item in progress_steps)
+        current_step = next((item for item in progress_steps if item["status"] != "completed"), None)
+        row["workflow_steps"] = progress_steps
+        row["total_steps"] = total_steps
+        row["completed_steps"] = completed_steps
+        row["completed_stages"] = completed_steps
+        row["progress_percent"] = round(100 * completed_steps / total_steps) if total_steps else 0
+        row["workflow_complete"] = bool(total_steps and completed_steps == total_steps)
+        row["current_step_id"] = current_step["step_id"] if current_step else None
+        row["current_stage"] = current_step["module_code"] if current_step else None
+        row["current_stage_label"] = current_step["module_label"] if current_step else "روند کامل"
+        row["module_time_seconds"] = module_times if include_timing else {}
+        row["total_active_seconds"] = round(sum(module_times.values()), 2) if include_timing else None
+        for canonical in STAGE_ORDER:
+            related = [item for item in progress_steps if item["stage_code"] == canonical]
+            if related:
+                row[canonical + "_status"] = (
+                    "completed" if all(item["status"] == "completed" for item in related)
+                    else "in_progress" if any(item["status"] != "not_started" for item in related)
+                    else "not_started"
+                )
+                row[canonical + "_attempts"] = sum(item["attempt_number"] for item in related)
+            else:
+                stage = legacy_stages.get(canonical, {})
+                row[canonical + "_status"] = stage.get("status", "not_started")
+                row[canonical + "_attempts"] = int(stage.get("attempt_number") or 0)
+
         valid_times = [value for value in last_activity_candidates if value is not None]
-        last_activity_epoch = max(valid_times) if valid_times else None
+        last_epoch = max(valid_times) if valid_times else None
         row["last_activity_at"] = (
-            datetime.fromtimestamp(last_activity_epoch, timezone.utc).isoformat()
-            if last_activity_epoch is not None else row.get("assigned_at")
+            datetime.fromtimestamp(last_epoch, timezone.utc).isoformat()
+            if last_epoch is not None else row.get("assigned_at")
         )
         row["hours_since_activity"] = (
-            round(max(0.0, (current_time.timestamp() - last_activity_epoch) / 3600), 2)
-            if last_activity_epoch is not None else None
+            round(max(0.0, (current_time.timestamp() - last_epoch) / 3600), 2)
+            if last_epoch is not None else None
         )
-        if completed_stages == len(STAGE_ORDER):
+        if total_steps and completed_steps == total_steps:
             row["progress_state"] = "completed"
         elif not has_started:
             row["progress_state"] = "not_started"
-        elif last_activity_epoch is not None and last_activity_epoch < stale_cutoff:
+        elif last_epoch is not None and last_epoch < stale_cutoff:
             row["progress_state"] = "stale_incomplete"
         else:
             row["progress_state"] = "in_progress"
-        # Assignment and activity metadata are now already flattened for JSON/CSV consumers.
+        row.pop("workflow_json", None)
+        row.pop("participation_id", None)
+        row.pop("assignment_id", None)
         output.append(row)
     return output
 
@@ -3222,7 +3376,8 @@ def export_ultimatum_csv(
         "study_code", "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
         "run_completed_at", "attempt_number", "instrument_version", "round_id", "phase",
         "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
-        "opponent_condition", "opponent_actual_type", "round_status", "participant_share",
+        "opponent_condition", "opponent_actual_type", "round_status", "ultimatum_variant",
+        "workflow_module_code", "participant_share",
         "opponent_share", "participant_decision", "opponent_decision", "accepted",
         "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
         "started_at", "decision_screen_shown_at", "responded_at", "received_at",
@@ -3260,6 +3415,12 @@ def export_ultimatum_csv(
                 current_run_id == item.get("run_id") and item.get("run_status") == "completed"
             )
             item["attempt_number"] = _int_or_none(run_metadata.get("attempt_number"))
+            item["workflow_module_code"] = run_metadata.get("workflow_module_code") or "ultimatum"
+            item["ultimatum_variant"] = (
+                run_metadata.get("ultimatum_variant")
+                or ULTIMATUM_WORKFLOW_VARIANTS.get(run_metadata.get("workflow_module_code"))
+                or "Legacy"
+            )
             item["feedback_group"] = (
                 "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
             )
