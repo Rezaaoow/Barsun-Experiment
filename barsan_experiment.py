@@ -2170,12 +2170,15 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
     }
 
 
-def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -> None:
+def _active_ultimatum_run(
+    connection: Any, assignment: dict[str, Any], run_id: str, step_id: str | None = None
+) -> None:
     marker = "%s" if DATABASE_URL else "?"
+    table, key_column, key_value = _progress_location(assignment, "ultimatum", step_id)
     state = connection.execute(
-        "SELECT status,current_run_id FROM experiment_stage_progress "
-        "WHERE participation_id=" + marker + " AND stage_code='ultimatum'",
-        (participation_id,),
+        "SELECT status,current_run_id FROM " + table + " WHERE participation_id=" + marker
+        + " AND " + key_column + "=" + marker,
+        (assignment["participation_id"], key_value),
     ).fetchone()
     if not state or state["status"] != "in_progress" or state["current_run_id"] != run_id:
         raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
@@ -2256,13 +2259,16 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        _active_ultimatum_run(connection, assignment, data.run_id, data.step_id)
         marker = "%s" if DATABASE_URL else "?"
+        progress_table, progress_key_column, progress_key_value = _progress_location(
+            assignment, "ultimatum", data.step_id
+        )
         stage_state = connection.execute(
-            "SELECT draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code='ultimatum' "
-            "AND current_run_id=" + marker + " AND status='in_progress'",
-            (assignment["participation_id"], data.run_id),
+            "SELECT draft_payload FROM " + progress_table
+            + " WHERE participation_id=" + marker + " AND " + progress_key_column + "=" + marker
+            + " AND current_run_id=" + marker + " AND status='in_progress'",
+            (assignment["participation_id"], progress_key_value, data.run_id),
         ).fetchone()
         if not stage_state:
             raise HTTPException(409, "اجرای فعال اولتیماتوم پیدا نشد.")
@@ -2423,7 +2429,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        _active_ultimatum_run(connection, assignment, data.run_id, data.step_id)
         marker = "%s" if DATABASE_URL else "?"
         row = connection.execute(
             "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
@@ -2608,7 +2614,7 @@ def record_ultimatum_events(data: UltimatumEventsIn):
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        _active_ultimatum_run(connection, assignment, data.run_id, data.step_id)
         row = connection.execute(
             "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
             (data.round_id, data.run_id),
