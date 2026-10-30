@@ -3041,12 +3041,13 @@ def experiment_progress(
     x_admin_token: str | None = Header(default=None),
     scope: Literal["main", "test"] = "main",
 ):
-    """One row per assignment, with module position and stale-incomplete indicator."""
+    """Monitor assignment progress, captured workflow steps and active time per visit/module."""
     authorize(x_admin_token)
     marker = "%s" if DATABASE_URL else "?"
     condition, params = _scope_filter(scope, "a.study_code", marker)
     query = (
-        "SELECT a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
+        "SELECT a.assignment_id,a.workflow_json,a.study_code,sp.participation_id,"
+        "p.participant_code,a.condition_code,a.assigned_at,"
         "COALESCE(q.status,'not_started') AS questionnaire_status,"
         "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
         "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
@@ -3069,6 +3070,46 @@ def experiment_progress(
     )
     with conn() as connection:
         raw_rows = connection.execute(query, params).fetchall()
+        assignment_ids = [row["assignment_id"] for row in raw_rows]
+        participation_ids = [row["participation_id"] for row in raw_rows if row["participation_id"]]
+        step_progress: dict[str, dict[str, dict[str, Any]]] = {}
+        if participation_ids:
+            marks = ",".join([marker] * len(participation_ids))
+            step_rows = connection.execute(
+                "SELECT participation_id,step_id,stage_code,status,attempt_number,current_run_id,"
+                "started_at,completed_at,updated_at,draft_payload "
+                "FROM experiment_workflow_step_progress WHERE participation_id IN (" + marks + ")",
+                tuple(participation_ids),
+            ).fetchall()
+            for raw_step in step_rows:
+                item = dict(raw_step)
+                step_progress.setdefault(item["participation_id"], {})[item["step_id"]] = item
+        activity_by_assignment: dict[str, dict[str, Any]] = {}
+        step_time_by_assignment: dict[str, dict[str, float]] = {}
+        module_time_by_assignment: dict[str, dict[str, float]] = {}
+        if assignment_ids:
+            marks = ",".join([marker] * len(assignment_ids))
+            activity_rows = connection.execute(
+                "SELECT assignment_id,COALESCE(SUM(total_active_seconds),0) AS total_active_seconds,"
+                "MIN(opened_at) AS first_opened_at,MAX(last_heartbeat_at) AS last_activity_at,"
+                "COUNT(*) AS visit_count,SUM(CASE WHEN active=1 AND closed_at IS NULL THEN 1 ELSE 0 END) AS active_visits "
+                "FROM experiment_activity_sessions WHERE assignment_id IN (" + marks + ") GROUP BY assignment_id",
+                tuple(assignment_ids),
+            ).fetchall()
+            for raw_activity in activity_rows:
+                activity_by_assignment[raw_activity["assignment_id"]] = dict(raw_activity)
+            time_rows = connection.execute(
+                "SELECT s.assignment_id,t.step_id,t.module_code,COALESCE(SUM(t.active_seconds),0) AS active_seconds "
+                "FROM experiment_activity_step_time t JOIN experiment_activity_sessions s "
+                "ON s.activity_session_id=t.activity_session_id "
+                "WHERE s.assignment_id IN (" + marks + ") GROUP BY s.assignment_id,t.step_id,t.module_code",
+                tuple(assignment_ids),
+            ).fetchall()
+            for raw_time in time_rows:
+                item = dict(raw_time)
+                step_time_by_assignment.setdefault(item["assignment_id"], {})[item["step_id"]] = float(item["active_seconds"] or 0)
+                module_times = module_time_by_assignment.setdefault(item["assignment_id"], {})
+                module_times[item["module_code"]] = module_times.get(item["module_code"], 0.0) + float(item["active_seconds"] or 0)
 
     current_time = datetime.now(timezone.utc)
     stale_cutoff = current_time.timestamp() - 24 * 60 * 60
@@ -3088,26 +3129,79 @@ def experiment_progress(
     output = []
     for raw in raw_rows:
         row = dict(raw)
-        stage_statuses = [row["questionnaire_status"], row["dd_lifetrade_status"], row["ultimatum_status"]]
-        stages = [
-            ("questionnaire", "questionnaire"),
-            ("dd_lifetrade", "dd_lifetrade"),
-            ("ultimatum", "ultimatum"),
-        ]
-        completed_stages = sum(status == "completed" for status in stage_statuses)
-        row["completed_stages"] = completed_stages
-        row["current_stage"] = next(
-            (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
-            None,
-        )
-        has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
-        last_activity_candidates = [parse_time(row.get("assigned_at"))]
-        for stage_code, _ in stages:
-            last_activity_candidates.extend([
-                parse_time(row.get(stage_code + "_started_at")),
-                parse_time(row.get(stage_code + "_completed_at")),
-                parse_time(row.get(stage_code + "_updated_at")),
-            ])
+        activity = activity_by_assignment.get(row["assignment_id"], {})
+        row["total_active_seconds"] = round(float(activity.get("total_active_seconds") or 0), 1)
+        row["total_active_minutes"] = round(row["total_active_seconds"] / 60, 1)
+        row["first_opened_at"] = activity.get("first_opened_at")
+        row["visit_count"] = int(activity.get("visit_count") or 0)
+        row["active_visits"] = int(activity.get("active_visits") or 0)
+        row["module_active_seconds"] = {
+            key: round(value, 1)
+            for key, value in module_time_by_assignment.get(row["assignment_id"], {}).items()
+        }
+        stored_workflow = _workflow_steps_for_assignment(row)
+        if stored_workflow is not None:
+            progress_map = step_progress.get(row["participation_id"], {})
+            time_map = step_time_by_assignment.get(row["assignment_id"], {})
+            public_steps = []
+            for index, step in enumerate(stored_workflow):
+                state = progress_map.get(step["step_id"], {})
+                public_steps.append({
+                    "step_id": step["step_id"],
+                    "stage_code": step["stage_code"],
+                    "step_order": index + 1,
+                    "status": state.get("status", "not_started"),
+                    "attempt_number": int(state.get("attempt_number") or 0),
+                    "started_at": state.get("started_at"),
+                    "completed_at": state.get("completed_at"),
+                    "active_seconds": round(time_map.get(step["step_id"], 0.0), 1),
+                })
+            row["workflow_steps"] = public_steps
+            row["workflow_total_steps"] = len(public_steps)
+            row["completed_stages"] = sum(step["status"] == "completed" for step in public_steps)
+            current = next((step for step in public_steps if step["status"] != "completed"), None)
+            row["current_stage"] = current["stage_code"] if current else None
+            row["current_step_id"] = current["step_id"] if current else None
+            has_started = any(step["attempt_number"] > 0 for step in public_steps)
+            is_completed = all(step["status"] == "completed" for step in public_steps)
+            last_activity_candidates = [parse_time(row.get("assigned_at")), parse_time(activity.get("last_activity_at"))]
+            for step in public_steps:
+                last_activity_candidates.extend([parse_time(step["started_at"]), parse_time(step["completed_at"])])
+            if is_completed:
+                row["progress_state"] = "completed"
+            elif not has_started and row["visit_count"] == 0:
+                row["progress_state"] = "not_started"
+            else:
+                row["progress_state"] = "in_progress"
+        else:
+            row["workflow_steps"] = []
+            row["workflow_total_steps"] = len(STAGE_ORDER)
+            stages = [
+                ("questionnaire", "questionnaire"),
+                ("dd_lifetrade", "dd_lifetrade"),
+                ("ultimatum", "ultimatum"),
+            ]
+            stage_statuses = [row[key + "_status"] for _, key in stages]
+            row["completed_stages"] = sum(status == "completed" for status in stage_statuses)
+            row["current_stage"] = next(
+                (stage_code for stage_code, key in stages if row[key + "_status"] != "completed"),
+                None,
+            )
+            row["current_step_id"] = None
+            has_started = any(int(row.get(key + "_attempts") or 0) > 0 for _, key in stages)
+            last_activity_candidates = [parse_time(row.get("assigned_at")), parse_time(activity.get("last_activity_at"))]
+            for stage_code, _ in stages:
+                last_activity_candidates.extend([
+                    parse_time(row.get(stage_code + "_started_at")),
+                    parse_time(row.get(stage_code + "_completed_at")),
+                    parse_time(row.get(stage_code + "_updated_at")),
+                ])
+            if row["completed_stages"] == len(STAGE_ORDER):
+                row["progress_state"] = "completed"
+            elif not has_started and row["visit_count"] == 0:
+                row["progress_state"] = "not_started"
+            else:
+                row["progress_state"] = "in_progress"
         valid_times = [value for value in last_activity_candidates if value is not None]
         last_activity_epoch = max(valid_times) if valid_times else None
         row["last_activity_at"] = (
@@ -3118,15 +3212,8 @@ def experiment_progress(
             round(max(0.0, (current_time.timestamp() - last_activity_epoch) / 3600), 2)
             if last_activity_epoch is not None else None
         )
-        if completed_stages == len(STAGE_ORDER):
-            row["progress_state"] = "completed"
-        elif not has_started:
-            row["progress_state"] = "not_started"
-        elif last_activity_epoch is not None and last_activity_epoch < stale_cutoff:
+        if row["progress_state"] != "completed" and last_activity_epoch is not None and last_activity_epoch < stale_cutoff:
             row["progress_state"] = "stale_incomplete"
-        else:
-            row["progress_state"] = "in_progress"
-        # Assignment and activity metadata are now already flattened for JSON/CSV consumers.
         output.append(row)
     return output
 
