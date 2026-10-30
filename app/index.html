@@ -2148,7 +2148,7 @@ function utMakeScreen(options) {
  if(options.title)utAddText(card,"h1","ut-title",options.title);
  if(options.progress){
   const progress=utNode("div","ut-progress");
-  const match=String(options.progress).match(/^بلوک\\s+(.+?)\\s+از\\s+(.+?)(?:\\s+·\\s+دور\\s+(.+?)\\s+از\\s+(.+))?$/);
+  const match=String(options.progress).match(/^بلوک\s+(.+?)\s+از\s+(.+?)(?:\s+·\s+دور\s+(.+?)\s+از\s+(.+))?$/);
   if(match){
    utAddText(progress,"span","ut-progress-label","بلوک");
    utAddText(progress,"strong","ut-progress-number",match[1]);
