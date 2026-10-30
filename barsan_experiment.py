@@ -185,7 +185,7 @@ def _study_flow(connection: Any, study_code: str) -> list[str]:
 def _snapshot_assignment_flow(connection: Any, assignment_id: str, study_code: str) -> list[str]:
     flow = _study_flow(connection, study_code)
     marker = "%s" if DATABASE_URL else "?"
-    flow_json = _json_param(flow)
+    flow_json = json.dumps(flow, ensure_ascii=False, separators=(",", ":"))
     if DATABASE_URL:
         connection.execute(
             "INSERT INTO experiment_assignment_flows(assignment_id,flow_json,created_at) VALUES(%s,%s,%s) "
@@ -1168,13 +1168,13 @@ def update_experiment_flow(
             connection.execute(
                 "INSERT INTO experiment_flow_definitions(study_code,flow_json,updated_at) VALUES(%s,%s,%s) "
                 "ON CONFLICT(study_code) DO UPDATE SET flow_json=EXCLUDED.flow_json,updated_at=EXCLUDED.updated_at",
-                (STUDY_CODE, _json_param(flow), timestamp),
+                (STUDY_CODE, json.dumps(flow, ensure_ascii=False, separators=(",", ":")), timestamp),
             )
         else:
             connection.execute(
                 "INSERT INTO experiment_flow_definitions(study_code,flow_json,updated_at) VALUES(?,?,?) "
                 "ON CONFLICT(study_code) DO UPDATE SET flow_json=excluded.flow_json,updated_at=excluded.updated_at",
-                (STUDY_CODE, _json_param(flow), timestamp),
+                (STUDY_CODE, json.dumps(flow, ensure_ascii=False, separators=(",", ":")), timestamp),
             )
     return {"stages": flow, "updated_at": timestamp, "affects": "new_links_only"}
 
