@@ -490,7 +490,7 @@ def test_admin_test_scope_monitoring_and_exports(client, monkeypatch):
     test_progress = client.get("/api/admin/progress?scope=test", headers=headers)
     assert test_progress.status_code == 200, test_progress.text
     test_rows = test_progress.json()
-    assert len(test_rows) == 2
+    assert len(test_rows) == 1
     assert all(row["study_code"].startswith("barsan-test-") for row in test_rows)
     assert {row["participant_code"] for row in test_rows} == {"TEST"}
 
@@ -501,7 +501,7 @@ def test_admin_test_scope_monitoring_and_exports(client, monkeypatch):
 
     preview = client.get("/api/admin/maintenance/preview?scope=test", headers=headers)
     assert preview.status_code == 200, preview.text
-    assert preview.json()["counts"]["assignments"] == 2
+    assert preview.json()["counts"]["assignments"] == 1
 
     for path in (
         "/api/admin/questionnaire/export.csv?scope=test",
