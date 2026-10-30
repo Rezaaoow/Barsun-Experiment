@@ -678,12 +678,69 @@ button{-webkit-tap-highlight-color:transparent}
   }
 }
 
+
+@media(max-width:680px){
+ body{font-size:17px}
+ .panel{padding:20px 16px;border-radius:20px}
+ .panel h1{font-size:clamp(1.7rem,7vw,2.15rem);line-height:1.55;font-weight:900}
+ .panel>p,.panel p,.subtitle,.hintline{font-size:1.08rem;line-height:1.95;font-weight:600}
+ .eyebrow{font-size:.94rem;font-weight:850}
+ .btn,.page-actions .btn,.questionnaire-actions .btn{min-height:56px;padding:12px 17px;font-size:1.1rem;font-weight:850;border-radius:14px}
+ input,select,textarea{min-height:54px;font-size:1.08rem;padding:12px 14px}
+ .instruction-heading{font-size:1.55rem;line-height:1.6;font-weight:900}
+ .instruction-content,.instruction-content p{font-size:1.12rem;line-height:2;font-weight:600}
+ .instruction-content p{margin-block:10px}
+ .instruction-progress,.step-count{font-size:1rem;font-weight:800}
+ .questionnaire-screen{padding:16px 12px}
+ .questionnaire-screen h2{font-size:1.18rem;line-height:1.8;font-weight:850}
+ .questionnaire-meta{font-size:1rem;font-weight:800}
+ .questionnaire-statement{font-size:1.35rem;line-height:1.9;font-weight:850}
+ .questionnaire-scale{gap:8px}
+ .scale-option{min-height:68px;padding:9px 5px;border-radius:14px}
+ .scale-number{font-size:1.35rem;font-weight:950}
+ .scale-label{font-size:.98rem;line-height:1.55;font-weight:800}
+ .scale-na{min-height:58px;font-size:1rem;font-weight:850}
+ .questionnaire-save-status{font-size:.96rem;font-weight:750}
+ .questionnaire-actions{gap:10px;padding-top:12px}
+ .questionnaire-actions .btn{min-height:56px;font-size:1.02rem}
+ .trial-layout{gap:12px}
+ .choice-card{min-height:104px;padding:16px 12px;font-size:1.25rem;line-height:1.65;font-weight:900;border-radius:17px}
+ .trial-screen .hintline,.trial-screen .statusline{font-size:1.05rem;line-height:1.8;font-weight:750}
+ .statusline{font-size:1.05rem;font-weight:800}
+ .ut-card{width:100%;height:calc(100dvh - 8px);padding:16px 13px;border-radius:17px}
+ .ut-topbar{margin-bottom:10px}
+ .ut-score{font-size:1rem;font-weight:900;padding:9px 12px}
+ .ut-opponent{font-size:1.08rem;font-weight:850}
+ .ut-opponent-icon{width:52px;height:52px;font-size:2.15rem}
+ .ut-progress{font-size:.94rem;font-weight:750}
+ .ut-title{font-size:1.48rem;line-height:1.55;font-weight:950}
+ .ut-copy{font-size:1.12rem;line-height:1.9;font-weight:650}
+ .ut-copy.small{font-size:.98rem}
+ .ut-rolebox strong{font-size:1.22rem}
+ .ut-rolebox span{font-size:1.02rem;line-height:1.8}
+ .ut-total,.ut-question{font-size:1.1rem;font-weight:850}
+ .ut-slider{height:42px}
+ .ut-share{font-size:1rem;font-weight:850;padding:12px 8px}
+ .ut-btn{min-height:56px;padding:12px 13px;font-size:1.08rem;font-weight:900}
+ .ut-result-main{font-size:1.48rem;font-weight:950}
+ .ut-result-detail{font-size:1.16rem;font-weight:850}
+ .ut-result-note{font-size:1rem}
+ .ut-summary-metric-label{font-size:.95rem;font-weight:850}
+ .ut-summary-metric-value{font-size:2rem;font-weight:950}
+}
+@media(max-width:680px) and (max-height:620px){
+ .ut-card{height:auto;min-height:calc(100dvh - 8px);overflow-y:auto}
+ .ut-body{overflow:visible}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
   <p class="eyebrow">پژوهش میدانی بارسان</p>
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <p>در این برنامه، ابتدا به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری پاسخ می‌دهید. سپس دو تکلیف تصمیم‌گیری و در ادامه یک بازی کوتاه تعاملی انجام خواهید داد.</p>
+  <p>در این برنامه، بر اساس روندی که برای شما در نظر گرفته شده، یک یا چند بخش کوتاه شامل پرسشنامه، تکلیف تصمیم‌گیری یا بازی تعاملی را انجام خواهید داد.</p>
   <div class="welcome-steps" aria-label="مراحل برنامه">
     <div class="welcome-step"><span>۱</span><div><strong>پرسشنامه</strong><small>تجربه و دیدگاه‌های شما</small></div></div>
     <div class="welcome-step"><span>۲</span><div><strong>تکلیف تصمیم‌گیری</strong><small>انتخاب بین دو گزینه</small></div></div>
@@ -735,7 +792,13 @@ const workflow = {
  questionnaireStageState:null,
  currentStage:null,
  stagedRunId:null,
- testModuleOnly:null
+ testModuleOnly:null,
+ workflowMode:false,
+ timeTrackingEnabled:false,
+ workflowSteps:[],
+ workflowStepIndex:-1,
+ currentStepId:null,
+ timerActive:false
 };
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
@@ -995,6 +1058,63 @@ async function api(path, body){
  }
  return res.json();
 }
+let workflowTimerHeartbeat=null;
+const LEGACY_STEP_IDS={
+ questionnaire:"default-questionnaire",
+ dd_lifetrade:"default-dd-lifetrade",
+ ultimatum:"default-ultimatum"
+};
+function legacyStepId(moduleCode){return LEGACY_STEP_IDS[moduleCode]||null;}
+function stepTimePayload(event){
+ return {
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  step_id:workflow.currentStepId,
+  stage_code:workflow.currentStage,
+  event
+ };
+}
+async function postStepTime(event,keepalive=false){
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return;
+ const payload=stepTimePayload(event);
+ if(keepalive){
+  try{
+   await fetch(APP_BASE_PATH+'/api/experiment/time',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),cache:'no-store',keepalive:true
+   });
+  }catch(error){console.warn('Time tracking beacon failed',error);}
+  return;
+ }
+ return api('/api/experiment/time',payload);
+}
+async function startStepTimer(){
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId||workflow.timerActive)return;
+ workflow.timerActive=true;
+ try{await postStepTime('start');}
+ catch(error){workflow.timerActive=false;console.warn('Time tracking start failed',error);}
+ if(!workflowTimerHeartbeat){
+  workflowTimerHeartbeat=window.setInterval(()=>{
+   if(workflow.timerActive)postStepTime('heartbeat').catch(error=>console.warn('Time heartbeat failed',error));
+  },15000);
+ }
+}
+async function pauseStepTimer(){
+ if(!workflow.timerActive)return;
+ workflow.timerActive=false;
+ try{await postStepTime('pause');}catch(error){console.warn('Time tracking pause failed',error);}
+}
+async function finishStepTimer(){
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
+ workflow.timerActive=false;
+ try{await postStepTime('complete');}catch(error){console.warn('Time tracking completion failed',error);}
+}
+document.addEventListener('visibilitychange',()=>{
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
+ if(document.hidden)pauseStepTimer();
+ else startStepTimer();
+});
+window.addEventListener('pagehide',()=>{if(workflow.timeTrackingEnabled&&workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}});
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function utApiWithRetry(path,payload,attempts=4){
  let lastError;
@@ -1278,7 +1398,7 @@ function showQuestionnaireIntro(pageIndex=0){
  content.className='instruction-content';
  if(pageIndex===0){
   const paras=[
-   'راننده گرامی،',
+   'بارسانی عزیز،',
    'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
    'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
    'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
@@ -1331,9 +1451,11 @@ async function startQuestionnaireRun(button){
   const started=await api('/api/experiment/stages/start',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:'questionnaire'
+   stage_code:'questionnaire',
+   step_id:workflow.workflowMode?workflow.currentStepId:null
   });
   workflow.stageRunId=started.run_id;
+  await startStepTimer();
   const serverDraft=started.draft_payload||{};
   if(serverDraft.answers&&typeof serverDraft.answers==='object'){
    workflow.questionnaireAnswers={...serverDraft.answers};
@@ -1354,6 +1476,7 @@ async function startQuestionnaireRun(button){
   console.error(error);
  }
 }
+
 
 function updateQuestionnaireSelection(){
  const current=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
@@ -1400,12 +1523,45 @@ async function chooseQuestionnaireAnswer(item,index,value){
  }
 }
 
+async function enterWorkflowStep(){
+ const step=workflow.workflowSteps[workflow.workflowStepIndex];
+ if(!step){
+  workflow.currentStepId=null;workflow.currentStage=null;
+  workflowMessage('برنامه پژوهشی تکمیل شد','همهٔ بخش‌های تعیین‌شده با موفقیت ثبت شدند. از وقتی که برای این پژوهش گذاشتید سپاسگزاریم.','پایان');
+  return;
+ }
+ workflow.currentStepId=step.step_id;
+ workflow.currentStage=step.module_code;
+ workflow.timerActive=false;
+ await startStepTimer();
+ workflow.stageRunId=null;
+ workflow.stagedRunId=null;
+ if(step.module_code==='questionnaire'){
+  const draft=step.draft_payload||{};
+  workflow.questionnaireStageState=step;
+  workflow.questionnaireAnswers=(draft.answers&&typeof draft.answers==='object')?{...draft.answers}:{};
+  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+  workflow.questionIndex=Number.isInteger(draft.current_question_index)?Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,draft.current_question_index)):0;
+  showQuestionnaireIntro(0);
+ }else if(step.module_code==='dd_lifetrade'){
+  await startAssignedDDStage();
+ }else if(step.module_code==='ultimatum'){
+  await startUltimatumInstructions();
+ }
+}
+async function advanceWorkflowStep(){
+ if(!workflow.workflowMode)return;
+ workflow.workflowStepIndex+=1;
+ await enterWorkflowStep();
+}
+
 async function saveQuestionnairePosition(index){
  await api('/api/experiment/stages/draft',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   stage_code:'questionnaire',
   run_id:workflow.stageRunId,
+  step_id:workflow.workflowMode?workflow.currentStepId:null,
   draft_payload:{
    answers:{...workflow.questionnaireAnswers},
    current_question_index:index,
@@ -1414,6 +1570,7 @@ async function saveQuestionnairePosition(index){
  });
  workflow.questionIndex=index;
 }
+
 
 async function moveQuestionnaire(direction){
  const item=QUESTIONNAIRE_ITEMS[workflow.questionIndex];
@@ -1504,18 +1661,23 @@ async function completeQuestionnaire(){
    participant_code:workflow.participantCode,
    stage_code:'questionnaire',
    run_id:workflow.stageRunId,
+   step_id:workflow.workflowMode?workflow.currentStepId:null,
    final_payload:{
     schema_version:1,
     answers:{...workflow.questionnaireAnswers},
     question_order:QUESTIONNAIRE_ITEMS.map(question=>question.code)
    }
   });
-  workflow.currentStage='dd_lifetrade';
+  await finishStepTimer();
   if(workflow.testModuleOnly==='questionnaire'){
    workflowMessage('تست پرسشنامه تکمیل شد','پاسخ‌های این ماژول در محدودهٔ داده‌های تست ثبت شده‌اند. این لینک به ماژول دیگری وارد نمی‌شود.','پایان');
    return;
   }
-  await startAssignedDDStage();
+  if(workflow.workflowMode)await advanceWorkflowStep();
+  else{
+   workflow.currentStage='dd_lifetrade';
+   await startAssignedDDStage();
+  }
  }catch(error){
   if(next){next.disabled=false;next.textContent='تلاش دوباره برای ثبت';}
   if(prev)prev.disabled=false;
@@ -1524,6 +1686,7 @@ async function completeQuestionnaire(){
   console.error(error);
  }
 }
+
 
 async function beginParticipantFlow(){
  const codeInput=$('participant-code-input');
@@ -1560,20 +1723,37 @@ async function beginParticipantFlow(){
   workflow.conditionCode=identity.condition_code;
   workflow.testModuleOnly=identity.test_module_only||null;
   workflow.currentStage=identity.current_stage;
-  const stages=identity.stages||[];
-  const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
-  workflow.questionnaireStageState=qstate||null;
-  workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
-  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
-  workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
-  if(identity.current_stage==='questionnaire'){
-   showQuestionnaireIntro(0);
-  }else if(identity.current_stage==='dd_lifetrade'){
-   await startAssignedDDStage();
-  }else if(identity.current_stage==='ultimatum'){
-   await startUltimatumInstructions();
+  workflow.workflowMode=Array.isArray(identity.workflow_steps)&&identity.workflow_steps.length>0;
+  workflow.timeTrackingEnabled=true;
+  workflow.workflowSteps=workflow.workflowMode?identity.workflow_steps:[];
+  workflow.workflowStepIndex=workflow.workflowMode
+   ?workflow.workflowSteps.findIndex(step=>step.status!=='completed'):-1;
+  workflow.currentStepId=null;
+  workflow.timerActive=false;
+  if(workflow.workflowMode){
+   if(workflow.workflowStepIndex<0){
+    workflowMessage('برنامه پژوهشی تکمیل شده است','طبق سوابق ثبت‌شده، همهٔ بخش‌های روند آزمایش تکمیل شده‌اند. از وقتی که برای این پژوهش گذاشتید سپاسگزاریم.','پایان');
+   }else{
+    await enterWorkflowStep();
+   }
   }else{
-   workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+   const stages=identity.stages||[];
+   const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
+   workflow.questionnaireStageState=qstate||null;
+   workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
+   workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+   workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
+   if(identity.current_stage==='questionnaire'){
+    workflow.currentStepId=legacyStepId("questionnaire");
+    await startStepTimer();
+    showQuestionnaireIntro(0);
+   }else if(identity.current_stage==='dd_lifetrade'){
+    await startAssignedDDStage();
+   }else if(identity.current_stage==='ultimatum'){
+    await startUltimatumInstructions();
+   }else{
+    workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+   }
   }
  }catch(error){
   console.error(error);
@@ -1584,17 +1764,21 @@ async function beginParticipantFlow(){
  }
 }
 
+
 async function startAssignedDDStage(){
+ if(!workflow.workflowMode){workflow.currentStage="dd_lifetrade";workflow.currentStepId=legacyStepId("dd_lifetrade");}
  const started=await api('/api/experiment/stages/start',{
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
-  stage_code:'dd_lifetrade'
+  stage_code:'dd_lifetrade',
+  step_id:workflow.workflowMode?workflow.currentStepId:null
  });
  workflow.stagedRunId=started.run_id;
  sessionId=started.run_id;
  participantCode=workflow.participantCode;
  participant={participant:participantCode,session:sessionId,date:nowISO()};
  rows=[];trialCount=0;stopped=false;
+ await startStepTimer();
  try{
   try{await recoverOrphanedPendingQueues()}catch(error){error.pendingRecovery=true;throw error}
   show();
@@ -1613,6 +1797,7 @@ async function startAssignedDDStage(){
    const unsent=await flushPending();
    await api('/api/complete',{session_id:sessionId,status:unsent?'error':'completed',trial_count:trialCount});
    if(unsent){
+    await pauseStepTimer();
     workflowMessage('ارسال پاسخ‌ها کامل نشد','تعدادی از پاسخ‌ها هنوز به سرور نرسیده‌اند؛ به همین دلیل این مرحله تکمیل‌شده علامت نخورد. اتصال را بررسی کنید و با تیم پژوهش هماهنگ کنید.','بازگشت');
     return;
    }
@@ -1620,17 +1805,23 @@ async function startAssignedDDStage(){
     invitation_token:workflow.invitationToken,
     participant_code:workflow.participantCode,
     stage_code:'dd_lifetrade',
-    run_id:sessionId
+    run_id:sessionId,
+    step_id:workflow.workflowMode?workflow.currentStepId:null
    });
+   await finishStepTimer();
    if(workflow.testModuleOnly==='dd_lifetrade'){
     workflowMessage('تست Life-Trade تکمیل شد','این لینک فقط برای تست همین ماژول ساخته شده است؛ داده‌ها در محدودهٔ تست باقی مانده‌اند.','پایان');
     return;
    }
-   workflow.currentStage='ultimatum';
-   await startUltimatumInstructions();
+   if(workflow.workflowMode)await advanceWorkflowStep();
+   else{
+    workflow.currentStage='ultimatum';
+    await startUltimatumInstructions();
+   }
   }else{
    await flushPending();
    await api('/api/complete',{session_id:sessionId,status:'stopped',trial_count:trialCount}).catch(()=>{});
+   await pauseStepTimer();
    workflowMessage('تکلیف تصمیم‌گیری متوقف شد','این مرحله کامل نشده است. با ورود دوباره از لینک اختصاصی، این مرحله از ابتدا اجرا می‌شود و مراحل تکمیل‌شدهٔ قبلی تکرار نمی‌شوند.','بازگشت');
   }
  }catch(error){
@@ -1639,9 +1830,11 @@ async function startAssignedDDStage(){
    await flushPending().catch(()=>{});
    await api('/api/complete',{session_id:sessionId,status:'error',trial_count:trialCount}).catch(()=>{});
   }
+  await pauseStepTimer();
   workflowMessage('مشکل در اجرای مرحله','اتصال یا ثبت پاسخ‌ها با خطا روبه‌رو شد. مرحله تکمیل‌شده ثبت نشده است؛ اتصال را بررسی کنید و در صورت تکرار خطا با تیم پژوهش هماهنگ کنید.','بازگشت');
  }
 }
+
 
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
@@ -1705,7 +1898,8 @@ const utCss = [
 ".ut-error{color:#9e1f1f;background:#fff5f5;border:1px solid #f0cccc;border-radius:12px;padding:12px;text-align:center}",
 ".ut-body>:not(.ut-actions),.ut-body p,.ut-body h1,.ut-body div,.ut-body span,.ut-rolebox,.ut-result,.ut-summary-box{text-align:center}",
 "@media(max-width:640px){.ut-card{height:calc(100dvh - 12px);padding:12px 11px;border-radius:17px}.ut-topbar{margin-bottom:8px}.ut-score{font-size:.86rem}.ut-opponent{font-size:1rem;gap:7px;padding:3px 7px}.ut-opponent-icon{font-size:1.75rem;width:42px;height:42px;border-radius:13px}.ut-opponent-label{font-size:.7rem}.ut-title{font-size:1.28rem;margin-bottom:8px}.ut-body{gap:10px}.ut-copy{font-size:.94rem;line-height:1.72}.ut-rolebox{padding:10px}.ut-rolebox strong{font-size:1.06rem}.ut-rolebox span{font-size:.86rem}.ut-total{font-size:.92rem}.ut-question{font-size:1.03rem}.ut-slider-wrap{padding-top:32px;padding-inline:8px}.ut-shares{gap:7px}.ut-share{padding:8px 4px;font-size:.82rem}.ut-btn{min-height:43px;padding:9px 8px;font-size:.9rem}.ut-result-main{font-size:1.28rem}.ut-result-detail{font-size:1rem}.ut-summary-box{padding:15px 12px}.ut-summary-metrics{gap:8px}.ut-summary-metric{padding:12px 6px}.ut-summary-metric-label{font-size:.78rem}.ut-summary-metric-value{font-size:1.65rem}}",
-"@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}.ut-summary-metric{padding:9px 5px}.ut-summary-metric-value{font-size:1.5rem}}"
+"@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}.ut-summary-metric{padding:9px 5px}.ut-summary-metric-value{font-size:1.5rem}}",
+"@media(max-width:680px){.ut-card{height:auto;min-height:calc(100dvh - 8px);max-height:none;overflow-y:auto;padding:16px 13px;border-radius:17px}.ut-topbar{gap:8px;margin-bottom:10px}.ut-score{font-size:1rem;font-weight:900;padding:9px 12px}.ut-opponent{font-size:1.08rem;font-weight:850}.ut-opponent-icon{width:52px;height:52px;font-size:2.15rem}.ut-progress{font-size:.94rem;font-weight:750}.ut-title{font-size:1.48rem;line-height:1.55;font-weight:950;margin-bottom:10px}.ut-body{flex:auto;min-height:0;overflow:visible;gap:12px;padding-block:8px}.ut-copy{font-size:1.12rem;line-height:1.9;font-weight:700}.ut-copy.small{font-size:.98rem;font-weight:650}.ut-rolebox{padding:14px 12px}.ut-rolebox strong{font-size:1.22rem;font-weight:900}.ut-rolebox span{font-size:1.02rem;line-height:1.8;font-weight:650}.ut-total,.ut-question{font-size:1.1rem;font-weight:850}.ut-slider{height:42px}.ut-share{font-size:1rem;font-weight:850;padding:12px 8px}.ut-btn{min-height:56px;padding:12px 13px;font-size:1.08rem;font-weight:900}.ut-result-main{font-size:1.48rem;font-weight:950}.ut-result-detail{font-size:1.16rem;font-weight:850}.ut-result-note{font-size:1rem}.ut-summary-metric-label{font-size:.95rem;font-weight:850}.ut-summary-metric-value{font-size:2rem;font-weight:950}}"
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
@@ -1830,17 +2024,20 @@ function utShowError(message,retry) {
 }
 async function startUltimatumInstructions() {
  try {
+  if(!workflow.workflowMode){workflow.currentStage="ultimatum";workflow.currentStepId=legacyStepId("ultimatum");}
   show();
   setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
   const started=await api("/api/experiment/stages/start",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:"ultimatum"
+   stage_code:"ultimatum",
+   step_id:workflow.workflowMode?workflow.currentStepId:null
   });
   if(started.already_completed) {
-   workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، مراحل آزمایش برای این کد کامل شده‌اند.","بازگشت");
+   workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، این بخش از روند آزمایش قبلاً کامل شده است.","بازگشت");
    return;
   }
+  await startStepTimer();
   ultimatumState={
    runId:started.run_id,
    score:0,
@@ -1866,7 +2063,8 @@ async function startUltimatumInstructions() {
   utRenderWelcome();
  } catch(error) {
   console.error(error);
-  workflowMessage("بازی اولتیماتوم آماده نشد","شروع مرحلهٔ اولتیماتوم موفق نبود. اتصال را بررسی کنید و دوباره وارد لینک اختصاصی شوید.","بازگشت");
+  await pauseStepTimer();
+  workflowMessage("بازی اولتیماتوم آماده نشد","شروع این بخش موفق نبود. اتصال را بررسی کنید و دوباره از لینک اختصاصی وارد شوید.","بازگشت");
  }
 }
 function utRenderWelcome() {
@@ -2232,6 +2430,7 @@ async function utFinishUltimatum() {
    participant_code:workflow.participantCode,
    stage_code:"ultimatum",
    run_id:ultimatumState.runId,
+   step_id:workflow.workflowMode?workflow.currentStepId:null,
    final_payload:{
     schema_version:1,
     condition_code:workflow.conditionCode,
@@ -2244,14 +2443,30 @@ async function utFinishUltimatum() {
     client_completed_at:nowISO()
    }
   });
+  await finishStepTimer();
   ultimatumState.completed=true;
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
-  utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+  const hasNext=workflow.workflowMode&&workflow.workflowStepIndex<workflow.workflowSteps.length-1;
+  let closingMessage;
+  if(workflow.testModuleOnly==="ultimatum"){
+   closingMessage="بارسانی عزیز، تست این ماژول به پایان رسید. داده‌ها در محدودهٔ تست ثبت شده‌اند.";
+  }else if(hasNext){
+   closingMessage="بارسانی عزیز، این بخش با موفقیت تکمیل شد. برای رفتن به بخش بعدی، دکمهٔ ادامه را بزنید.";
+  }else{
+   closingMessage="بارسانی عزیز، برنامهٔ پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.";
+  }
+  utAddText(end.body,"p","ut-copy",closingMessage);
+  if(hasNext){
+   const actions=utNode("div","ut-actions");
+   end.body.appendChild(actions);
+   utButton(actions,"ادامه به مرحله بعد",function(){advanceWorkflowStep();},"");
+  }else{
+   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+  }
  } catch(error) {
   console.error(error);
   utShowError("ثبت نهایی موفق نشد. داده‌های دورها در سرور نگه داشته شده‌اند؛ برای تکمیل ثبت، دوباره تلاش کنید.",utFinishUltimatum);
