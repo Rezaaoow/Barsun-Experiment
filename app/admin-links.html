@@ -377,7 +377,8 @@ let lastAssignmentLinks=[];
 let workflowSteps=[
  {step_id:"default-questionnaire",module_code:"questionnaire"},
  {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
- {step_id:"default-ultimatum",module_code:"ultimatum"}
+ {step_id:"default-ultimatum-frame",module_code:"ultimatum_frame"},
+ {step_id:"default-ultimatum-control",module_code:"ultimatum_control"}
 ];
 let workflowLoaded=false;
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
