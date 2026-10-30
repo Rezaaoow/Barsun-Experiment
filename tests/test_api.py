@@ -486,7 +486,54 @@ def test_configured_workflow_repeats_modules_and_tracks_active_time(client, monk
     assert saved.status_code == 200, saved.text
     assert saved.json()["workflow"] == configured
 
+    full_test = client.post("/api/admin/test-links", headers=headers)
+    assert full_test.status_code == 200, full_test.text
+    full_test_item = full_test.json()["assignments"][0]
+    full_test_token = parse_qs(urlparse(full_test_item["invitation_url"]).query)["invite"][0]
+    full_test_consent = client.post(
+        "/api/experiment/consent",
+        json={"invitation_token": full_test_token, "participant_code": "TEST", "accepted": True},
+    )
+    assert full_test_consent.status_code == 200, full_test_consent.text
+    full_test_identity = client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": full_test_token, "participant_code": "TEST"},
+    )
+    assert full_test_identity.status_code == 200, full_test_identity.text
+    assert full_test_identity.json()["workflow"] == configured
+
+    standalone = client.post(
+        "/api/admin/module-test-links",
+        headers=headers,
+        json={"stage_code": "ultimatum", "condition_code": "A"},
+    )
+    assert standalone.status_code == 200, standalone.text
+    assert standalone.json()["prerequisites_marked_synthetic"] == ["questionnaire", "dd_lifetrade"]
+    standalone_url = standalone.json()["invitation_url"]
+    standalone_token = parse_qs(urlparse(standalone_url).query)["invite"][0]
+    standalone_consent = client.post(
+        "/api/experiment/consent",
+        json={"invitation_token": standalone_token, "participant_code": "TEST", "accepted": True},
+    )
+    assert standalone_consent.status_code == 200, standalone_consent.text
+    standalone_identity = client.post(
+        "/api/experiment/identify",
+        json={"invitation_token": standalone_token, "participant_code": "TEST"},
+    )
+    assert standalone_identity.status_code == 200, standalone_identity.text
+    assert standalone_identity.json()["workflow"] == ["ultimatum"]
+    assert standalone_identity.json()["current_stage"] == "ultimatum"
+    assert standalone_identity.json()["current_step_index"] == 0
+    standalone_start = client.post(
+        "/api/experiment/stages/start",
+        json={"invitation_token": standalone_token, "participant_code": "TEST",
+              "stage_code": "ultimatum", "workflow_step_index": 0},
+    )
+    assert standalone_start.status_code == 200, standalone_start.text
+    assert standalone_start.json()["workflow_step_index"] == 0
+
     token = _create_assignment(client, monkeypatch, code="BS-WORKFLOW-REPEAT-01", condition="A")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
     monkeypatch.setattr(main, "ADMIN_TOKEN", "workflow-admin-token")
     opened = client.post("/api/experiment/activity/open", json={"invitation_token": token})
     assert opened.status_code == 200, opened.text
