@@ -1186,6 +1186,21 @@ def _get_workflow_step_rows(connection: Any, participation_id: str) -> dict[str,
     return {row["step_id"]: dict(row) for row in rows}
 
 
+def _progress_location(
+    assignment: dict[str, Any], stage_code: str, step_id: str | None
+) -> tuple[str, str, str]:
+    workflow = _workflow_steps_for_assignment(assignment)
+    if step_id:
+        if workflow is None or not any(
+            item["step_id"] == step_id and item["stage_code"] == stage_code for item in workflow
+        ):
+            raise HTTPException(403, "جایگاه ماژول با روند آزمایش این لینک مطابقت ندارد.")
+        return "experiment_workflow_step_progress", "step_id", step_id
+    if workflow is not None:
+        raise HTTPException(422, "شناسهٔ جایگاه روند آزمایش ارسال نشده است.")
+    return "experiment_stage_progress", "stage_code", stage_code
+
+
 def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str, Any]:
     if not row:
         return {
@@ -2077,41 +2092,43 @@ def start_experiment_stage(data: StageStartIn):
 
 @app.post("/api/experiment/stages/draft")
 def save_questionnaire_draft(data: StageDraftIn):
-    """Persist questionnaire answers continuously so a refresh restores the same draft."""
+    """Persist a questionnaire draft for this occurrence in a configurable workflow."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
+        table, key_column, key_value = _progress_location(assignment, data.stage_code, data.step_id)
         state = connection.execute(
-            "SELECT status,current_run_id FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], data.stage_code),
+            "SELECT status,current_run_id FROM " + table + " WHERE participation_id=" + marker
+            + " AND " + key_column + "=" + marker,
+            (assignment["participation_id"], key_value),
         ).fetchone()
         if not state or state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
         if state["status"] == "completed":
             raise HTTPException(409, "پرسشنامه قبلاً تکمیل شده است.")
         connection.execute(
-            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(data.draft_payload), now(), assignment["participation_id"], data.stage_code),
+            "UPDATE " + table + " SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND " + key_column + "=" + marker,
+            (_json_param(data.draft_payload), now(), assignment["participation_id"], key_value),
         )
-    return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id}
+    return {"saved": True, "stage_code": data.stage_code, "step_id": data.step_id, "run_id": data.run_id}
 
 
 @app.post("/api/experiment/questionnaire/answer")
 def save_questionnaire_answer(data: QuestionnaireAnswerIn):
-    """Upsert one answer by its hidden question code and refresh the server-side draft."""
+    """Upsert one answer by question code and refresh the current workflow-step draft."""
     if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
         raise HTTPException(422, "Unknown questionnaire question code")
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
+        table, key_column, key_value = _progress_location(assignment, "questionnaire", data.step_id)
         state = connection.execute(
-            "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], "questionnaire"),
+            "SELECT status,current_run_id,draft_payload FROM " + table
+            + " WHERE participation_id=" + marker + " AND " + key_column + "=" + marker,
+            (assignment["participation_id"], key_value),
         ).fetchone()
         if not state or state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
@@ -2140,15 +2157,16 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
         draft["answers"] = answers
         draft["current_question_index"] = data.current_question_index
         connection.execute(
-            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+            "UPDATE " + table + " SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND " + key_column + "=" + marker,
+            (_json_param(draft), timestamp, assignment["participation_id"], key_value),
         )
     return {
         "saved": True,
         "question_code": data.question_code,
         "response_value": data.response_value,
         "current_question_index": data.current_question_index,
+        "step_id": data.step_id,
     }
 
 
