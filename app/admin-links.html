@@ -162,6 +162,32 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  .link-bulk-actions button{flex:1 1 45%}
  .link-bulk-actions .danger{margin-right:0;flex-basis:100%}
 }
+
+/* Monitoring detail and tidier link-management actions */
+.progress-workflow-cell{display:flex;flex-wrap:wrap;gap:6px;max-width:610px;white-space:normal;min-width:320px}
+.workflow-step-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;background:#f2f6fc;border:1px solid #e1e8f2;font-size:.8rem;font-weight:800;line-height:1.55}
+.workflow-step-pill small{font-size:.72rem;color:#687992;font-weight:700}
+.workflow-step-pill.done{background:#effaf3;border-color:#d7efdf;color:#1e7042}
+.workflow-step-pill.active{background:#eef4ff;border-color:#cfddf7;color:#284f8d}
+.workflow-step-pill.pending{color:#65738a}
+.progress-time{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:plaintext;font-weight:900;color:#284875}
+.progress-time-summary{font-size:.95rem;line-height:1.75;white-space:normal;min-width:110px}
+.progress-opened{font-size:.76rem;color:#78869b;line-height:1.65;white-space:normal;min-width:120px}
+.link-manager-toolbar{display:grid;grid-template-columns:minmax(170px,1fr) minmax(160px,.7fr) auto;gap:10px;align-items:end}
+.link-manager-toolbar .field{margin:0}
+.link-manager-toolbar .actions{margin:0;display:flex;gap:8px}
+.link-manager-toolbar .actions button{white-space:nowrap}
+.link-bulk-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px;border:1px solid #e2e8f1;border-radius:13px;background:#f8faff;margin-top:10px}
+.link-bulk-actions button{min-height:40px;font-size:.85rem}
+.link-bulk-actions .danger{margin-right:auto}
+@media(max-width:760px){
+ .link-manager-toolbar{grid-template-columns:1fr}
+ .link-manager-toolbar .actions{display:grid;grid-template-columns:1fr 1fr}
+ .link-bulk-actions{align-items:stretch}
+ .link-bulk-actions button{flex:1 1 45%}
+ .link-bulk-actions .danger{margin-right:0;flex-basis:100%}
+ .progress-workflow-cell{min-width:240px}
+}
 </style>
 </head>
 <body>
@@ -289,7 +315,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <div class="link-count active"><div class="link-count-label">لینک‌های فعال</div><div class="link-count-value" id="linkCountActive">—</div></div>
  <div class="link-count inactive"><div class="link-count-label">لینک‌های غیرفعال</div><div class="link-count-value" id="linkCountInactive">—</div></div>
 </div>
-<div class="link-manager-tools">
+<div class="link-manager-toolbar">
  <div class="field">
   <label for="linkSearch">جست‌وجو بر اساس کد شرکت‌کننده</label>
   <input id="linkSearch" type="text" class="compact-input" placeholder="مثلاً BS-001">
@@ -303,7 +329,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
   <button id="downloadActiveLinks" class="secondary" type="button">دریافت CSV لینک‌های فعال</button>
  </div>
 </div>
-<div class="actions">
+<div class="link-bulk-actions">
  <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ موارد نمایش‌داده‌شده</label>
  <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
  <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
@@ -381,6 +407,162 @@ const basePath=window.location.pathname.replace(/\/admin(?:\/links)?\/?$/,"").re
 const token=()=>$("adminToken").value.trim();
 let progressRows=[];
 let lastAssignmentLinks=[];
+let workflowSteps=[];
+let workflowTemplateLoaded=false;
+let workflowDirty=false;
+let workflowDragPayload=null;
+const workflowModuleLabels={
+ questionnaire:"پرسشنامه",
+ dd_lifetrade:"DD / Life-Trade",
+ ultimatum:"بازی اولتیماتوم"
+};
+const faDigits=value=>String(value).replace(/[0-9]/g,d=>"۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+function workflowLocalId(){
+ return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():"wf-"+Date.now()+"-"+Math.random().toString(16).slice(2);
+}
+function setWorkflowDirty(){
+ workflowDirty=true;
+ $("workflowSaveState").textContent="تغییرات ذخیره نشده‌اند.";
+ $("workflowSaveState").className="workflow-save-state dirty";
+}
+function setWorkflowSaved(message){
+ workflowDirty=false;
+ $("workflowSaveState").textContent=message||"روند آزمایش ذخیره شد.";
+ $("workflowSaveState").className="workflow-save-state saved";
+}
+function renderWorkflowTimeline(){
+ const list=$("workflowSteps"),empty=$("workflowEmpty");
+ list.replaceChildren();
+ $("workflowStepCount").textContent=faDigits(workflowSteps.length);
+ empty.hidden=workflowSteps.length>0;
+ workflowSteps.forEach((step,index)=>{
+  const card=document.createElement("div");
+  card.className="workflow-step";
+  card.draggable=true;
+  card.dataset.index=String(index);
+  card.dataset.localId=step.local_id;
+  const number=document.createElement("div");number.className="workflow-step-number";number.textContent=faDigits(index+1);
+  const main=document.createElement("div");main.className="workflow-step-main";
+  const title=document.createElement("strong");title.textContent=workflowModuleLabels[step.module_code]||step.module_code;
+  const code=document.createElement("small");code.textContent=step.module_code;
+  main.append(title,code);
+  const actions=document.createElement("div");actions.className="workflow-step-actions";
+  const up=document.createElement("button");up.type="button";up.className="secondary";up.title="انتقال به بالا";up.setAttribute("aria-label","انتقال "+(index+1)+" به بالا");up.textContent="↑";up.disabled=index===0;
+  up.addEventListener("click",()=>moveWorkflowStep(index,-1));
+  const down=document.createElement("button");down.type="button";down.className="secondary";down.title="انتقال به پایین";down.setAttribute("aria-label","انتقال "+(index+1)+" به پایین");down.textContent="↓";down.disabled=index===workflowSteps.length-1;
+  down.addEventListener("click",()=>moveWorkflowStep(index,1));
+  const remove=document.createElement("button");remove.type="button";remove.className="remove-step";remove.title="حذف از تایم‌لاین";remove.setAttribute("aria-label","حذف ماژول "+(index+1));remove.textContent="حذف";
+  remove.addEventListener("click",()=>removeWorkflowStep(index));
+  actions.append(up,down,remove);card.append(number,main,actions);
+  card.addEventListener("dragstart",event=>{
+   workflowDragPayload={kind:"step",local_id:step.local_id};
+   event.dataTransfer.effectAllowed="move";
+   event.dataTransfer.setData("text/plain",JSON.stringify(workflowDragPayload));
+   card.classList.add("dragging");
+  });
+  card.addEventListener("dragend",()=>{card.classList.remove("dragging");$("workflowDropzone").classList.remove("drag-over");});
+  card.addEventListener("dragover",event=>{event.preventDefault();card.classList.add("drag-over");});
+  card.addEventListener("dragleave",()=>card.classList.remove("drag-over"));
+  card.addEventListener("drop",event=>{
+   event.preventDefault();card.classList.remove("drag-over");
+   const payload=readWorkflowDragPayload(event);
+   if(payload)applyWorkflowDrop(payload,index);
+  });
+  list.appendChild(card);
+ });
+}
+function addWorkflowStep(moduleCode,index){
+ if(!workflowModuleLabels[moduleCode])return;
+ const step={local_id:workflowLocalId(),module_code:moduleCode};
+ if(Number.isInteger(index)&&index>=0&&index<=workflowSteps.length)workflowSteps.splice(index,0,step);
+ else workflowSteps.push(step);
+ renderWorkflowTimeline();setWorkflowDirty();
+}
+function moveWorkflowStep(index,direction){
+ const target=index+direction;
+ if(target<0||target>=workflowSteps.length)return;
+ [workflowSteps[index],workflowSteps[target]]=[workflowSteps[target],workflowSteps[index]];
+ renderWorkflowTimeline();setWorkflowDirty();
+}
+function removeWorkflowStep(index){
+ if(index<0||index>=workflowSteps.length)return;
+ workflowSteps.splice(index,1);renderWorkflowTimeline();setWorkflowDirty();
+}
+function readWorkflowDragPayload(event){
+ if(workflowDragPayload)return workflowDragPayload;
+ try{return JSON.parse(event.dataTransfer.getData("text/plain"));}catch(_){return null;}
+}
+function applyWorkflowDrop(payload,targetIndex){
+ if(payload.kind==="module"&&workflowModuleLabels[payload.module_code]){
+  addWorkflowStep(payload.module_code,targetIndex);workflowDragPayload=null;return;
+ }
+ if(payload.kind==="step"){
+  const source=workflowSteps.findIndex(item=>item.local_id===payload.local_id);
+  if(source<0)return;
+  const [item]=workflowSteps.splice(source,1);
+  let destination=targetIndex;
+  if(source<targetIndex)destination-=1;
+  workflowSteps.splice(Math.max(0,Math.min(destination,workflowSteps.length)),0,item);
+  renderWorkflowTimeline();setWorkflowDirty();
+ }
+ workflowDragPayload=null;
+}
+async function loadWorkflowTemplate(){
+ try{
+  const response=await adminFetch("/api/admin/workflow",{method:"GET"});
+  const data=await response.json();
+  workflowSteps=(data.workflow_steps||[]).map(module_code=>({local_id:workflowLocalId(),module_code}));
+  workflowTemplateLoaded=true;renderWorkflowTimeline();
+  setWorkflowSaved(data.saved?"روند ذخیره‌شدهٔ فعلی بارگذاری شد.":"روند پیش‌فرض بارگذاری شد؛ هنوز ذخیره نشده است.");
+  if(!data.saved)setWorkflowDirty();
+ }catch(error){
+  $("workflowSaveState").textContent=error.message;
+  $("workflowSaveState").className="workflow-save-state dirty";
+ }
+}
+async function saveWorkflowTemplate(){
+ if(!workflowTemplateLoaded)throw new Error("روند آزمایش هنوز بارگذاری نشده است؛ ابتدا اتصال مدیریتی را برقرار کن.");
+ if(workflowSteps.length>500)throw new Error("حداکثر ۵۰۰ جایگاه در روند مجاز است.");
+ const codes=workflowSteps.map(step=>step.module_code);
+ const response=await adminFetch("/api/admin/workflow",{method:"POST",body:JSON.stringify({workflow_steps:codes})});
+ const data=await response.json();
+ setWorkflowSaved("روند ذخیره شد؛ لینک‌های جدید از این الگو استفاده می‌کنند.");
+ return data;
+}
+function initWorkflowBuilder(){
+ document.querySelectorAll("[data-add-module]").forEach(button=>{
+  button.addEventListener("click",()=>addWorkflowStep(button.dataset.addModule));
+ });
+ document.querySelectorAll(".workflow-module-chip").forEach(chip=>{
+  chip.addEventListener("dragstart",event=>{
+   workflowDragPayload={kind:"module",module_code:chip.dataset.module};
+   event.dataTransfer.effectAllowed="copy";
+   event.dataTransfer.setData("text/plain",JSON.stringify(workflowDragPayload));
+  });
+  chip.addEventListener("dragend",()=>{workflowDragPayload=null;$("workflowDropzone").classList.remove("drag-over");});
+ });
+ const dropzone=$("workflowDropzone");
+ dropzone.addEventListener("dragover",event=>{event.preventDefault();dropzone.classList.add("drag-over");});
+ dropzone.addEventListener("dragleave",event=>{
+  if(!dropzone.contains(event.relatedTarget))dropzone.classList.remove("drag-over");
+ });
+ dropzone.addEventListener("drop",event=>{
+  event.preventDefault();dropzone.classList.remove("drag-over");
+  const payload=readWorkflowDragPayload(event);
+  if(payload)applyWorkflowDrop(payload,workflowSteps.length);
+ });
+ $("saveWorkflow").addEventListener("click",async()=>{
+  const button=$("saveWorkflow");button.disabled=true;
+  try{await saveWorkflowTemplate();setStatus("assignmentStatus","روند آزمایش ذخیره شد. لینک‌های جدید با همین ترتیب ساخته می‌شوند.","success");}
+  catch(error){setStatus("assignmentStatus",error.message,"error");}
+  finally{button.disabled=false;}
+ });
+ $("clearWorkflow").addEventListener("click",()=>{
+  if(workflowSteps.length&&!window.confirm("تمام ماژول‌ها از تایم‌لاین حذف شوند؟"))return;
+  workflowSteps=[];renderWorkflowTimeline();setWorkflowDirty();
+ });
+}
+initWorkflowBuilder();
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
 function clearStatus(id){const el=$(id);el.textContent="";el.className="status";}
 function escapeHtml(value){return String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
