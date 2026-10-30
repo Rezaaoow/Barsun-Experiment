@@ -1126,7 +1126,7 @@ def _condition_group(condition_code: Any) -> str:
         return "A"
     if value in {"B", "CONTROL"}:
         return "B"
-    return _workflow_condition_code([])
+    raise HTTPException(422, "مقدار condition_code معتبر نیست؛ در روند جدید این فیلد باید حذف شود و نوع ماژول از تایم‌لاین تعیین شود.")
 
 
 def _workflow_condition_code(steps: list[dict[str, str]]) -> str:
