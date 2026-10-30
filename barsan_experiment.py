@@ -43,8 +43,6 @@ WORKFLOW_MODULE_CODES = frozenset((*STAGE_ORDER, *ULTIMATUM_WORKFLOW_VARIANTS))
 DEFAULT_WORKFLOW = (
     {"step_id": "default-questionnaire", "module_code": "questionnaire"},
     {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
-    {"step_id": "default-ultimatum-frame", "module_code": "ultimatum_frame"},
-    {"step_id": "default-ultimatum-control", "module_code": "ultimatum_control"},
 )
 ULTIMATUM_TOTAL_POINTS = 10
 ULTIMATUM_MAIN_BLOCK_TRIALS = 5
@@ -658,7 +656,7 @@ WorkflowModuleCode = Literal[
 
 class AssignmentItemIn(BaseModel):
     participant_code: str = Field(min_length=1, max_length=100)
-    condition_code: str = Field(min_length=1, max_length=64)
+    condition_code: str | None = Field(default=None, max_length=64)
 
 
 class WorkflowStepIn(BaseModel):
@@ -1094,9 +1092,7 @@ def _default_workflow_steps() -> list[dict[str, str]]:
     return [dict(step) for step in DEFAULT_WORKFLOW]
 
 
-def _normalize_workflow_steps(
-    raw_steps: Any, *, require_variant_pair: bool = True
-) -> list[dict[str, str]]:
+def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
     if not isinstance(raw_steps, (list, tuple)) or not raw_steps:
         raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۶۰ ماژول داشته باشد.")
     normalized = []
@@ -1116,12 +1112,6 @@ def _normalize_workflow_steps(
             raise HTTPException(422, "شناسه یا نوع یکی از ماژول‌های روند آزمایش معتبر نیست.")
         seen_ids.add(step_id)
         normalized.append({"step_id": step_id, "module_code": module_code})
-    variants = {step["module_code"] for step in normalized} & set(ULTIMATUM_WORKFLOW_VARIANTS)
-    if require_variant_pair and variants and variants != set(ULTIMATUM_WORKFLOW_VARIANTS):
-        raise HTTPException(
-            422,
-            "برای استفاده از اولتیماتوم گروهی، هر دو ماژول Ultimatum — Frame و Ultimatum — Control را به روند اضافه کن.",
-        )
     return normalized
 
 
@@ -1130,31 +1120,40 @@ def _canonical_workflow_stage(module_code: str) -> str:
 
 
 def _condition_group(condition_code: Any) -> str:
+    """Normalize optional legacy A/B values; new assignments derive this from the workflow."""
     value = str(condition_code or "").strip().upper()
     if value in {"A", "FRAME", "FRAMING"}:
         return "A"
     if value in {"B", "CONTROL"}:
         return "B"
-    raise HTTPException(422, "گروه هر شرکت‌کننده باید به‌صورت Frame یا Control مشخص شود.")
+    raise HTTPException(422, "مقدار condition_code معتبر نیست؛ در روند جدید این فیلد باید حذف شود و نوع ماژول از تایم‌لاین تعیین شود.")
 
 
-def _workflow_steps_for_condition(
-    steps: list[dict[str, str]], condition_code: Any
-) -> list[dict[str, str]]:
-    group = _condition_group(condition_code)
-    selected_variant = "ultimatum_frame" if group == "A" else "ultimatum_control"
-    return [
-        dict(step) for step in steps
-        if step["module_code"] not in ULTIMATUM_WORKFLOW_VARIANTS
-        or step["module_code"] == selected_variant
-    ]
+def _workflow_condition_code(steps: list[dict[str, str]]) -> str:
+    variants = {step["module_code"] for step in steps} & set(ULTIMATUM_WORKFLOW_VARIANTS)
+    if variants == {"ultimatum_frame"}:
+        return "A"
+    if variants == {"ultimatum_control"}:
+        return "B"
+    if len(variants) == 2:
+        return "MIXED"
+    return "NONE"
+
+
+def _workflow_ultimatum_variant(steps: list[dict[str, str]]) -> str | None:
+    variants = []
+    for step in steps:
+        label = ULTIMATUM_WORKFLOW_VARIANTS.get(step["module_code"])
+        if label and label not in variants:
+            variants.append(label)
+    return " + ".join(variants) if variants else None
 
 
 def _workflow_module_label(module_code: str) -> str:
     return {
         "questionnaire": "پرسشنامه",
         "dd_lifetrade": "DD / Life-Trade",
-        "ultimatum": "Ultimatum (نسخهٔ قدیمی)",
+        "ultimatum": "بازی Ultimatum",
         "ultimatum_frame": "Ultimatum — Frame",
         "ultimatum_control": "Ultimatum — Control",
     }.get(module_code, module_code)
@@ -1169,7 +1168,18 @@ def _load_study_workflow(connection: Any, study_code: str) -> list[dict[str, str
     if not row:
         return _default_workflow_steps()
     try:
-        return _normalize_workflow_steps(json.loads(row["workflow_json"]))
+        normalized = _normalize_workflow_steps(json.loads(row["workflow_json"]))
+        previous_default = [
+            {"step_id": "default-questionnaire", "module_code": "questionnaire"},
+            {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
+            {"step_id": "default-ultimatum-frame", "module_code": "ultimatum_frame"},
+            {"step_id": "default-ultimatum-control", "module_code": "ultimatum_control"},
+        ]
+        # The former built-in pair is not a user-selected experimental design.
+        # Replace only that exact default snapshot; preserve custom workflows.
+        if normalized == previous_default:
+            return _default_workflow_steps()
+        return normalized
     except (TypeError, ValueError, KeyError, HTTPException):
         return _default_workflow_steps()
 
@@ -1183,11 +1193,10 @@ def _workflow_for_assignment(assignment: dict[str, Any]) -> list[dict[str, str]]
         try:
             if isinstance(raw, str):
                 raw = json.loads(raw)
-            normalized = _normalize_workflow_steps(raw, require_variant_pair=False)
-            return _workflow_steps_for_condition(normalized, assignment.get("condition_code"))
+            return _normalize_workflow_steps(raw)
         except (TypeError, ValueError, HTTPException):
             pass
-    return _workflow_steps_for_condition(_default_workflow_steps(), assignment.get("condition_code"))
+    return _default_workflow_steps()
 
 
 def _workflow_progress_rows(connection: Any, assignment_id: str) -> dict[str, dict[str, Any]]:
@@ -1316,8 +1325,9 @@ def create_assignments(
     with conn() as connection:
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
-            condition = _condition_group(item.condition_code)
-            assignment_steps = _workflow_steps_for_condition(workflow_steps, condition)
+            assignment_steps = [dict(step) for step in workflow_steps]
+            condition = _condition_group(item.condition_code) if item.condition_code else _workflow_condition_code(assignment_steps)
+            variant = _workflow_ultimatum_variant(assignment_steps)
             workflow_json = json.dumps(assignment_steps, ensure_ascii=False, separators=(",", ":"))
             if code in seen_codes:
                 raise HTTPException(422, "Each participant code may appear only once in a batch")
@@ -1352,6 +1362,7 @@ def create_assignments(
             created.append({
                 "participant_code": code,
                 "condition_code": condition,
+                "ultimatum_variant": variant,
                 "invitation_url": base_url + joiner + "invite=" + invitation_token,
             })
     return {"created_count": len(created), "assignments": created}
@@ -1363,67 +1374,59 @@ def create_test_links(
     data: WorkflowConfigIn | None = None,
     x_admin_token: str | None = Header(default=None),
 ):
-    """Create two isolated, fresh test studies with the shared participant code TEST."""
+    """Create one isolated test invitation that runs the exact configured workflow."""
     authorize(x_admin_token)
     generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    study_code = f"{TEST_STUDY_PREFIX}{generation}"
+    study_name = f"BarSan workflow test — {generation}"
+    participant_code = "TEST"
     base_url = _invitation_base_url(request, "/api/admin/test-links")
     joiner = "&" if "?" in base_url else "?"
-    created = []
     with conn() as workflow_connection:
-        workflow_steps = _normalize_workflow_steps(data.steps) if data else _load_study_workflow(workflow_connection, STUDY_CODE)
+        workflow_steps = (
+            _normalize_workflow_steps(data.steps)
+            if data and data.steps
+            else _load_study_workflow(workflow_connection, STUDY_CODE)
+        )
+    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
+    condition = _workflow_condition_code(workflow_steps)
+    variant = _workflow_ultimatum_variant(workflow_steps)
     with conn() as connection:
-        for condition, group_label in (("A", "Frame"), ("B", "Control")):
-            assignment_steps = _workflow_steps_for_condition(workflow_steps, condition)
-            workflow_json = json.dumps(assignment_steps, ensure_ascii=False, separators=(",", ":"))
-            group_slug = group_label.lower()
-            study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
-            study_name = f"BarSan isolated test — {generation} — {group_label}"
-            participant_code = "TEST"
-            participant_id, _participation_id = _ensure_participation(
-                connection,
-                participant_code,
-                study_code=study_code,
-                study_name=study_name,
-            )
-            marker = "%s" if DATABASE_URL else "?"
-            existing = connection.execute(
-                "SELECT assignment_id FROM experiment_assignments "
-                "WHERE study_code=" + marker + " AND participant_id=" + marker,
-                (study_code, participant_id),
-            ).fetchone()
-            if existing:
-                raise HTTPException(409, "A test assignment already exists for this test generation")
-            invitation_token = secrets.token_urlsafe(32)
-            token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
-            token_encrypted = _encrypt_invitation_token(invitation_token)
-            values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now(), workflow_json
-            )
-            if DATABASE_URL:
-                connection.execute(
-                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    values,
-                )
-            else:
-                connection.execute(
-                    "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES(?,?,?,?,?,?,?,?,?)",
-                    values,
-                )
-            created.append({
-                "participant_code": participant_code,
-                "condition_code": condition,
-                "group": group_label,
-                "study_code": study_code,
-                "invitation_url": base_url + joiner + "invite=" + invitation_token,
-            })
+        participant_id, _participation_id = _ensure_participation(
+            connection,
+            participant_code,
+            study_code=study_code,
+            study_name=study_name,
+        )
+        marker = "%s" if DATABASE_URL else "?"
+        invitation_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+        token_encrypted = _encrypt_invitation_token(invitation_token)
+        values = (
+            str(uuid.uuid4()), study_code, participant_id, condition, token_hash,
+            token_encrypted, 1, now(), workflow_json,
+        )
+        connection.execute(
+            "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
+            "invitation_token_hash,invitation_token_encrypted,active,assigned_at,workflow_json) VALUES("
+            + ",".join([marker] * 9) + ")",
+            values,
+        )
+    invitation_url = base_url + joiner + "invite=" + invitation_token
     return {
-        "test_code": "TEST",
+        "test_code": participant_code,
         "generation": generation,
-        "created_count": len(created),
-        "assignments": created,
-        "note": "Each click creates a new isolated test pair. Invitation URLs are encrypted at rest and can be exported later; preserve the private invitation-token key file when backing up this installation. Existing test data is retained.",
+        "created_count": 1,
+        "workflow_modules": [step["module_code"] for step in workflow_steps],
+        "ultimatum_variant": variant,
+        "assignments": [{
+            "participant_code": participant_code,
+            "condition_code": condition,
+            "ultimatum_variant": variant,
+            "study_code": study_code,
+            "invitation_url": invitation_url,
+        }],
+        "note": "این لینک آزمایشی یک نسخهٔ مستقل از کل روند ذخیره‌شده را اجرا می‌کند؛ مراحل و ترتیب آن با روند اصلی یکسان است.",
     }
 
 
@@ -1512,14 +1515,9 @@ def list_admin_assignments(
         item = dict(raw)
         token = _decrypt_invitation_token(item.pop("invitation_token_encrypted", None))
         item["active"] = bool(item["active"])
-        item["group"] = "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control"
         saved_workflow = _workflow_for_assignment(item)
         item["workflow_modules"] = [step["module_code"] for step in saved_workflow]
-        item["ultimatum_variant"] = next(
-            (ULTIMATUM_WORKFLOW_VARIANTS[step["module_code"]] for step in saved_workflow
-             if step["module_code"] in ULTIMATUM_WORKFLOW_VARIANTS),
-            "Legacy" if any(step["module_code"] == "ultimatum" for step in saved_workflow) else None,
-        )
+        item["ultimatum_variant"] = _workflow_ultimatum_variant(saved_workflow)
         item.pop("workflow_json", None)
         item["url_available"] = bool(token)
         item["invitation_url"] = (
@@ -1628,7 +1626,7 @@ def reissue_admin_assignment_link(
     scope_condition, scope_params = _scope_filter(data.scope, "a.study_code", marker)
     with conn() as connection:
         row = connection.execute(
-            "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.active "
+            "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,a.active "
             "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
             "WHERE a.assignment_id=" + marker + " AND " + scope_condition,
             (data.assignment_id, *scope_params),
@@ -1647,7 +1645,7 @@ def reissue_admin_assignment_link(
         "assignment_id": data.assignment_id,
         "participant_code": row["participant_code"],
         "condition_code": row["condition_code"],
-        "group": "Frame" if str(row["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
+        "ultimatum_variant": _workflow_ultimatum_variant(_workflow_for_assignment(dict(row))),
         "active": bool(row["active"]),
         "study_code": row["study_code"],
         "invitation_url": _invitation_url_for_token(request, "/api/admin/assignments/reissue-link", new_token),
@@ -1729,7 +1727,7 @@ def export_admin_active_assignments_csv(
     output = io.StringIO(newline="")
     output.write("\ufeff")
     fields = [
-        "participant_code", "group", "condition_code", "ultimatum_variant", "active", "study_code",
+        "participant_code", "condition_code", "ultimatum_variant", "active", "study_code",
         "assigned_at", "invitation_url", "url_available", "link_id",
     ]
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
@@ -1738,14 +1736,9 @@ def export_admin_active_assignments_csv(
         item = dict(raw)
         token = _decrypt_invitation_token(item.get("invitation_token_encrypted"))
         saved_steps = _workflow_for_assignment(item)
-        variant = next(
-            (ULTIMATUM_WORKFLOW_VARIANTS[step["module_code"]] for step in saved_steps
-             if step["module_code"] in ULTIMATUM_WORKFLOW_VARIANTS),
-            "Legacy" if any(step["module_code"] == "ultimatum" for step in saved_steps) else "",
-        )
+        variant = _workflow_ultimatum_variant(saved_steps) or ""
         writer.writerow({
             "participant_code": item["participant_code"],
-            "group": "Frame" if str(item["condition_code"]).upper() in {"A", "FRAME", "FRAMING"} else "Control",
             "condition_code": item["condition_code"],
             "ultimatum_variant": variant,
             "active": True,
@@ -1822,17 +1815,15 @@ def get_public_experiment_workflow(invite: str):
         try:
             if isinstance(raw, str):
                 raw = json.loads(raw)
-            steps = _workflow_steps_for_condition(
-                _normalize_workflow_steps(raw, require_variant_pair=False), assignment["condition_code"]
-            )
+            steps = _normalize_workflow_steps(raw)
         except (TypeError, ValueError, HTTPException):
-            steps = _workflow_steps_for_condition(_default_workflow_steps(), assignment["condition_code"])
+            steps = _default_workflow_steps()
         is_legacy = False
     elif module_only:
         steps = [{"step_id": "module-test-" + module_only, "module_code": module_only}]
         is_legacy = False
     else:
-        steps = _workflow_steps_for_condition(_default_workflow_steps(), assignment["condition_code"])
+        steps = _default_workflow_steps()
         is_legacy = True
     module_details = {
         "questionnaire": (
@@ -3297,6 +3288,7 @@ def experiment_progress(
         completed_steps = sum(item["status"] == "completed" for item in progress_steps)
         current_step = next((item for item in progress_steps if item["status"] != "completed"), None)
         row["workflow_steps"] = progress_steps
+        row["ultimatum_variant"] = _workflow_ultimatum_variant(steps)
         row["total_steps"] = total_steps
         row["completed_steps"] = completed_steps
         row["completed_stages"] = completed_steps
@@ -3427,9 +3419,9 @@ def export_ultimatum_csv(
             item["ultimatum_variant"] = (
                 run_metadata.get("ultimatum_variant")
                 or ULTIMATUM_WORKFLOW_VARIANTS.get(run_metadata.get("workflow_module_code"))
-                or "Legacy"
+                or ""
             )
-            item["feedback_group"] = (
+            item["feedback_group"] = item["ultimatum_variant"] or (
                 "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
             )
             item["block_order_json"] = json.dumps(

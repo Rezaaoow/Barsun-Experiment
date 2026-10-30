@@ -138,34 +138,47 @@ def csv_rows(client, path):
     return list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
 
 
-def test_test_links_use_code_test_and_create_separate_frame_control_studies(client):
+def test_test_link_uses_one_exact_saved_workflow_and_not_a_frame_control_pair(client):
+    steps = [
+        {"step_id": "test-questionnaire", "module_code": "questionnaire"},
+        {"step_id": "test-control", "module_code": "ultimatum_control"},
+        {"step_id": "test-dd-again", "module_code": "dd_lifetrade"},
+    ]
+    saved = client.post(
+        "/api/admin/workflow",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"steps": steps},
+    )
+    assert saved.status_code == 200, saved.text
+
     response = client.post("/api/admin/test-links", headers={"x-admin-token": "test-admin-token"})
     assert response.status_code == 200, response.text
     data = response.json()
 
     assert data["test_code"] == "TEST"
-    assert data["created_count"] == 2
-    assert [(row["participant_code"], row["group"], row["condition_code"]) for row in data["assignments"]] == [
-        ("TEST", "Frame", "A"),
-        ("TEST", "Control", "B"),
-    ]
-    assert len({row["study_code"] for row in data["assignments"]}) == 2
-    assert all(row["study_code"].startswith(main.TEST_STUDY_PREFIX) for row in data["assignments"])
+    assert data["created_count"] == 1
+    assert data["workflow_modules"] == ["questionnaire", "ultimatum_control", "dd_lifetrade"]
+    assert data["ultimatum_variant"] == "Control"
+    assert len(data["assignments"]) == 1
+    link = data["assignments"][0]
+    assert link["participant_code"] == "TEST"
+    assert link["ultimatum_variant"] == "Control"
+    assert link["study_code"].startswith(main.TEST_STUDY_PREFIX)
 
-    for row in data["assignments"]:
-        token = invite_token(row)
-        identity = {"invitation_token": token, "participant_code": "TEST"}
-        consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
-        assert consent.status_code == 200, consent.text
-        identified = client.post("/api/experiment/identify", json=identity)
-        assert identified.status_code == 200, identified.text
-        assert identified.json()["condition_code"] == row["condition_code"]
+    token = invite_token(link)
+    identity = {"invitation_token": token, "participant_code": "TEST"}
+    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    assert consent.status_code == 200, consent.text
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    payload = identified.json()
+    assert [step["module_code"] for step in payload["workflow_steps"]] == data["workflow_modules"]
 
     page = client.get("/admin/links")
     assert page.status_code == 200
     assert "پنل مدیریت آزمایش" in page.text
-    assert "ساخت لینک تست (Frame و Control)" in page.text
-
+    assert "ساخت لینک تست" in page.text
+    assert "ساخت لینک تست (Frame و Control)" not in page.text
 
 def test_main_and_test_exports_are_separated_across_all_modules(client):
     main_assignment = create_main_assignment(client)
@@ -194,7 +207,7 @@ def test_main_and_test_exports_are_separated_across_all_modules(client):
         main_rows = csv_rows(client, route)
         test_rows = csv_rows(client, route + "?scope=test")
         assert len(main_rows) == 1, (route, main_rows)
-        assert len(test_rows) == 2, (route, test_rows)
+        assert len(test_rows) == 1, (route, test_rows)
         assert {row["participant_code"] for row in main_rows} == {"MAIN-DATA"}
         assert {row["participant_code"] for row in test_rows} == {"TEST"}
         assert all(row["study_code"].startswith(main.TEST_STUDY_PREFIX) for row in test_rows)
@@ -319,7 +332,7 @@ def test_scoped_reset_requires_exact_phrase_and_does_not_cross_scopes(client):
     main_rows = csv_rows(client, "/api/admin/export.csv")
     test_rows = csv_rows(client, "/api/admin/export.csv?scope=test")
     assert main_rows == []
-    assert len(test_rows) == 2
+    assert len(test_rows) == 1
     assert {row["participant_code"] for row in test_rows} == {"TEST"}
 
     # Scope=test cleanup removes only all test study rows and invalidates their links.
@@ -329,7 +342,7 @@ def test_scoped_reset_requires_exact_phrase_and_does_not_cross_scopes(client):
         json={"scope": "test", "confirm_phrase": "CLEAR TEST DATA"},
     )
     assert test_reset.status_code == 200, test_reset.text
-    assert test_reset.json()["deleted_rows"]["test_studies"] >= 2
+    assert test_reset.json()["deleted_rows"]["test_studies"] >= 1
     assert csv_rows(client, "/api/admin/export.csv?scope=test") == []
 
 
@@ -408,24 +421,28 @@ def test_delete_inactive_assignments_removes_assignment_child_rows_safely(client
         ).fetchone() is None
 
 
-def test_active_links_csv_identifies_frame_and_control_ultimatum_variants(client):
-    steps = [
-        {"step_id": "csv-q", "module_code": "questionnaire"},
+def test_active_links_csv_identifies_workflow_selected_ultimatum_variant(client):
+    frame_steps = [
+        {"step_id": "csv-q-frame", "module_code": "questionnaire"},
         {"step_id": "csv-frame", "module_code": "ultimatum_frame"},
+    ]
+    control_steps = [
+        {"step_id": "csv-q-control", "module_code": "questionnaire"},
         {"step_id": "csv-control", "module_code": "ultimatum_control"},
     ]
-    created = client.post(
+    frame = client.post(
         "/api/admin/assignments",
         headers={"x-admin-token": "test-admin-token"},
-        json={
-            "assignments": [
-                {"participant_code": "CSV-FRAME", "condition_code": "Frame"},
-                {"participant_code": "CSV-CONTROL", "condition_code": "Control"},
-            ],
-            "steps": steps,
-        },
+        json={"assignments": [{"participant_code": "CSV-FRAME"}], "steps": frame_steps},
     )
-    assert created.status_code == 200, created.text
+    control = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"assignments": [{"participant_code": "CSV-CONTROL"}], "steps": control_steps},
+    )
+    assert frame.status_code == 200, frame.text
+    assert control.status_code == 200, control.text
+
     response = client.get(
         "/api/admin/assignments/export.csv",
         headers={"x-admin-token": "test-admin-token"},

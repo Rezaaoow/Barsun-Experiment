@@ -236,7 +236,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 
 <section class="card" aria-labelledby="linkTitle">
 <h2 id="linkTitle">۲. روند آزمایش و ساخت لینک</h2>
-<p class="hint">ترتیب ماژول‌ها را در تایم‌لاین مشخص کن؛ برای هر شرکت‌کننده گروه Frame یا Control را در فایل یا فهرست کدها تعیین کن. قالب: <span class="code">participant_code,group</span>، مانند <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. هر شرکت‌کننده نسخهٔ متناسب اولتیماتوم را دریافت می‌کند. گروه برای هیچ ردیفی به‌صورت پیش‌فرض حدس زده نمی‌شود. حداکثر ۵۰۰ کد در هر بار.</p>
+<p class="hint">ترتیب و نوع ماژول‌ها را در تایم‌لاین مشخص کن. هر شرکت‌کننده دقیقاً همین روند ذخیره‌شده را اجرا می‌کند؛ برای Ultimatum می‌توانی فقط Frame، فقط Control یا هر دو را در ترتیب دلخواه اضافه کنی. فهرست کارکنان فقط شامل کدهاست؛ هر خط یک کد و حداکثر ۵۰۰ کد در هر بار.</p>
 
 <div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
  <div class="workflow-builder-heading">
@@ -261,11 +261,11 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 <div class="field">
 <label for="assignmentCsv">بارگذاری فایل CSV</label>
 <input id="assignmentCsv" type="file" accept=".csv,text/csv">
-<div class="small">هر ردیف باید کد و گروه Frame/Control داشته باشد؛ فایل UTF-8 یا UTF-8 با BOM پیشنهاد می‌شود.</div>
+<div class="small">فایل فقط به یک ستون کد شرکت‌کننده نیاز دارد؛ فایل UTF-8 یا UTF-8 با BOM پیشنهاد می‌شود.</div>
 </div>
 <div class="field">
-<label for="codes">کدهای کارکنان و گروه‌ها</label>
-<textarea id="codes" spellcheck="false" placeholder="BS-001,Frame&#10;BS-002,Control"></textarea>
+<label for="codes">کدهای کارکنان</label>
+<textarea id="codes" spellcheck="false" placeholder="BS-001&#10;BS-002&#10;BS-003"></textarea>
 </div>
 <div class="actions">
 <button id="createAssignments" type="button">ساخت لینک‌ها</button>
@@ -276,8 +276,8 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 <div id="assignmentOutput"></div>
 
 <div class="test-link-tools">
- <div><strong>آزمون روند ذخیره‌شده</strong><p class="small">دو لینک تست با کد TEST می‌سازد: یکی برای Frame و دیگری برای Control؛ هر دو دقیقاً از روند فعلی و نسخهٔ اولتیماتوم گروه خودشان استفاده می‌کنند.</p></div>
- <button id="createFullTestLinks" class="secondary" type="button">ساخت لینک تست (Frame و Control)</button>
+ <div><strong>لینک تست روند</strong><p class="small">یک لینک تست با کد TEST می‌سازد که دقیقاً تمام ماژول‌ها و ترتیب تایم‌لاین فعلی را اجرا می‌کند؛ نوع Ultimatum هم از همان روند مشخص می‌شود.</p></div>
+ <button id="createFullTestLinks" class="secondary" type="button">ساخت لینک تست</button>
 </div>
 <div id="moduleTestStatus" class="status" role="status" aria-live="polite"></div>
 <div id="fullTestOutput"></div>
@@ -320,7 +320,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <button id="applyBulkLinkAction" class="secondary" type="button">اعمال عملیات</button>
  <button id="deleteInactiveLinks" class="danger" type="button">حذف لینک‌های غیرفعال</button>
 </div>
-<div class="link-manager-note">برای تغییر وضعیت یا صدور مجدد URL، ردیف‌ها را انتخاب کن و یک عملیات گروهی اعمال کن. لینک‌های قدیمیِ بدون URL قابل بازیابی را فقط در صورت نیاز دوباره صادر کن؛ URL قبلی آن‌ها باطل می‌شود. حذف لینک غیرفعال، داده‌های پژوهشی و پاسخ‌های ثبت‌شده را پاک نمی‌کند.</div>
+<div class="link-manager-note">برای تغییر وضعیت یا صدور مجدد URL، ردیف‌ها را انتخاب کن و یک عملیات گروهی اعمال کن. لینک‌های فاقد URL قابل بازیابی را فقط در صورت نیاز دوباره صادر کن؛ URL قبلی آن‌ها باطل می‌شود. حذف لینک غیرفعال، داده‌های پژوهشی و پاسخ‌های ثبت‌شده را پاک نمی‌کند.</div>
 <div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentManagementTable" class="table-wrap link-mgmt-table"><p class="hint" style="padding:12px">برای دیدن لینک‌ها، «بارگذاری لینک‌ها» را بزن.</p></div>
 </section>
@@ -370,9 +370,7 @@ let progressRows=[];
 let lastAssignmentLinks=[];
 let workflowSteps=[
  {step_id:"default-questionnaire",module_code:"questionnaire"},
- {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
- {step_id:"default-ultimatum-frame",module_code:"ultimatum_frame"},
- {step_id:"default-ultimatum-control",module_code:"ultimatum_control"}
+ {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"}
 ];
 let workflowLoaded=false;
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
@@ -420,32 +418,20 @@ function csvParse(text){
  row.push(field.replace(/\r$/,""));if(row.some(v=>v.trim()))rows.push(row);
  return rows;
 }
-function groupLabel(value){
- const v=String(value||"").trim().toLowerCase();
- if(["a","frame","framing"].includes(v))return "Frame";
- if(["b","control","کنترل"].includes(v))return "Control";
- if(!v)return "";
- throw new Error("گروه نامعتبر است: "+value+"؛ Frame یا Control وارد کن.");
-}
 function csvToTextarea(text){
  const rows=csvParse(text.replace(/^\uFEFF/,""));
  if(!rows.length)throw new Error("فایل CSV خالی است.");
  const norm=x=>String(x||"").trim().toLowerCase().replace(/[\s-]+/g,"_");
  const headers=rows[0].map(norm);
  const codeNames=["participant_code","code","employee_code","employee_id","کد","کد_کارمند"];
- const groupNames=["group","condition","condition_code","feedback_group","گروه"];
  const codeIndex=headers.findIndex(x=>codeNames.includes(x));
- const groupIndex=headers.findIndex(x=>groupNames.includes(x));
  const hasHeader=codeIndex>=0;
- const cIdx=hasHeader?codeIndex:0,gIdx=hasHeader?groupIndex:1;
+ const cIdx=hasHeader?codeIndex:0;
  const dataRows=hasHeader?rows.slice(1):rows;
  const lines=[];
- for(let i=0;i<dataRows.length;i++){
-  const row=dataRows[i];const code=String(row[cIdx]||"").trim();
-  if(!code)continue;
-  const group=String(row[gIdx]||"").trim();
-  if(!group)throw new Error("گروه شرکت‌کننده در ردیف "+(i+1)+" خالی است؛ هر ردیف باید Frame یا Control داشته باشد.");
-  lines.push(code+","+groupLabel(group));
+ for(const row of dataRows){
+  const code=String(row[cIdx]||"").trim();
+  if(code)lines.push(code.toUpperCase());
  }
  if(!lines.length)throw new Error("ستون کد شرکت‌کننده در فایل پیدا نشد یا داده‌ای در آن نیست.");
  $("codes").value=lines.join("\n");
@@ -454,7 +440,7 @@ function csvToTextarea(text){
 const workflowModuleLabels={
  questionnaire:"پرسشنامه",
  dd_lifetrade:"DD / Life-Trade",
- ultimatum:"بازی Ultimatum (قدیمی)",
+ ultimatum:"بازی Ultimatum",
  ultimatum_frame:"بازی Ultimatum — Frame",
  ultimatum_control:"بازی Ultimatum — Control"
 };
@@ -556,9 +542,7 @@ $("saveWorkflow").addEventListener("click",async()=>{
 $("resetWorkflow").addEventListener("click",()=>{
  workflowSteps=[
   {step_id:"default-questionnaire",module_code:"questionnaire"},
-  {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
-  {step_id:"default-ultimatum-frame",module_code:"ultimatum_frame"},
-  {step_id:"default-ultimatum-control",module_code:"ultimatum_control"}
+  {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"}
  ];
  renderWorkflowBuilder();setStatus("workflowStatus","ترتیب پیش‌فرض نمایش داده شد؛ برای اعمال آن دکمهٔ «ذخیره روند آزمایش» را بزن.","info");
 });
@@ -567,13 +551,10 @@ renderWorkflowBuilder();
 function parseAssignments(){
  const lines=$("codes").value.split(/\r?\n/);const seen=new Set(),assignments=[];
  for(let i=0;i<lines.length;i++){
-  const raw=lines[i].trim();if(!raw||raw.startsWith("#"))continue;
-  const parts=raw.split(/[,;\t]/).map(v=>v.trim());
-  if(parts.length!==2||!parts[0]||!parts[1])throw new Error("خط "+(i+1)+" باید کد و گروه داشته باشد؛ قالب درست: CODE,Frame یا CODE,Control.");
-  const group=groupLabel(parts[1]);
-  const code=parts[0].toUpperCase();
+  const code=lines[i].trim().split(/[,;\t]/)[0].trim().toUpperCase();
+  if(!code||code.startsWith("#"))continue;
   if(seen.has(code))throw new Error("کد تکراری در ورودی: "+code);
-  seen.add(code);assignments.push({participant_code:code,condition_code:group==="Frame"?"A":"B",group});
+  seen.add(code);assignments.push({participant_code:code});
  }
  if(!assignments.length)throw new Error("حداقل یک کد کارکنان وارد کن.");
  if(assignments.length>500)throw new Error("در هر نوبت حداکثر ۵۰۰ کد مجاز است.");
@@ -581,8 +562,8 @@ function parseAssignments(){
 }
 function csvEscape(value){return '"'+String(value==null?"":value).replace(/"/g,'""')+'"';}
 function downloadCsv(rows,filename,headers){
- const head=headers||["participant_code","group","condition_code","study_code","invitation_url"];
- const csv=[head.join(","),...rows.map(r=>head.map(key=>csvEscape(key==="group"?(r.group||(r.condition_code==="A"?"Frame":"Control")):r[key])).join(","))].join("\r\n");
+ const head=headers||["participant_code","ultimatum_variant","study_code","invitation_url"];
+ const csv=[head.join(","),...rows.map(r=>head.map(key=>csvEscape(r[key])).join(","))].join("\r\n");
  const blob=new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"});
  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
@@ -590,13 +571,13 @@ function makeLinkTable(target,rows,options){
  const root=$(target);root.replaceChildren();if(!rows||!rows.length)return;
  const table=document.createElement("table");
  const head=document.createElement("thead"),hr=document.createElement("tr");
- ["کد ورود","گروه / ماژول","لینک اختصاصی","کپی"].forEach(v=>{const th=document.createElement("th");th.textContent=v;hr.appendChild(th);});
+ ["کد ورود","نوع Ultimatum","لینک اختصاصی","کپی"].forEach(v=>{const th=document.createElement("th");th.textContent=v;hr.appendChild(th);});
  head.appendChild(hr);table.appendChild(head);
  const body=document.createElement("tbody");
  rows.forEach(item=>{
   const row=document.createElement("tr");
   const code=document.createElement("td");code.textContent=item.participant_code||"TEST";row.appendChild(code);
-  const group=document.createElement("td");group.textContent=item.stage_code?stageLabel(item.stage_code):(item.group||(item.condition_code==="A"?"Frame":"Control"));row.appendChild(group);
+  const group=document.createElement("td");group.textContent=item.stage_code?stageLabel(item.stage_code):(item.ultimatum_variant||"—");row.appendChild(group);
   const linkCell=document.createElement("td"),link=document.createElement("a");link.href=item.invitation_url;link.target="_blank";link.rel="noopener noreferrer";link.className="link-url";link.textContent=item.invitation_url;linkCell.appendChild(link);row.appendChild(linkCell);
   const copyCell=document.createElement("td"),copy=document.createElement("button");copy.className="secondary";copy.type="button";copy.textContent="کپی";
   copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";setTimeout(()=>copy.textContent="کپی",1200);}catch(_){window.prompt("لینک را کپی کن:",item.invitation_url);}});copyCell.appendChild(copy);row.appendChild(copyCell);body.appendChild(row);
@@ -622,7 +603,7 @@ function renderAssignmentManagement(data){
   return;
  }
  const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
- ["انتخاب","کد","گروه","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ ["انتخاب","کد","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
  thead.appendChild(headRow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(item=>{
@@ -630,7 +611,6 @@ function renderAssignmentManagement(data){
   const selectCell=document.createElement("td"),check=document.createElement("input");
   check.type="checkbox";check.className="assignment-select";check.dataset.id=item.assignment_id;check.setAttribute("aria-label","انتخاب لینک "+item.participant_code);selectCell.appendChild(check);tr.appendChild(selectCell);
   const codeCell=document.createElement("td");codeCell.className="row-code";codeCell.textContent=item.participant_code;tr.appendChild(codeCell);
-  const groupCell=document.createElement("td");groupCell.textContent=item.group|| (item.condition_code==="A"?"Frame":"Control");tr.appendChild(groupCell);
   const variantCell=document.createElement("td");variantCell.textContent=item.ultimatum_variant||"—";tr.appendChild(variantCell);
   const stateCell=document.createElement("td"),state=document.createElement("span");state.className="link-state "+(item.active?"active":"inactive");state.textContent=item.active?"فعال":"غیرفعال";stateCell.appendChild(state);tr.appendChild(stateCell);
   const urlCell=document.createElement("td");
@@ -701,11 +681,11 @@ async function downloadActiveAssignmentsCsv(){
   const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;
   a.download=scope==="test"?"barsan_test_active_links.csv":"barsan_active_links.csv";
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-  setStatus("linkManagementStatus","CSV لینک‌های فعال دانلود شد."+(unavailable?" توجه: "+unavailable+" لینک قدیمی URL قابل بازیابی نداشت؛ برای آن‌ها URL جدید صادر کن.":""),unavailable?"info":"success");
+  setStatus("linkManagementStatus","CSV لینک‌های فعال دانلود شد."+(unavailable?" توجه: "+unavailable+" لینک فاقد URL قابل بازیابی بود؛ برای آن‌ها URL جدید صادر کن.":""),unavailable?"info":"success");
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{button.disabled=false;}
 }
-function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum (قدیمی)",ultimatum_frame:"Ultimatum — Frame",ultimatum_control:"Ultimatum — Control"})[code]||code;}
+function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum",ultimatum_frame:"Ultimatum — Frame",ultimatum_control:"Ultimatum — Control"})[code]||code;}
 function progressStateLabel(state){
  return ({not_started:"شروع نکرده",in_progress:"در حال انجام",stale_incomplete:"متوقف / پیگیری",completed:"کامل"})[state]||state||"نامشخص";
 }
@@ -734,12 +714,12 @@ function renderProgress(){
  const root=$("participantTable");root.replaceChildren();
  if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت","پیشرفت روند اختصاصی","ماژول فعلی","زمان فعال","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","نوع Ultimatum","وضعیت","پیشرفت روند اختصاصی","ماژول فعلی","زمان فعال","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
   const code=document.createElement("td");code.className="row-code";code.textContent=r.participant_code;tr.appendChild(code);
-  const group=document.createElement("td");group.textContent=r.condition_code==="A"?"Frame":"Control";tr.appendChild(group);
+  const variant=document.createElement("td");variant.textContent=r.ultimatum_variant||"—";tr.appendChild(variant);
   const state=document.createElement("td"),badge=document.createElement("span");
   badge.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");
   badge.textContent=progressStateLabel(r.progress_state);state.appendChild(badge);tr.appendChild(state);
@@ -793,15 +773,15 @@ $("createAssignments").addEventListener("click",async()=>{
  try{
   const steps=await saveWorkflow();
   const assignments=parseAssignments();
-  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code})),steps})});
-  const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
+  const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments,steps})});
+  const data=await response.json();lastAssignmentLinks=data.assignments;
   makeLinkTable("assignmentOutput",lastAssignmentLinks);
   setStatus("assignmentStatus",data.created_count+" لینک ایجاد شد. URLها به‌صورت رمزنگاری‌شده نگه‌داری می‌شوند و از مدیریت لینک‌ها یا CSV لینک‌های فعال قابل دریافت‌اند؛ فایل خروجی را محرمانه نگه‌دار.","success");
   refreshProgress();refreshAssignments();
  }catch(e){setStatus("assignmentStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
-$("downloadAssignmentTemplate").addEventListener("click",()=>downloadCsv([{participant_code:"BS-001",group:"Frame",condition_code:"A"},{participant_code:"BS-002",group:"Control",condition_code:"B"}],"barsan_codes_template.csv",["participant_code","group"]));
+$("downloadAssignmentTemplate").addEventListener("click",()=>downloadCsv([{participant_code:"BS-001"},{participant_code:"BS-002"}],"barsan_codes_template.csv",["participant_code"]));
 $("clearAssignments").addEventListener("click",()=>{$("codes").value="";$("assignmentOutput").replaceChildren();clearStatus("assignmentStatus");});
 $("refreshAssignments").addEventListener("click",refreshAssignments);
 $("linkStatusFilter").addEventListener("change",refreshAssignments);
@@ -847,7 +827,7 @@ $("createFullTestLinks").addEventListener("click",async()=>{
  try{
   const steps=await saveWorkflow();
   const response=await adminFetch("/api/admin/test-links",{method:"POST",body:JSON.stringify({steps})});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
-  setStatus("moduleTestStatus","دو لینک تست از روند فعلی ساخته شد: نسخهٔ Frame و نسخهٔ Control؛ کد ورود هر دو TEST است.","success");
+  setStatus("moduleTestStatus","یک لینک تست ساخته شد؛ کد ورود TEST است و تمام روند ذخیره‌شده را با همان ترتیب اجرا می‌کند.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
