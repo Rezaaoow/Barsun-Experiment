@@ -470,3 +470,27 @@ def test_workflow_config_accepts_a_single_ultimatum_variant(client):
     assert response.status_code == 200, response.text
     assert [step["module_code"] for step in response.json()["steps"]] == ["ultimatum_frame"]
 
+
+
+def test_previous_paired_builtin_default_is_migrated_to_neutral_workflow(client):
+    previous_default = [
+        {"step_id": "default-questionnaire", "module_code": "questionnaire"},
+        {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
+        {"step_id": "default-ultimatum-frame", "module_code": "ultimatum_frame"},
+        {"step_id": "default-ultimatum-control", "module_code": "ultimatum_control"},
+    ]
+    with main.conn() as connection:
+        connection.execute(
+            "INSERT INTO study_workflows(study_code,workflow_json,updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(study_code) DO UPDATE SET workflow_json=excluded.workflow_json,updated_at=excluded.updated_at",
+            (main.STUDY_CODE, json.dumps(previous_default), main.now()),
+        )
+
+    response = client.get(
+        "/api/admin/workflow",
+        headers={"x-admin-token": "test-admin-token"},
+    )
+    assert response.status_code == 200, response.text
+    assert [step["module_code"] for step in response.json()["steps"]] == [
+        "questionnaire", "dd_lifetrade"
+    ]
