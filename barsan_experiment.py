@@ -39,7 +39,7 @@ STAGE_TO_INSTRUMENT = {
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
 ULTIMATUM_WORKFLOW_VARIANTS = {"ultimatum_frame": "Frame", "ultimatum_control": "Control"}
-WORKFLOW_MODULE_CODES = frozenset({"questionnaire", "dd_lifetrade", *ULTIMATUM_WORKFLOW_VARIANTS})
+WORKFLOW_MODULE_CODES = frozenset((*STAGE_ORDER, *ULTIMATUM_WORKFLOW_VARIANTS))
 DEFAULT_WORKFLOW = (
     {"step_id": "default-questionnaire", "module_code": "questionnaire"},
     {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
