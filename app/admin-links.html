@@ -651,7 +651,7 @@ function renderAssignmentManagement(data){
  footer.textContent="نمایش "+rows.length+" لینک با فیلتر فعلی؛ مجموع این محدوده: "+counts.total+" لینک.";
  root.appendChild(footer);
  if(data.legacy_token_count>0){
-  setStatus("linkManagementStatus",data.legacy_token_count+" لینک در فهرست فعلی URL قابل بازیابی ندارد؛ برای آن‌ها «صدور URL جدید» را انتخاب کن. لینک قبلی در زمان صدور مجدد باطل می‌شود.","info");
+  setStatus("linkManagementStatus",data.legacy_token_count+" لینک URL قابل بازیابی ندارند؛ ردیف‌هایشان را انتخاب کن و از منوی عملیات گروهی «صدور مجدد URLهای غیرقابل‌بازیابی» را اعمال کن. URL قبلی این لینک‌ها باطل می‌شود.","info");
  }
 }
 async function refreshAssignments(){
