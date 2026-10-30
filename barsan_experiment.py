@@ -2927,6 +2927,19 @@ def maintenance_preview(
     queries = {
         "assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition, params),
         "participations": ("SELECT COUNT(*) AS n FROM study_participations WHERE " + condition, params),
+        "workflow_step_progress": (
+            "SELECT COUNT(*) AS n FROM experiment_workflow_step_progress wp JOIN study_participations sp "
+            "ON sp.participation_id=wp.participation_id WHERE " + condition.replace("study_code","sp.study_code"), params
+        ),
+        "activity_sessions": (
+            "SELECT COUNT(*) AS n FROM experiment_activity_sessions s JOIN experiment_assignments a "
+            "ON a.assignment_id=s.assignment_id WHERE " + condition.replace("study_code","a.study_code"), params
+        ),
+        "activity_step_time": (
+            "SELECT COUNT(*) AS n FROM experiment_activity_step_time t JOIN experiment_activity_sessions s "
+            "ON s.activity_session_id=t.activity_session_id JOIN experiment_assignments a "
+            "ON a.assignment_id=s.assignment_id WHERE " + condition.replace("study_code","a.study_code"), params
+        ),
         "runs": (
             "SELECT COUNT(*) AS n FROM instrument_runs ir JOIN study_participations sp "
             "ON sp.participation_id=ir.participation_id WHERE " + condition.replace("study_code", "sp.study_code"),
@@ -3002,6 +3015,18 @@ def reset_study_data(
             ("ultimatum_trials",
              "DELETE FROM ultimatum_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
              "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_activity_step_time",
+             "DELETE FROM experiment_activity_step_time WHERE activity_session_id IN "
+             "(SELECT s.activity_session_id FROM experiment_activity_sessions s JOIN experiment_assignments a "
+             "ON a.assignment_id=s.assignment_id WHERE " + condition.replace("study_code", "a.study_code") + ")"),
+            ("experiment_activity_sessions",
+             "DELETE FROM experiment_activity_sessions WHERE assignment_id IN "
+             "(SELECT a.assignment_id FROM experiment_assignments a WHERE "
+             + condition.replace("study_code", "a.study_code") + ")"),
+            ("experiment_workflow_step_progress",
+             "DELETE FROM experiment_workflow_step_progress WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
              + condition.replace("study_code", "sp.study_code") + ")"),
             ("experiment_stage_progress",
              "DELETE FROM experiment_stage_progress WHERE participation_id IN "
