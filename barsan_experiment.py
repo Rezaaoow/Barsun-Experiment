@@ -1723,6 +1723,77 @@ def record_experiment_consent(data: ExperimentConsentIn):
     return {"accepted": True, "consent_version": CONSENT_VERSION, "accepted_at": row["accepted_at"]}
 
 
+@app.get("/api/experiment/workflow")
+def get_public_experiment_workflow(invite: str):
+    """Return only the ordered, non-sensitive module outline for a valid active invite."""
+    token = str(invite or "").strip()
+    if len(token) < 20 or len(token) > 200:
+        raise HTTPException(404, "لینک اختصاصی معتبر نیست.")
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = connection.execute(
+            "SELECT study_code,workflow_json FROM experiment_assignments "
+            "WHERE invitation_token_hash=" + marker + " AND active=1",
+            (token_hash,),
+        ).fetchone()
+    if not assignment:
+        raise HTTPException(404, "لینک اختصاصی معتبر نیست یا غیرفعال شده است.")
+    module_only = _test_module_from_study_code(str(assignment["study_code"] or ""))
+    if assignment["workflow_json"]:
+        raw = assignment["workflow_json"]
+        try:
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+            steps = _normalize_workflow_steps(raw)
+        except (TypeError, ValueError, HTTPException):
+            steps = _default_workflow_steps()
+        is_legacy = False
+    elif module_only:
+        steps = [{"step_id": "module-test-" + module_only, "module_code": module_only}]
+        is_legacy = False
+    else:
+        steps = _default_workflow_steps()
+        is_legacy = True
+    module_details = {
+        "questionnaire": (
+            "پرسشنامه",
+            "چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری",
+        ),
+        "dd_lifetrade": (
+            "تکلیف تصمیم‌گیری",
+            "انتخاب میان دریافت پاداش در زمان‌های متفاوت",
+        ),
+        "ultimatum": (
+            "بازی اولتیماتوم",
+            "تقسیم امتیاز و تصمیم‌گیری در تعامل با بازیکن مقابل",
+        ),
+    }
+    totals: dict[str, int] = {}
+    for step in steps:
+        totals[step["module_code"]] = totals.get(step["module_code"], 0) + 1
+    seen: dict[str, int] = {}
+    public_steps = []
+    for index, step in enumerate(steps):
+        code = step["module_code"]
+        seen[code] = seen.get(code, 0) + 1
+        title, description = module_details[code]
+        public_steps.append({
+            "step_order": index + 1,
+            "module_code": code,
+            "title": title,
+            "description": description,
+            "repeat_number": seen[code],
+            "repeat_total": totals[code],
+        })
+    return {
+        "steps": public_steps,
+        "total_steps": len(public_steps),
+        "legacy_default": is_legacy,
+        "module_test_only": module_only,
+    }
+
+
 @app.post("/api/experiment/identify")
 def identify_experiment_participant(data: ExperimentIdentityIn):
     """Resolve the assigned link, workflow instances and legacy stage snapshot."""
