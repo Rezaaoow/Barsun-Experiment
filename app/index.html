@@ -678,6 +678,27 @@ button{-webkit-tap-highlight-color:transparent}
   }
 }
 
+
+/* Accessible mobile baseline: legible text and touch targets for field staff. */
+@media (max-width: 640px) {
+  html { font-size: 19px; }
+  .screen { padding: 14px 10px; }
+  .panel { padding: 24px 18px; border-radius: 18px; }
+  .panel h1 { font-size: 1.65rem; font-weight: 850; line-height: 1.55; }
+  .panel p, .instruction-content p { font-size: 1.12rem !important; font-weight: 650; line-height: 2 !important; }
+  .field label, .hint, .instruction-content .hintline { font-size: 1rem !important; font-weight: 650; }
+  .field input, .field select { min-height: 56px; padding: 14px; font-size: 1.12rem; font-weight: 650; }
+  .btn, button, .next-page { min-height: 56px; padding: 14px 18px; font-size: 1.1rem; font-weight: 800; }
+  .choice-card { min-height: 34vh; padding: 18px 12px; }
+  .choice-amount { font-size: clamp(1.55rem, 8vw, 2.2rem); font-weight: 900; }
+  .choice-detail { font-size: clamp(1.08rem, 5.2vw, 1.35rem); font-weight: 750; line-height: 1.8; }
+  .choice-label, .instruction-progress { font-size: .98rem; font-weight: 750; }
+  .intro-scale-list { grid-template-columns: 1fr; gap: 9px; }
+  .intro-scale-item { display:grid; grid-template-columns: 42px 1fr; gap: 10px; align-items:center; padding: 13px; text-align:right; }
+  .intro-scale-item strong { font-size: 1.3rem; }
+  .intro-scale-item span { margin: 0; font-size: 1rem; font-weight: 650; }
+}
+
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
@@ -1278,7 +1299,7 @@ function showQuestionnaireIntro(pageIndex=0){
  content.className='instruction-content';
  if(pageIndex===0){
   const paras=[
-   'راننده گرامی،',
+   'بارسانی عزیز،',
    'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
    'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
    'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
@@ -2250,7 +2271,7 @@ async function utFinishUltimatum() {
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
+  utAddText(end.body,"p","ut-copy","بارسانی عزیز، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
  } catch(error) {
   console.error(error);
