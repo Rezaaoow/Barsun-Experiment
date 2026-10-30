@@ -1220,6 +1220,26 @@ def _upsert_flow_progress(
         )
 
 
+def _ensure_flow_progress_row(
+    connection: Any, participation_id: str, step_id: str, step_index: int,
+    module_code: str, timestamp: str,
+) -> None:
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO experiment_flow_progress(participation_id,step_id,step_index,module_code,status,"
+            "current_run_id,active_seconds,started_at,completed_at,last_activity_at) "
+            "VALUES(%s,%s,%s,%s,'not_started',NULL,0,NULL,NULL,%s) ON CONFLICT(participation_id,step_id) DO NOTHING",
+            (participation_id, step_id, step_index, module_code, timestamp),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO experiment_flow_progress(participation_id,step_id,step_index,module_code,status,"
+            "current_run_id,active_seconds,started_at,completed_at,last_activity_at) "
+            "VALUES(?,?,?,?, 'not_started',NULL,0,NULL,NULL,?)",
+            (participation_id, step_id, step_index, module_code, timestamp),
+        )
+
+
 def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -1773,64 +1793,216 @@ def record_experiment_consent(data: ExperimentConsentIn):
     return {"accepted": True, "consent_version": CONSENT_VERSION, "accepted_at": row["accepted_at"]}
 
 
+@app.post("/api/experiment/access/open")
+def open_experiment_access(data: AccessOpenIn):
+    """Record first access as soon as an invitation URL is opened."""
+    token_hash = hashlib.sha256(data.invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT sp.participation_id,a.flow_config FROM experiment_assignments a "
+            "JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+            "WHERE a.invitation_token_hash=" + marker + " AND a.active=1",
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(403, "لینک دعوت معتبر نیست یا غیرفعال شده است.")
+        timestamp = now()
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO experiment_time_tracking(participation_id,first_seen_at,last_activity_at,total_active_seconds) "
+                "VALUES(%s,%s,%s,0) ON CONFLICT(participation_id) DO UPDATE SET "
+                "last_activity_at=EXCLUDED.last_activity_at",
+                (row["participation_id"], timestamp, timestamp),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO experiment_time_tracking(participation_id,first_seen_at,last_activity_at,total_active_seconds) "
+                "VALUES(?,?,?,0) ON CONFLICT(participation_id) DO UPDATE SET "
+                "last_activity_at=excluded.last_activity_at",
+                (row["participation_id"], timestamp, timestamp),
+            )
+        for index, step in enumerate(_flow_for_assignment(dict(row))["steps"]):
+            _ensure_flow_progress_row(
+                connection, row["participation_id"], step["step_id"], index,
+                step["module_code"], timestamp,
+            )
+    return {"opened": True, "opened_at": timestamp}
+
+
+@app.post("/api/experiment/time/heartbeat")
+def experiment_time_heartbeat(data: TimeHeartbeatIn):
+    """Accumulate foreground-visible time using bounded heartbeat intervals."""
+    token_hash = hashlib.sha256(data.invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT sp.participation_id,a.flow_config FROM experiment_assignments a "
+            "JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+            "WHERE a.invitation_token_hash=" + marker + " AND a.active=1",
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(403, "لینک دعوت معتبر نیست یا غیرفعال شده است.")
+        timestamp = now()
+        total_seconds = min(int(data.active_seconds), 60)
+        module_seconds = min(int(data.module_active_seconds), total_seconds, 60)
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO experiment_time_tracking(participation_id,first_seen_at,last_activity_at,total_active_seconds) "
+                "VALUES(%s,%s,%s,%s) ON CONFLICT(participation_id) DO UPDATE SET "
+                "last_activity_at=EXCLUDED.last_activity_at,total_active_seconds="
+                "experiment_time_tracking.total_active_seconds+EXCLUDED.total_active_seconds",
+                (row["participation_id"], timestamp, timestamp, total_seconds),
+            )
+        else:
+            connection.execute(
+                "INSERT INTO experiment_time_tracking(participation_id,first_seen_at,last_activity_at,total_active_seconds) "
+                "VALUES(?,?,?,?) ON CONFLICT(participation_id) DO UPDATE SET "
+                "last_activity_at=excluded.last_activity_at,total_active_seconds="
+                "experiment_time_tracking.total_active_seconds+excluded.total_active_seconds",
+                (row["participation_id"], timestamp, timestamp, total_seconds),
+            )
+        if module_seconds:
+            flow = _flow_for_assignment(dict(row))
+            matched = next(
+                ((index, step) for index, step in enumerate(flow["steps"]) if step["step_id"] == data.flow_step_id),
+                None,
+            )
+            if matched:
+                step_index, step = matched
+                step_id, module_code = step["step_id"], step["module_code"]
+            elif data.module_code:
+                step_id, module_code, step_index = "time-" + data.module_code, data.module_code, 0
+            else:
+                step_id = None
+            if step_id and module_code:
+                _ensure_flow_progress_row(
+                    connection, row["participation_id"], step_id, step_index,
+                    module_code, timestamp,
+                )
+                connection.execute(
+                    "UPDATE experiment_flow_progress SET active_seconds=active_seconds+" + marker
+                    + ",last_activity_at=" + marker + " WHERE participation_id=" + marker + " AND step_id=" + marker,
+                    (module_seconds, timestamp, row["participation_id"], step_id),
+                )
+    return {"saved": True, "active_seconds_added": total_seconds, "module_seconds_added": module_seconds}
+
+
 @app.post("/api/experiment/identify")
 def identify_experiment_participant(data: ExperimentIdentityIn):
-    """Resolve the preassigned link/code and return authoritative saved stage progress."""
+    """Return the invitation's immutable flow and progress for each occurrence."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
-        rows = _get_stage_rows(connection, assignment["participation_id"])
-    states = [_public_stage_state(stage, rows.get(stage)) for stage in STAGE_ORDER]
-    current_stage = next((state["stage_code"] for state in states if state["status"] != "completed"), None)
+        legacy_rows = _get_stage_rows(connection, assignment["participation_id"])
+        flow = _flow_for_assignment(assignment)
+        timestamp = now()
+        seen_modules: set[str] = set()
+        for index, step in enumerate(flow["steps"]):
+            if step["module_code"] not in seen_modules:
+                legacy = legacy_rows.get(step["module_code"])
+            else:
+                legacy = None
+            _ensure_flow_progress_row(
+                connection, assignment["participation_id"], step["step_id"], index,
+                step["module_code"], timestamp,
+            )
+            if legacy and legacy["status"] == "completed":
+                marker = "%s" if DATABASE_URL else "?"
+                # Migrate pre-flow completed legacy states to the first corresponding occurrence only.
+                connection.execute(
+                    "UPDATE experiment_flow_progress SET status='completed',current_run_id="
+                    + marker + ",completed_at=COALESCE(completed_at," + marker + ") "
+                    "WHERE participation_id=" + marker + " AND step_id=" + marker
+                    + " AND status='not_started'",
+                    (legacy.get("current_run_id"), legacy.get("completed_at") or timestamp,
+                     assignment["participation_id"], step["step_id"]),
+                )
+            seen_modules.add(step["module_code"])
+        flow_rows = _flow_progress_rows(connection, assignment["participation_id"])
+    progress = [
+        _public_flow_state(step, index, flow_rows.get(step["step_id"]))
+        for index, step in enumerate(flow["steps"])
+    ]
+    current = next((item for item in progress if item["status"] != "completed"), None)
+    legacy_states = [_public_stage_state(stage, legacy_rows.get(stage)) for stage in STAGE_ORDER]
     return {
         "participant_code": assignment["participant_code"],
         "condition_code": assignment["condition_code"],
         "study_code": assignment["study_code"],
         "test_module_only": _test_module_from_study_code(assignment["study_code"]),
-        "current_stage": current_stage,
-        "stages": states,
+        "flow": flow,
+        "flow_progress": progress,
+        "current_flow_step": current,
+        "current_stage": current["module_code"] if current else None,
+        "stages": legacy_states,
     }
 
 
 @app.post("/api/experiment/stages/start")
 def start_experiment_stage(data: StageStartIn):
-    """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
+    """Start or resume one exact position in the invitation's saved workflow."""
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
         rows = _get_stage_rows(connection, assignment["participation_id"])
         existing = rows.get(data.stage_code)
+        flow_step = None
+        step_index = -1
+        existing_flow = None
 
-        if existing and existing["status"] == "completed":
-            return {
-                "stage_code": data.stage_code,
-                "status": "completed",
-                "already_completed": True,
-                "run_id": existing["current_run_id"],
-                "attempt_number": existing["attempt_number"],
-            }
+        if data.flow_step_id:
+            steps = _flow_for_assignment(assignment)["steps"]
+            match = next(
+                ((index, step) for index, step in enumerate(steps) if step["step_id"] == data.flow_step_id),
+                None,
+            )
+            if not match or match[1]["module_code"] != data.stage_code:
+                raise HTTPException(409, "این ماژول با روند ذخیره‌شدهٔ لینک مطابقت ندارد.")
+            step_index, flow_step = match
+            flow_rows = _flow_progress_rows(connection, assignment["participation_id"])
+            existing_flow = flow_rows.get(data.flow_step_id)
+            for previous in steps[:step_index]:
+                prior = flow_rows.get(previous["step_id"])
+                if not prior or prior["status"] != "completed":
+                    raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
+            if existing_flow and existing_flow["status"] == "completed":
+                return {
+                    "stage_code": data.stage_code, "flow_step_id": data.flow_step_id,
+                    "status": "completed", "already_completed": True,
+                    "run_id": existing_flow["current_run_id"],
+                }
+        else:
+            # Existing links and module-only test links retain their legacy route.
+            if existing and existing["status"] == "completed":
+                return {
+                    "stage_code": data.stage_code, "status": "completed",
+                    "already_completed": True, "run_id": existing["current_run_id"],
+                    "attempt_number": existing["attempt_number"],
+                }
+            stage_index = STAGE_ORDER.index(data.stage_code)
+            if stage_index > 0:
+                previous_state = rows.get(STAGE_ORDER[stage_index - 1])
+                if not previous_state or previous_state["status"] != "completed":
+                    raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
 
-        stage_index = STAGE_ORDER.index(data.stage_code)
-        if stage_index > 0:
-            previous = STAGE_ORDER[stage_index - 1]
-            previous_state = rows.get(previous)
-            if not previous_state or previous_state["status"] != "completed":
-                raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
-
-        # For the questionnaire, keep the same run and its saved draft after refresh.
+        # Resume the questionnaire only when the saved draft belongs to this exact step.
         if (
-            data.stage_code == "questionnaire"
-            and existing
-            and existing["status"] == "in_progress"
-            and existing["current_run_id"]
+            data.stage_code == "questionnaire" and existing
+            and existing["status"] == "in_progress" and existing["current_run_id"]
+            and (
+                not data.flow_step_id
+                or (
+                    existing_flow and existing_flow["status"] == "in_progress"
+                    and existing_flow.get("current_run_id") == existing["current_run_id"]
+                )
+            )
         ):
             return {
-                "stage_code": data.stage_code,
-                "status": "in_progress",
-                "resumed": True,
-                "already_completed": False,
-                "run_id": existing["current_run_id"],
-                "attempt_number": existing["attempt_number"],
+                "stage_code": data.stage_code, "flow_step_id": data.flow_step_id,
+                "status": "in_progress", "resumed": True, "already_completed": False,
+                "run_id": existing["current_run_id"], "attempt_number": existing["attempt_number"],
                 "draft_payload": _json_value(existing.get("draft_payload")),
                 "condition_code": assignment["condition_code"],
             }
@@ -1839,8 +2011,7 @@ def start_experiment_stage(data: StageStartIn):
         attempt_number = int(existing["attempt_number"]) + 1 if existing else 1
         timestamp = now()
         old_run_id = existing["current_run_id"] if existing else None
-
-        if old_run_id:
+        if old_run_id and existing and existing["status"] == "in_progress":
             marker = "%s" if DATABASE_URL else "?"
             connection.execute(
                 "UPDATE instrument_runs SET status='superseded',completed_at=COALESCE(completed_at,"
@@ -1848,7 +2019,12 @@ def start_experiment_stage(data: StageStartIn):
                 (timestamp, old_run_id),
             )
 
-        settings = {"module": data.stage_code, "study_code": assignment["study_code"], "schema_version": 1}
+        settings = {
+            "module": data.stage_code, "study_code": assignment["study_code"],
+            "schema_version": 1, "flow_step_id": data.flow_step_id,
+            "flow_step_index": step_index if data.flow_step_id else None,
+        }
+        marker = "%s" if DATABASE_URL else "?"
         if DATABASE_URL:
             connection.execute(
                 "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
@@ -1873,7 +2049,6 @@ def start_experiment_stage(data: StageStartIn):
         run_id = str(uuid.uuid4())
         stage_draft: dict[str, Any] = {}
         if data.stage_code == "ultimatum":
-            # Randomize block order server-side and persist it with this attempt.
             stage_draft["block_order"] = random.sample(
                 list(ULTIMATUM_BLOCKS.keys()), k=ULTIMATUM_MAIN_BLOCK_COUNT
             )
@@ -1882,14 +2057,17 @@ def start_experiment_stage(data: StageStartIn):
             "condition_code": assignment["condition_code"],
             "attempt_number": attempt_number,
             "block_order": stage_draft.get("block_order"),
+            "flow_step_id": data.flow_step_id,
+            "flow_step_index": step_index if data.flow_step_id else None,
         }
+        metadata_value = Jsonb(metadata) if DATABASE_URL else json.dumps(metadata, ensure_ascii=False)
+        connection.execute(
+            "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
+            "VALUES(" + ",".join([marker] * 4) + ",'in_progress'," + marker + ")",
+            (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
+             timestamp, metadata_value),
+        )
         if DATABASE_URL:
-            connection.execute(
-                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
-                "VALUES(%s,%s,%s,%s,'in_progress',%s)",
-                (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
-                 timestamp, Jsonb(metadata)),
-            )
             connection.execute(
                 "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
                 "draft_payload,started_at,completed_at,updated_at) VALUES(%s,%s,'in_progress',%s,%s,%s,%s,NULL,%s) "
@@ -1902,12 +2080,6 @@ def start_experiment_stage(data: StageStartIn):
             )
         else:
             connection.execute(
-                "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
-                "VALUES(?,?,?,?,?,?)",
-                (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
-                 timestamp, "in_progress", json.dumps(metadata, ensure_ascii=False)),
-            )
-            connection.execute(
                 "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
                 "draft_payload,started_at,completed_at,updated_at) VALUES(?,?,'in_progress',?,?,?, ?,NULL,?) "
                 "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
@@ -1917,15 +2089,16 @@ def start_experiment_stage(data: StageStartIn):
                 (assignment["participation_id"], data.stage_code, attempt_number, run_id,
                  json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
             )
+        if data.flow_step_id:
+            _upsert_flow_progress(
+                connection, assignment["participation_id"], data.flow_step_id, step_index,
+                data.stage_code, "in_progress", timestamp, run_id,
+            )
     return {
-        "stage_code": data.stage_code,
-        "status": "in_progress",
-        "resumed": False,
-        "already_completed": False,
-        "run_id": run_id,
-        "attempt_number": attempt_number,
-        "draft_payload": stage_draft,
-        "condition_code": assignment["condition_code"],
+        "stage_code": data.stage_code, "flow_step_id": data.flow_step_id,
+        "status": "in_progress", "resumed": False, "already_completed": False,
+        "run_id": run_id, "attempt_number": attempt_number,
+        "draft_payload": stage_draft, "condition_code": assignment["condition_code"],
     }
 
 
@@ -2483,8 +2656,23 @@ def complete_experiment_stage(data: StageCompleteIn):
             raise HTTPException(409, "این مرحله هنوز شروع نشده است.")
         if state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای مرحله دیگر فعال نیست.")
-        if state["status"] == "completed":
+        if state["current_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای مرحله دیگر فعال نیست.")
+        if not data.flow_step_id and state["status"] == "completed":
             return {"completed": True, "already_completed": True, "stage_code": data.stage_code}
+        if data.flow_step_id:
+            flow = _flow_for_assignment(assignment)
+            match = next(
+                ((index, step) for index, step in enumerate(flow["steps"]) if step["step_id"] == data.flow_step_id),
+                None,
+            )
+            if not match or match[1]["module_code"] != data.stage_code:
+                raise HTTPException(409, "این جایگاه با روند ذخیره‌شدهٔ لینک مطابقت ندارد.")
+            step_state = _flow_progress_rows(connection, assignment["participation_id"]).get(data.flow_step_id)
+            if not step_state or step_state.get("current_run_id") != data.run_id:
+                raise HTTPException(409, "اجرای این جایگاه دیگر فعال نیست.")
+            if step_state["status"] == "completed":
+                return {"completed": True, "already_completed": True, "stage_code": data.stage_code, "flow_step_id": data.flow_step_id}
         timestamp = now()
         if data.stage_code == "questionnaire":
             if data.final_payload is None:
@@ -2590,7 +2778,14 @@ def complete_experiment_stage(data: StageCompleteIn):
             "UPDATE instrument_runs SET status='completed',completed_at=" + marker + " WHERE run_id=" + marker,
             (timestamp, data.run_id),
         )
-    return {"completed": True, "already_completed": False, "stage_code": data.stage_code}
+    if data.flow_step_id:
+        connection.execute(
+            "UPDATE experiment_flow_progress SET status='completed',completed_at=" + marker
+            + ",last_activity_at=" + marker + " WHERE participation_id=" + marker + " AND step_id=" + marker
+            + " AND current_run_id=" + marker,
+            (timestamp, timestamp, assignment["participation_id"], data.flow_step_id, data.run_id),
+        )
+    return {"completed": True, "already_completed": False, "stage_code": data.stage_code, "flow_step_id": data.flow_step_id}
 
 
 
@@ -2832,6 +3027,14 @@ def reset_study_data(
              "DELETE FROM ultimatum_trials WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
              "JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE "
              + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_flow_progress",
+             "DELETE FROM experiment_flow_progress WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
+            ("experiment_time_tracking",
+             "DELETE FROM experiment_time_tracking WHERE participation_id IN "
+             "(SELECT sp.participation_id FROM study_participations sp WHERE "
+             + condition.replace("study_code", "sp.study_code") + ")"),
             ("experiment_stage_progress",
              "DELETE FROM experiment_stage_progress WHERE participation_id IN "
              "(SELECT sp.participation_id FROM study_participations sp WHERE "
@@ -2874,6 +3077,11 @@ def experiment_progress(
     condition, params = _scope_filter(scope, "a.study_code", marker)
     query = (
         "SELECT a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
+        "COALESCE(tt.total_active_seconds,0) AS total_active_seconds,"
+        "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='questionnaire') AS questionnaire_active_seconds,"
+        "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='dd_lifetrade') AS dd_lifetrade_active_seconds,"
+        "(SELECT COALESCE(SUM(fp.active_seconds),0) FROM experiment_flow_progress fp WHERE fp.participation_id=sp.participation_id AND fp.module_code='ultimatum') AS ultimatum_active_seconds,"
+        "tt.first_seen_at AS first_opened_at,tt.last_activity_at AS time_last_activity_at,"
         "COALESCE(q.status,'not_started') AS questionnaire_status,"
         "COALESCE(q.attempt_number,0) AS questionnaire_attempts,"
         "q.started_at AS questionnaire_started_at,q.completed_at AS questionnaire_completed_at,"
@@ -2889,6 +3097,7 @@ def experiment_progress(
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
         "LEFT JOIN study_participations sp ON sp.participant_id=a.participant_id AND sp.study_code=a.study_code "
+        "LEFT JOIN experiment_time_tracking tt ON tt.participation_id=sp.participation_id "
         "LEFT JOIN experiment_stage_progress q ON q.participation_id=sp.participation_id AND q.stage_code='questionnaire' "
         "LEFT JOIN experiment_stage_progress d ON d.participation_id=sp.participation_id AND d.stage_code='dd_lifetrade' "
         "LEFT JOIN experiment_stage_progress u ON u.participation_id=sp.participation_id AND u.stage_code='ultimatum' "
@@ -2928,7 +3137,11 @@ def experiment_progress(
             None,
         )
         has_started = any(int(row.get(stage_code + "_attempts") or 0) > 0 for stage_code, _ in stages)
-        last_activity_candidates = [parse_time(row.get("assigned_at"))]
+        last_activity_candidates = [
+            parse_time(row.get("assigned_at")),
+            parse_time(row.get("first_opened_at")),
+            parse_time(row.get("time_last_activity_at")),
+        ]
         for stage_code, _ in stages:
             last_activity_candidates.extend([
                 parse_time(row.get(stage_code + "_started_at")),
