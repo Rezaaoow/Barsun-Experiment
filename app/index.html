@@ -677,6 +677,69 @@ button{-webkit-tap-highlight-color:transparent}
     padding: 5px 8px;
   }
 }
+/* Accessibility-first participant interface: larger text, stronger controls and generous touch targets. */
+:root{font-size:18px}
+body{font-size:18px}
+.panel{line-height:1.95}
+.panel h1{font-size:clamp(1.6rem,4.5vw,2.05rem);font-weight:850}
+.panel p,.instruction-content p{font-size:1.12rem;line-height:2;font-weight:550}
+.panel .hint,.hintline,.instruction-content .hintline{font-size:1rem!important;line-height:1.9}
+.field label{font-size:1.05rem;font-weight:800}
+.field input,.field select{min-height:58px;padding:13px 15px;font-size:1.08rem;font-weight:650;border-width:1.5px}
+.btn,.page-actions .btn,.questionnaire-actions .btn{min-height:60px;padding:13px 24px;font-size:1.12rem;font-weight:850;border-radius:14px}
+.status{max-width:min(82vw,520px);font-size:.9rem;font-weight:700;padding:9px 13px;line-height:1.7}
+.instruction-screen,.interstitial-screen{width:min(840px,100%);height:min(760px,calc(100dvh - 24px));padding:clamp(22px,4vw,42px);line-height:2}
+.instruction-progress{font-size:.98rem;font-weight:750}
+.instruction-heading{font-size:clamp(1.55rem,3.6vw,2.05rem);font-weight:850}
+.instruction-content{gap:clamp(12px,2vh,22px)}
+.questionnaire-screen{width:min(860px,100%);height:calc(100dvh - 24px);padding:26px;overflow:auto}
+.questionnaire-meta{font-size:1rem;font-weight:800;margin-bottom:18px}
+.questionnaire-screen h2{font-size:1.45rem;font-weight:850;line-height:1.8;margin-bottom:18px}
+.questionnaire-statement{font-size:1.28rem;font-weight:700;line-height:2;margin-bottom:20px}
+.questionnaire-scale{gap:12px}
+.scale-option{min-height:112px;padding:13px 7px;border-width:2px;border-radius:16px}
+.scale-option .scale-number{width:40px;height:40px;font-size:1.2rem;font-weight:900}
+.scale-option .scale-label{font-size:.95rem;font-weight:800;line-height:1.65}
+.scale-na{min-height:58px;font-size:1rem;font-weight:800;padding:12px 16px;border-width:2px}
+.questionnaire-save-status{font-size:.95rem;font-weight:700;min-height:28px}
+.questionnaire-actions{gap:12px;padding-top:14px}
+.questionnaire-actions .btn{flex:1}
+@media(max-width:680px){
+ body{font-size:19px}
+ .screen{padding:8px;align-items:stretch}
+ .panel{width:100%;max-height:calc(100dvh - 16px);margin:auto;padding:21px 18px;border-radius:18px}
+ .panel h1{font-size:1.65rem}
+ .panel p{font-size:1.16rem;line-height:2}
+ .field{gap:9px;margin:17px 0}
+ .field label{font-size:1.08rem}
+ .field input,.field select{min-height:62px;font-size:1.12rem}
+ .btn,.finish-actions .btn{width:100%;min-height:64px;font-size:1.16rem;padding:15px 18px}
+ #stimulus{padding:7px}
+ .instruction-screen,.interstitial-screen{width:100%;height:calc(100dvh - 14px);padding:19px 16px;border-radius:17px}
+ .instruction-progress{font-size:.95rem;margin-bottom:13px}
+ .instruction-heading{font-size:1.55rem;margin-bottom:12px}
+ .instruction-content{gap:13px;overflow:auto;justify-content:flex-start}
+ .instruction-content p{font-size:1.13rem;line-height:2}
+ .questionnaire-screen{width:100%;height:calc(100dvh - 14px);padding:17px 14px 14px;border-radius:17px;overflow:auto}
+ .questionnaire-meta{font-size:.95rem;margin-bottom:12px}
+ .questionnaire-screen h2{font-size:1.18rem;line-height:1.8;margin-bottom:12px}
+ .questionnaire-statement{font-size:1.13rem;line-height:1.9;margin-bottom:13px}
+ .questionnaire-scale{gap:7px}
+ .scale-option{min-height:98px;padding:8px 4px;gap:6px;border-radius:12px}
+ .scale-option .scale-number{width:36px;height:36px;font-size:1.05rem}
+ .scale-option .scale-label{font-size:.82rem;line-height:1.55;font-weight:850}
+ .scale-na{min-height:58px;width:100%;font-size:.98rem;padding:11px 9px}
+ .questionnaire-actions{gap:8px;padding-top:10px}
+ .questionnaire-actions .btn{width:auto;min-height:58px;padding:11px 8px;font-size:1rem}
+ .questionnaire-save-status{font-size:.9rem}
+ .status{left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));max-width:none;font-size:.85rem}
+}
+@media(max-height:620px){
+ .instruction-content{overflow:auto;justify-content:flex-start}
+ .questionnaire-screen{overflow:auto}
+ .scale-option{min-height:88px}
+}
+
 
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
@@ -1333,7 +1396,7 @@ function showQuestionnaireIntro(pageIndex=0){
  content.className='instruction-content';
  if(pageIndex===0){
   const paras=[
-   'راننده گرامی،',
+   'بارسانی عزیز،',
    'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
    'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
    'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
@@ -1760,7 +1823,20 @@ const utCss = [
 ".ut-error{color:#9e1f1f;background:#fff5f5;border:1px solid #f0cccc;border-radius:12px;padding:12px;text-align:center}",
 ".ut-body>:not(.ut-actions),.ut-body p,.ut-body h1,.ut-body div,.ut-body span,.ut-rolebox,.ut-result,.ut-summary-box{text-align:center}",
 "@media(max-width:640px){.ut-card{height:calc(100dvh - 12px);padding:12px 11px;border-radius:17px}.ut-topbar{margin-bottom:8px}.ut-score{font-size:.86rem}.ut-opponent{font-size:1rem;gap:7px;padding:3px 7px}.ut-opponent-icon{font-size:1.75rem;width:42px;height:42px;border-radius:13px}.ut-opponent-label{font-size:.7rem}.ut-title{font-size:1.28rem;margin-bottom:8px}.ut-body{gap:10px}.ut-copy{font-size:.94rem;line-height:1.72}.ut-rolebox{padding:10px}.ut-rolebox strong{font-size:1.06rem}.ut-rolebox span{font-size:.86rem}.ut-total{font-size:.92rem}.ut-question{font-size:1.03rem}.ut-slider-wrap{padding-top:32px;padding-inline:8px}.ut-shares{gap:7px}.ut-share{padding:8px 4px;font-size:.82rem}.ut-btn{min-height:43px;padding:9px 8px;font-size:.9rem}.ut-result-main{font-size:1.28rem}.ut-result-detail{font-size:1rem}.ut-summary-box{padding:15px 12px}.ut-summary-metrics{gap:8px}.ut-summary-metric{padding:12px 6px}.ut-summary-metric-label{font-size:.78rem}.ut-summary-metric-value{font-size:1.65rem}}",
-"@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}.ut-summary-metric{padding:9px 5px}.ut-summary-metric-value{font-size:1.5rem}}"
+"@media(max-height:620px){.ut-card{padding-top:8px;padding-bottom:8px}.ut-topbar{margin-bottom:5px}.ut-progress{margin-bottom:4px}.ut-title{font-size:1.15rem;margin-bottom:5px}.ut-body{gap:7px}.ut-copy{font-size:.9rem;line-height:1.55}.ut-rolebox{padding:7px 10px}.ut-rolebox strong{font-size:1rem;margin-bottom:0}.ut-rolebox span{font-size:.8rem;line-height:1.5}.ut-slider-wrap{padding-top:29px}.ut-shares{gap:6px}.ut-share{padding:6px 4px}.ut-actions{padding-top:4px}.ut-btn{min-height:38px;padding:6px 8px}.ut-result{gap:8px}.ut-result-icon{width:42px;height:42px;font-size:1.2rem}.ut-result-main{font-size:1.1rem}.ut-summary-box{padding:12px}.ut-summary-metric{padding:9px 5px}.ut-summary-metric-value{font-size:1.5rem}}",
+".ut-card{font-size:1.08rem;line-height:1.9}",
+".ut-title{font-size:1.55rem;font-weight:900;line-height:1.6}",
+".ut-copy{font-size:1.12rem;font-weight:700;line-height:1.9}",
+".ut-btn{min-height:60px;padding:13px 16px;font-size:1.1rem;font-weight:900;border-radius:15px}",
+".ut-score{font-size:1rem;font-weight:900}",
+".ut-opponent-icon{font-size:2.1rem;width:54px;height:54px}",
+".ut-opponent-label{font-size:.9rem;font-weight:800}",
+".ut-share{min-height:58px;font-size:1rem;font-weight:900}",
+".ut-question{font-size:1.15rem;font-weight:850;line-height:1.9}",
+".ut-summary-metric-label{font-size:1rem;font-weight:850}",
+".ut-summary-metric-value{font-size:clamp(1.8rem,5vw,2.5rem);font-weight:900}",
+"@media(max-width:640px){.ut-card{height:calc(100dvh - 10px);padding:16px 13px}.ut-title{font-size:1.45rem}.ut-copy{font-size:1.08rem;line-height:1.85}.ut-btn{min-height:62px;font-size:1.08rem;padding:12px 9px}.ut-opponent-icon{font-size:2.35rem;width:58px;height:58px}.ut-opponent-label{font-size:.95rem}.ut-score{font-size:1rem}.ut-question{font-size:1.13rem}.ut-share{min-height:58px;font-size:.95rem}.ut-result-main{font-size:1.5rem}.ut-result-detail{font-size:1.1rem}.ut-summary-metric-label{font-size:.98rem}.ut-summary-metric-value{font-size:1.9rem}}"
+
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
