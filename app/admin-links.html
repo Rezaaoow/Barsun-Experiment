@@ -93,6 +93,45 @@ a{color:#245fc0;overflow-wrap:anywhere}
 .link-manager-note{padding:11px 13px;border:1px solid #dce6f6;background:#f5f8ff;border-radius:12px;color:#4e607e;font-size:.83rem;line-height:1.9;margin:12px 0}
 .link-selection{display:inline-flex;align-items:center;gap:7px;font-size:.83rem;color:#56647a;font-weight:650}
 .link-selection input{width:auto}
+.workflow-builder{margin:15px 0 22px;padding:18px;border:1px solid #dce5f3;border-radius:18px;background:linear-gradient(145deg,#f8faff,#fff)}
+.workflow-builder h3{margin:0 0 7px;font-size:1.08rem}
+.workflow-builder-note{margin:0 0 15px;color:#5f6f89;font-size:.9rem;line-height:1.85}
+.workflow-layout{display:grid;grid-template-columns:minmax(210px,.72fr) minmax(0,1.6fr);gap:14px;align-items:stretch}
+.workflow-palette,.workflow-timeline{padding:14px;border:1px dashed #c8d5e8;border-radius:14px;background:#fff;min-width:0}
+.workflow-palette-title,.workflow-timeline-title{font-weight:850;color:#324563;margin-bottom:11px}
+.workflow-module-list{display:grid;gap:9px}
+.workflow-module{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid #dbe4f2;background:#f8faff;color:#24395b;text-align:right;border-radius:13px;font-weight:800;cursor:grab;touch-action:manipulation}
+.workflow-module:hover{border-color:#88a4d4;background:#eef4ff}
+.workflow-module small{display:block;font-size:.77rem;font-weight:600;color:#687996;margin-top:2px}
+.workflow-module .add-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;height:30px;border-radius:9px;background:#e5edfb;color:#2857a6;font-size:1.25rem}
+.workflow-timeline{border-style:solid;background:linear-gradient(180deg,#fcfdff,#f7f9fe)}
+.workflow-timeline.drag-over{outline:3px solid #9ab7eb;background:#eef5ff}
+.workflow-step-list{display:grid;gap:9px;min-height:92px}
+.workflow-step{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border:1px solid #dce4f0;border-radius:13px;background:#fff;box-shadow:0 3px 10px rgba(35,53,86,.035)}
+.workflow-step.dragging{opacity:.45}
+.workflow-step-number{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:#eaf0fb;color:#294c83;font-weight:900}
+.workflow-step-name{font-weight:850;color:#253b5f}
+.workflow-step-name small{display:block;margin-top:2px;color:#728097;font-size:.76rem;font-weight:650}
+.workflow-step-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.workflow-step-actions button{min-height:36px;width:38px;padding:4px;border-radius:10px}
+.workflow-step-actions button.remove-step{width:auto;padding:4px 10px}
+.workflow-empty{padding:21px 14px;text-align:center;color:#78869a;border:1px dashed #cdd7e6;border-radius:12px;line-height:1.8;font-weight:650}
+.workflow-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:11px;color:#627087;font-size:.82rem}
+.workflow-meta strong{color:#2b4267}
+.workflow-save-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:13px}
+.workflow-save-row .actions{margin:0}
+.workflow-dirty{font-size:.84rem;font-weight:800;color:#965b16}
+.workflow-clean{font-size:.84rem;font-weight:800;color:#217044}
+.workflow-management-help{margin-top:10px;padding:11px 13px;border-radius:12px;background:#edf4ff;color:#3e5579;line-height:1.85;font-size:.84rem}
+.link-action-groups{display:grid;gap:10px;margin-top:12px}
+.link-action-group{padding:12px 13px;border:1px solid #e3e9f2;border-radius:13px;background:#fbfcff}
+.link-action-group-title{margin:0 0 8px;font-size:.83rem;color:#596985;font-weight:850}
+.link-action-group .actions{margin:0;align-items:center}
+.link-action-group .link-selection{margin-left:auto}
+.monitor-times{min-width:260px;white-space:normal!important;line-height:1.7}
+.monitor-time-line{display:flex;justify-content:space-between;gap:12px;font-size:.82rem;border-bottom:1px dashed #e8edf4;padding:3px 0}
+.monitor-time-line:last-child{border-bottom:0}
+.monitor-time-line strong{direction:ltr;font-variant-numeric:tabular-nums;white-space:nowrap}
 .compact-input{max-width:280px}
 footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
@@ -151,7 +190,37 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </section>
 
 <section class="card" aria-labelledby="linkTitle">
-<h2 id="linkTitle">۲. ساخت لینک اختصاصی کارکنان</h2>
+<h2 id="linkTitle">۲. روند آزمایش و ساخت لینک</h2>
+<p class="hint">ابتدا ترتیب ماژول‌های آزمایش را در Timeline بچین و ذخیره کن؛ هر ماژول را می‌توانی چند بار اضافه کنی. سپس کد کارکنان، گروه و فایل CSV را وارد کن و لینک بساز. این روند روی لینک‌های جدید اعمال می‌شود.</p>
+<div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
+ <h3 id="workflowBuilderTitle">طراحی روند آزمایش</h3>
+ <p class="workflow-builder-note">ماژول‌ها را بکش و در Timeline رها کن، یا با دکمهٔ + اضافه کن. برای موبایل از + و دکمه‌های جابه‌جایی استفاده کن. تکرار ماژول‌ها آزاد است (حداکثر ۴۰ جایگاه).</p>
+ <div class="workflow-layout">
+  <div class="workflow-palette">
+   <div class="workflow-palette-title">ماژول‌های در دسترس</div>
+   <div class="workflow-module-list">
+    <button class="workflow-module" type="button" draggable="true" data-workflow-module="questionnaire"><span>پرسشنامه<small>پرسشنامهٔ تجربهٔ همکاری</small></span><span class="add-mark">+</span></button>
+    <button class="workflow-module" type="button" draggable="true" data-workflow-module="dd_lifetrade"><span>DD / Life-Trade<small>تکلیف تصمیم‌گیری و ترجیح زمانی</small></span><span class="add-mark">+</span></button>
+    <button class="workflow-module" type="button" draggable="true" data-workflow-module="ultimatum"><span>بازی اولتیماتوم<small>بازی تقسیم امتیاز</small></span><span class="add-mark">+</span></button>
+   </div>
+  </div>
+  <div class="workflow-timeline" id="workflowTimeline" aria-label="ترتیب ماژول‌های آزمایش">
+   <div class="workflow-timeline-title">Timeline · ترتیب اجرای شرکت‌کننده</div>
+   <div id="workflowStepList" class="workflow-step-list"><div class="workflow-empty">برای شروع، یک ماژول را با + اضافه کن یا آن را به این قسمت بکش.</div></div>
+   <div class="workflow-meta"><span>تعداد جایگاه‌ها: <strong id="workflowCount">۰</strong></span><span>هر جایگاه یک اجرای مستقل است</span></div>
+  </div>
+ </div>
+ <div class="workflow-save-row">
+  <div id="workflowSaveState" class="workflow-clean">روند ذخیره‌شده را دریافت کن.</div>
+  <div class="actions">
+   <button id="saveWorkflow" type="button">ذخیرهٔ روند آزمایش</button>
+   <button id="clearWorkflow" class="secondary" type="button">خالی‌کردن Timeline</button>
+   <button id="resetWorkflow" class="secondary" type="button">بازگشت به روند پیش‌فرض</button>
+  </div>
+ </div>
+ <div id="workflowStatus" class="status" role="status" aria-live="polite"></div>
+ <div class="workflow-management-help">لینک‌های ساخته‌شده، نسخهٔ روند را در زمان ساخت دریافت می‌کنند. اگر بعداً ترتیب را تغییر بدهی، لینک‌های قبلی با همان ترتیب اولیه اجرا می‌شوند و فقط لینک‌های جدید از روند تازه استفاده می‌کنند.</div>
+</div>
 <p class="hint">یک کد در هر خط بنویس یا فایل CSV بارگذاری کن. قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
 <div class="grid">
 <div class="field">
@@ -203,12 +272,22 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
   <button id="downloadActiveLinks" class="secondary" type="button">دریافت CSV لینک‌های فعال</button>
  </div>
 </div>
-<div class="actions">
- <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ موارد نمایش‌داده‌شده</label>
- <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
- <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
- <button id="reissueMissingSelectedLinks" class="tertiary" type="button">صدور مجدد URLهای غیرقابل‌بازیابی</button>
- <button id="deleteInactiveLinks" class="danger" type="button">حذف همهٔ لینک‌های غیرفعال</button>
+<div class="link-action-groups">
+ <div class="link-action-group">
+  <p class="link-action-group-title">تغییر وضعیت لینک‌های انتخاب‌شده</p>
+  <div class="actions">
+   <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ ردیف‌های قابل مشاهده</label>
+   <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
+   <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
+  </div>
+ </div>
+ <div class="link-action-group">
+  <p class="link-action-group-title">ابزارهای لینک</p>
+  <div class="actions">
+   <button id="reissueMissingSelectedLinks" class="tertiary" type="button">صدور URL جدید برای انتخاب‌شده‌های قدیمی</button>
+   <button id="deleteInactiveLinks" class="danger" type="button">حذف همهٔ لینک‌های غیرفعال</button>
+  </div>
+ </div>
 </div>
 <div class="link-manager-note">غیرفعال‌کردن لینک دسترسی با URL فعلی را مسدود می‌کند و با فعال‌کردن دوباره، همان URL قابل استفاده می‌شود. حذف لینک غیرفعال فقط تخصیص لینک را حذف می‌کند و پاسخ‌ها/داده‌های پژوهشی قبلی را پاک نمی‌کند. برای لینک‌های قدیمی که توکن قابل بازیابی ندارند، «صدور URL جدید» لینک قبلی را باطل می‌کند.</div>
 <div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
@@ -217,7 +296,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 
 <section class="card" aria-labelledby="testTitle">
 <h2 id="testTitle">۳. تست مستقل ماژول‌ها</h2>
-<p class="hint">هر دکمه یک لینک جداگانه با کد ورود <span class="pill">TEST</span> می‌سازد. لینک مستقیماً وارد همان ماژول می‌شود؛ برای تست DD/Life-Trade و Ultimatum لازم نیست کل آزمایش اجرا شود. مراحل قبلی در فضای تست به‌صورت مصنوعی کامل علامت می‌خورند و با پرچم مشخص در متادیتا می‌مانند. خروجی‌ها فقط در محدودهٔ تست هستند.</p>
+<p class="hint">لینک مستقل ماژول‌ها بدون تغییر، فقط همان ماژول انتخاب‌شده را اجرا می‌کند. اما «ساخت دو لینک تست کامل» از همان روند Timeline ذخیره‌شده استفاده می‌کند و دو لینک Frame و Control می‌سازد. خروجی‌ها فقط در محدودهٔ تست باقی می‌مانند.</p>
 <div class="grid">
 <div class="field">
 <label for="moduleTestGroup">گروه برای لینک تست مستقل</label>
