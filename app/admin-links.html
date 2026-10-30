@@ -326,7 +326,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <button id="applyBulkLinkAction" class="secondary" type="button">اعمال عملیات</button>
  <button id="deleteInactiveLinks" class="danger" type="button">حذف لینک‌های غیرفعال</button>
 </div>
-<div class="link-manager-note">غیرفعال‌کردن لینک دسترسی با URL فعلی را مسدود می‌کند و با فعال‌کردن دوباره، همان URL قابل استفاده می‌شود. حذف لینک غیرفعال فقط تخصیص لینک را حذف می‌کند و پاسخ‌ها/داده‌های پژوهشی قبلی را پاک نمی‌کند. برای لینک‌های قدیمی که توکن قابل بازیابی ندارند، «صدور URL جدید» لینک قبلی را باطل می‌کند.</div>
+<div class="link-manager-note">برای تغییر وضعیت یا صدور مجدد URL، ردیف‌ها را انتخاب کن و یک عملیات گروهی اعمال کن. لینک‌های قدیمیِ بدون URL قابل بازیابی را فقط در صورت نیاز دوباره صادر کن؛ URL قبلی آن‌ها باطل می‌شود. حذف لینک غیرفعال، داده‌های پژوهشی و پاسخ‌های ثبت‌شده را پاک نمی‌کند.</div>
 <div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentManagementTable" class="table-wrap link-mgmt-table"><p class="hint" style="padding:12px">برای دیدن لینک‌ها، «بارگذاری لینک‌ها» را بزن.</p></div>
 </section>
@@ -627,7 +627,7 @@ function renderAssignmentManagement(data){
   return;
  }
  const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
- ["انتخاب","کد","گروه","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ ["انتخاب","کد","گروه","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
  thead.appendChild(headRow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(item=>{
@@ -649,15 +649,7 @@ function renderAssignmentManagement(data){
   }
   tr.appendChild(urlCell);
   const dateCell=document.createElement("td");dateCell.textContent=item.assigned_at?new Date(item.assigned_at).toLocaleString("fa-IR"):"—";tr.appendChild(dateCell);
-  const actionCell=document.createElement("td"),actions=document.createElement("div");actions.className="link-row-actions";
-  const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=item.active?"غیرفعال کن":"فعال کن";
-  toggle.addEventListener("click",()=>changeAssignmentStatuses([item.assignment_id],!item.active));
-  actions.appendChild(toggle);
-  if(!item.url_available){
-   const reissue=document.createElement("button");reissue.type="button";reissue.className="tertiary";reissue.textContent="صدور URL جدید";
-   reissue.addEventListener("click",()=>reissueAssignmentUrl(item));actions.appendChild(reissue);
-  }
-  actionCell.appendChild(actions);tr.appendChild(actionCell);tbody.appendChild(tr);
+  tbody.appendChild(tr);
  });
  table.appendChild(tbody);root.className="table-wrap link-mgmt-table";root.appendChild(table);
  const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";
