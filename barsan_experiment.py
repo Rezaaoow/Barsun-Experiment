@@ -1168,7 +1168,18 @@ def _load_study_workflow(connection: Any, study_code: str) -> list[dict[str, str
     if not row:
         return _default_workflow_steps()
     try:
-        return _normalize_workflow_steps(json.loads(row["workflow_json"]))
+        normalized = _normalize_workflow_steps(json.loads(row["workflow_json"]))
+        previous_default = [
+            {"step_id": "default-questionnaire", "module_code": "questionnaire"},
+            {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
+            {"step_id": "default-ultimatum-frame", "module_code": "ultimatum_frame"},
+            {"step_id": "default-ultimatum-control", "module_code": "ultimatum_control"},
+        ]
+        # The former built-in pair is not a user-selected experimental design.
+        # Replace only that exact default snapshot; preserve custom workflows.
+        if normalized == previous_default:
+            return _default_workflow_steps()
+        return normalized
     except (TypeError, ValueError, KeyError, HTTPException):
         return _default_workflow_steps()
 
