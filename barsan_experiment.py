@@ -5,6 +5,7 @@ import json
 import math
 import os
 import random
+import re
 import secrets
 import sqlite3
 import uuid
@@ -38,6 +39,12 @@ STAGE_TO_INSTRUMENT = {
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
+DEFAULT_FLOW_STEPS = [
+    {"step_id": "default-questionnaire", "module_code": "questionnaire"},
+    {"step_id": "default-lifetrade", "module_code": "dd_lifetrade"},
+    {"step_id": "default-ultimatum", "module_code": "ultimatum"},
+]
+MAX_FLOW_STEPS = 100
 ULTIMATUM_TOTAL_POINTS = 10
 ULTIMATUM_MAIN_BLOCK_TRIALS = 5
 ULTIMATUM_MAIN_BLOCK_COUNT = 4
@@ -252,15 +259,37 @@ if DATABASE_URL:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, flow_config JSONB, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
+            connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS flow_config JSONB")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_templates ("
+                "template_key TEXT PRIMARY KEY, flow_json JSONB NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_id TEXT NOT NULL, step_index INTEGER NOT NULL, module_code TEXT NOT NULL "
+                "CHECK(module_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' "
+                "CHECK(status IN ('not_started','in_progress','completed')), "
+                "current_run_id TEXT REFERENCES instrument_runs(run_id), active_seconds INTEGER NOT NULL DEFAULT 0, "
+                "started_at TEXT, completed_at TEXT, last_activity_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id,step_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_tracking ("
+                "participation_id TEXT PRIMARY KEY REFERENCES study_participations(participation_id), "
+                "first_seen_at TEXT NOT NULL, last_activity_at TEXT NOT NULL, "
+                "total_active_seconds INTEGER NOT NULL DEFAULT 0)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -427,17 +456,40 @@ else:
                 "assignment_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "participant_id TEXT NOT NULL REFERENCES participants(participant_id), "
                 "condition_code TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
-                "invitation_token_encrypted TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
+                "invitation_token_encrypted TEXT, flow_config TEXT, active INTEGER NOT NULL DEFAULT 1, assigned_at TEXT NOT NULL, "
                 "UNIQUE(study_code, participant_id))"
             )
             assignment_columns = {row["name"] for row in connection.execute("PRAGMA table_info(experiment_assignments)").fetchall()}
             if "invitation_token_encrypted" not in assignment_columns:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
+            if "flow_config" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN flow_config TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_templates ("
+                "template_key TEXT PRIMARY KEY, flow_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_flow_progress ("
+                "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
+                "step_id TEXT NOT NULL, step_index INTEGER NOT NULL, module_code TEXT NOT NULL "
+                "CHECK(module_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
+                "status TEXT NOT NULL DEFAULT 'not_started' "
+                "CHECK(status IN ('not_started','in_progress','completed')), "
+                "current_run_id TEXT REFERENCES instrument_runs(run_id), active_seconds INTEGER NOT NULL DEFAULT 0, "
+                "started_at TEXT, completed_at TEXT, last_activity_at TEXT NOT NULL, "
+                "PRIMARY KEY(participation_id,step_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_tracking ("
+                "participation_id TEXT PRIMARY KEY REFERENCES study_participations(participation_id), "
+                "first_seen_at TEXT NOT NULL, last_activity_at TEXT NOT NULL, "
+                "total_active_seconds INTEGER NOT NULL DEFAULT 0)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -607,6 +659,27 @@ class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
 
 
+class FlowStepIn(BaseModel):
+    step_id: str = Field(min_length=1, max_length=80)
+    module_code: StageCode
+
+
+class ExperimentFlowIn(BaseModel):
+    steps: list[FlowStepIn] = Field(min_length=1, max_length=100)
+
+
+class AccessOpenIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+
+
+class TimeHeartbeatIn(BaseModel):
+    invitation_token: str = Field(min_length=20, max_length=200)
+    active_seconds: int = Field(default=0, ge=0, le=120)
+    module_active_seconds: int = Field(default=0, ge=0, le=120)
+    flow_step_id: str | None = Field(default=None, max_length=80)
+    module_code: StageCode | None = None
+
+
 class AssignmentStatusBatchIn(BaseModel):
     scope: Literal["main", "test"] = "main"
     assignment_ids: list[str] = Field(min_length=1, max_length=5000)
@@ -649,6 +722,7 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
+    flow_step_id: str | None = Field(default=None, max_length=80)
 
 
 class StageDraftIn(ExperimentIdentityIn):
@@ -667,6 +741,7 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
+    flow_step_id: str | None = Field(default=None, max_length=80)
     final_payload: dict[str, Any] | None = None
 
 
@@ -1013,11 +1088,143 @@ def _scope_rows(connection: Any, scope: str, table: str, column: str = "study_co
     ).fetchall()]
 
 
+def _decode_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return None
+    return value
+
+
+def _normalize_flow_steps(value: Any) -> list[dict[str, str]]:
+    decoded = _decode_json_value(value)
+    if isinstance(decoded, dict):
+        decoded = decoded.get("steps")
+    if not isinstance(decoded, list) or not decoded or len(decoded) > MAX_FLOW_STEPS:
+        raise HTTPException(422, "روند آزمایش باید حداقل یک و حداکثر ۱۰۰ ماژول داشته باشد.")
+    steps: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in decoded:
+        if not isinstance(item, dict):
+            raise HTTPException(422, "ساختار یکی از مراحل روند آزمایش معتبر نیست.")
+        step_id = str(item.get("step_id") or "").strip()
+        module_code = str(item.get("module_code") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", step_id):
+            raise HTTPException(422, "شناسهٔ هر جایگاه روند باید شامل حروف، عدد یا خط تیره باشد.")
+        if step_id in seen:
+            raise HTTPException(422, "شناسهٔ جایگاه‌ها نباید تکراری باشد؛ تکرار خود ماژول مجاز است.")
+        if module_code not in STAGE_TO_INSTRUMENT:
+            raise HTTPException(422, "نوع یکی از ماژول‌های روند آزمایش معتبر نیست.")
+        seen.add(step_id)
+        steps.append({"step_id": step_id, "module_code": module_code})
+    return steps
+
+
+def _default_flow() -> dict[str, Any]:
+    return {"version": 1, "steps": [dict(item) for item in DEFAULT_FLOW_STEPS]}
+
+
+def _flow_for_assignment(assignment: dict[str, Any]) -> dict[str, Any]:
+    raw = assignment.get("flow_config")
+    if raw is None:
+        return _default_flow()
+    try:
+        return {"version": 1, "steps": _normalize_flow_steps(raw)}
+    except HTTPException:
+        return _default_flow()
+
+
+def _load_saved_flow(connection: Any) -> dict[str, Any]:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT flow_json FROM experiment_flow_templates WHERE template_key=" + marker,
+        (STUDY_CODE,),
+    ).fetchone()
+    if not row:
+        return _default_flow()
+    try:
+        return {"version": 1, "steps": _normalize_flow_steps(row["flow_json"])}
+    except HTTPException:
+        return _default_flow()
+
+
+def _flow_progress_rows(connection: Any, participation_id: str) -> dict[str, dict[str, Any]]:
+    marker = "%s" if DATABASE_URL else "?"
+    rows = connection.execute(
+        "SELECT step_id,step_index,module_code,status,current_run_id,active_seconds,"
+        "started_at,completed_at,last_activity_at FROM experiment_flow_progress "
+        "WHERE participation_id=" + marker + " ORDER BY step_index",
+        (participation_id,),
+    ).fetchall()
+    return {row["step_id"]: dict(row) for row in rows}
+
+
+def _public_flow_state(step: dict[str, str], index: int, row: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "step_id": step["step_id"],
+        "step_index": index,
+        "module_code": step["module_code"],
+        "status": row["status"] if row else "not_started",
+        "current_run_id": row.get("current_run_id") if row else None,
+        "active_seconds": int(row.get("active_seconds") or 0) if row else 0,
+        "started_at": row.get("started_at") if row else None,
+        "completed_at": row.get("completed_at") if row else None,
+        "last_activity_at": row.get("last_activity_at") if row else None,
+    }
+
+
+def _persist_flow_template(connection: Any, steps: list[dict[str, str]], timestamp: str) -> None:
+    payload = {"version": 1, "steps": steps}
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO experiment_flow_templates(template_key,flow_json,updated_at) VALUES(%s,%s,%s) "
+            "ON CONFLICT(template_key) DO UPDATE SET flow_json=EXCLUDED.flow_json,updated_at=EXCLUDED.updated_at",
+            (STUDY_CODE, Jsonb(payload), timestamp),
+        )
+    else:
+        connection.execute(
+            "INSERT INTO experiment_flow_templates(template_key,flow_json,updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(template_key) DO UPDATE SET flow_json=excluded.flow_json,updated_at=excluded.updated_at",
+            (STUDY_CODE, json.dumps(payload, ensure_ascii=False), timestamp),
+        )
+
+
+def _upsert_flow_progress(
+    connection: Any, participation_id: str, step_id: str, step_index: int,
+    module_code: str, status: str, timestamp: str, run_id: str | None = None,
+) -> None:
+    if DATABASE_URL:
+        connection.execute(
+            "INSERT INTO experiment_flow_progress(participation_id,step_id,step_index,module_code,status,"
+            "current_run_id,active_seconds,started_at,completed_at,last_activity_at) "
+            "VALUES(%s,%s,%s,%s,%s,%s,0,%s,NULL,%s) "
+            "ON CONFLICT(participation_id,step_id) DO UPDATE SET "
+            "step_index=EXCLUDED.step_index,module_code=EXCLUDED.module_code,status=EXCLUDED.status,"
+            "current_run_id=EXCLUDED.current_run_id,started_at=COALESCE(experiment_flow_progress.started_at,EXCLUDED.started_at),"
+            "completed_at=NULL,last_activity_at=EXCLUDED.last_activity_at",
+            (participation_id, step_id, step_index, module_code, status, run_id, timestamp, timestamp),
+        )
+    else:
+        connection.execute(
+            "INSERT INTO experiment_flow_progress(participation_id,step_id,step_index,module_code,status,"
+            "current_run_id,active_seconds,started_at,completed_at,last_activity_at) "
+            "VALUES(?,?,?,?,?,?,0,?,NULL,?) "
+            "ON CONFLICT(participation_id,step_id) DO UPDATE SET "
+            "step_index=excluded.step_index,module_code=excluded.module_code,status=excluded.status,"
+            "current_run_id=excluded.current_run_id,started_at=COALESCE(experiment_flow_progress.started_at,excluded.started_at),"
+            "completed_at=NULL,last_activity_at=excluded.last_activity_at",
+            (participation_id, step_id, step_index, module_code, status, run_id, timestamp, timestamp),
+        )
+
+
 def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
     row = connection.execute(
-        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,"
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.flow_config,"
         "sp.participation_id,p.participant_code "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -1079,6 +1286,25 @@ def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str
     return state
 
 
+@app.get("/api/admin/flow")
+def get_admin_flow(x_admin_token: str | None = Header(default=None)):
+    authorize(x_admin_token)
+    with conn() as connection:
+        return _load_saved_flow(connection)
+
+
+@app.put("/api/admin/flow")
+def update_admin_flow(
+    data: ExperimentFlowIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    authorize(x_admin_token)
+    steps = _normalize_flow_steps([item.dict() for item in data.steps])
+    with conn() as connection:
+        _persist_flow_template(connection, steps, now())
+    return {"saved": True, "version": 1, "steps": steps}
+
+
 @app.post("/api/admin/assignments")
 def create_assignments(
     data: AssignmentBatchIn,
@@ -1092,6 +1318,7 @@ def create_assignments(
     base_url = _invitation_base_url(request, "/api/admin/assignments")
     joiner = "&" if "?" in base_url else "?"
     with conn() as connection:
+        flow_config = _load_saved_flow(connection)
         for item in data.assignments:
             code = normalize_participant_code(item.participant_code)
             condition = item.condition_code.strip().upper()
@@ -1113,18 +1340,18 @@ def create_assignments(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), STUDY_CODE, participant_id, condition, token_hash, token_encrypted, _json_param(flow_config), 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,flow_config,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,flow_config,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
@@ -1147,6 +1374,7 @@ def create_test_links(
     joiner = "&" if "?" in base_url else "?"
     created = []
     with conn() as connection:
+        flow_config = _load_saved_flow(connection)
         for condition, group_label in (("A", "Frame"), ("B", "Control")):
             group_slug = group_label.lower()
             study_code = f"{TEST_STUDY_PREFIX}{generation}-{group_slug}"
@@ -1170,18 +1398,18 @@ def create_test_links(
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
             values = (
-                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, 1, now()
+                str(uuid.uuid4()), study_code, participant_id, condition, token_hash, token_encrypted, _json_param(flow_config), 1, now()
             )
             if DATABASE_URL:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "invitation_token_hash,invitation_token_encrypted,flow_config,active,assigned_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     values,
                 )
             else:
                 connection.execute(
                     "INSERT INTO experiment_assignments(assignment_id,study_code,participant_id,condition_code,"
-                    "invitation_token_hash,invitation_token_encrypted,active,assigned_at) VALUES(?,?,?,?,?,?,?,?)",
+                    "invitation_token_hash,invitation_token_encrypted,flow_config,active,assigned_at) VALUES(?,?,?,?,?,?,?,?,?)",
                     values,
                 )
             created.append({
