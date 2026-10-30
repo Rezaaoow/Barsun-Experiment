@@ -2016,12 +2016,14 @@ async function startUltimatumInstructions() {
   const started=await api("/api/experiment/stages/start",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
-   stage_code:"ultimatum"
+   stage_code:"ultimatum",
+   step_id:workflow.workflowMode?workflow.currentStepId:null
   });
   if(started.already_completed) {
-   workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، مراحل آزمایش برای این کد کامل شده‌اند.","بازگشت");
+   workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، این بخش از روند آزمایش قبلاً کامل شده است.","بازگشت");
    return;
   }
+  await startStepTimer();
   ultimatumState={
    runId:started.run_id,
    score:0,
@@ -2047,7 +2049,8 @@ async function startUltimatumInstructions() {
   utRenderWelcome();
  } catch(error) {
   console.error(error);
-  workflowMessage("بازی اولتیماتوم آماده نشد","شروع مرحلهٔ اولتیماتوم موفق نبود. اتصال را بررسی کنید و دوباره وارد لینک اختصاصی شوید.","بازگشت");
+  await pauseStepTimer();
+  workflowMessage("بازی اولتیماتوم آماده نشد","شروع این بخش موفق نبود. اتصال را بررسی کنید و دوباره از لینک اختصاصی وارد شوید.","بازگشت");
  }
 }
 function utRenderWelcome() {
@@ -2413,6 +2416,7 @@ async function utFinishUltimatum() {
    participant_code:workflow.participantCode,
    stage_code:"ultimatum",
    run_id:ultimatumState.runId,
+   step_id:workflow.workflowMode?workflow.currentStepId:null,
    final_payload:{
     schema_version:1,
     condition_code:workflow.conditionCode,
@@ -2425,14 +2429,30 @@ async function utFinishUltimatum() {
     client_completed_at:nowISO()
    }
   });
+  await finishStepTimer();
   ultimatumState.completed=true;
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","بارسانی عزیز، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
-  utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+  const hasNext=workflow.workflowMode&&workflow.workflowStepIndex<workflow.workflowSteps.length-1;
+  let closingMessage;
+  if(workflow.testModuleOnly==="ultimatum"){
+   closingMessage="بارسانی عزیز، تست این ماژول به پایان رسید. داده‌ها در محدودهٔ تست ثبت شده‌اند.";
+  }else if(hasNext){
+   closingMessage="بارسانی عزیز، این بخش با موفقیت تکمیل شد. برای رفتن به بخش بعدی، دکمهٔ ادامه را بزنید.";
+  }else{
+   closingMessage="بارسانی عزیز، برنامهٔ پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.";
+  }
+  utAddText(end.body,"p","ut-copy",closingMessage);
+  if(hasNext){
+   const actions=utNode("div","ut-actions");
+   end.body.appendChild(actions);
+   utButton(actions,"ادامه به مرحله بعد",function(){advanceWorkflowStep();},"");
+  }else{
+   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+  }
  } catch(error) {
   console.error(error);
   utShowError("ثبت نهایی موفق نشد. داده‌های دورها در سرور نگه داشته شده‌اند؛ برای تکمیل ثبت، دوباره تلاش کنید.",utFinishUltimatum);
