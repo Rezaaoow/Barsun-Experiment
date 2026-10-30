@@ -2644,10 +2644,13 @@ def complete_experiment_stage(data: StageCompleteIn):
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
+        progress_table, progress_key_column, progress_key_value = _progress_location(
+            assignment, data.stage_code, data.step_id
+        )
         state = connection.execute(
-            "SELECT status,current_run_id,attempt_number,draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], data.stage_code),
+            "SELECT status,current_run_id,attempt_number,draft_payload FROM " + progress_table
+            + " WHERE participation_id=" + marker + " AND " + progress_key_column + "=" + marker,
+            (assignment["participation_id"], progress_key_value),
         ).fetchone()
         if not state:
             raise HTTPException(409, "این مرحله هنوز شروع نشده است.")
@@ -2674,10 +2677,10 @@ def complete_experiment_stage(data: StageCompleteIn):
                 raise HTTPException(422, "پاسخ همهٔ سؤال‌ها هنوز در سرور ذخیره نشده است.")
             payload_param = _json_param(data.final_payload)
             connection.execute(
-                "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
+                "UPDATE " + progress_table + " SET status='completed',draft_payload=" + marker
                 + ",completed_at=" + marker + ",updated_at=" + marker
-                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-                (payload_param, timestamp, timestamp, assignment["participation_id"], data.stage_code),
+                + " WHERE participation_id=" + marker + " AND " + progress_key_column + "=" + marker,
+                (payload_param, timestamp, timestamp, assignment["participation_id"], progress_key_value),
             )
         elif data.stage_code == "ultimatum":
             if data.final_payload is None:
@@ -2744,23 +2747,23 @@ def complete_experiment_stage(data: StageCompleteIn):
                 raise HTTPException(422, "جمع امتیازهای نهایی با پاسخ‌های ثبت‌شده مطابقت ندارد.")
             payload_param = _json_param(data.final_payload)
             connection.execute(
-                "UPDATE experiment_stage_progress SET status='completed',draft_payload=" + marker
+                "UPDATE " + progress_table + " SET status='completed',draft_payload=" + marker
                 + ",completed_at=" + marker + ",updated_at=" + marker
-                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-                (payload_param, timestamp, timestamp, assignment["participation_id"], data.stage_code),
+                + " WHERE participation_id=" + marker + " AND " + progress_key_column + "=" + marker,
+                (payload_param, timestamp, timestamp, assignment["participation_id"], progress_key_value),
             )
         else:
             connection.execute(
-                "UPDATE experiment_stage_progress SET status='completed',completed_at=" + marker
+                "UPDATE " + progress_table + " SET status='completed',completed_at=" + marker
                 + ",updated_at=" + marker
-                + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-                (timestamp, timestamp, assignment["participation_id"], data.stage_code),
+                + " WHERE participation_id=" + marker + " AND " + progress_key_column + "=" + marker,
+                (timestamp, timestamp, assignment["participation_id"], progress_key_value),
             )
         connection.execute(
             "UPDATE instrument_runs SET status='completed',completed_at=" + marker + " WHERE run_id=" + marker,
             (timestamp, data.run_id),
         )
-    return {"completed": True, "already_completed": False, "stage_code": data.stage_code}
+    return {"completed": True, "already_completed": False, "stage_code": data.stage_code, "step_id": data.step_id}
 
 
 
