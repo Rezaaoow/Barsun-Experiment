@@ -1453,11 +1453,11 @@ async function startQuestionnaireRun(button){
    workflow_step_index:workflow.currentStepIndex
   });
   workflow.stageRunId=started.run_id;
+  workflow.activeRunId=started.run_id;
   const serverDraft=started.draft_payload||{};
-  if(serverDraft.answers&&typeof serverDraft.answers==='object'){
-   workflow.questionnaireAnswers={...serverDraft.answers};
-   workflow.questionnaireSavedAnswers={...serverDraft.answers};
-  }
+  const savedAnswers=serverDraft.answers&&typeof serverDraft.answers==='object'?serverDraft.answers:{};
+  workflow.questionnaireAnswers={...savedAnswers};
+  workflow.questionnaireSavedAnswers={...savedAnswers};
   const savedIndex=Number.isInteger(serverDraft.current_question_index)?serverDraft.current_question_index:0;
   workflow.questionIndex=Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,savedIndex));
   showQuestionnaireQuestion(workflow.questionIndex);
