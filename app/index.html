@@ -678,6 +678,100 @@ button{-webkit-tap-highlight-color:transparent}
   }
 }
 
+
+/* Accessibility-first participant interface: large typography and touch targets. */
+html,body{font-size:18px;font-weight:550}
+.panel{width:min(760px,100%);padding:clamp(24px,4vw,46px)}
+.panel h1{font-size:clamp(1.65rem,4vw,2.1rem);font-weight:850}
+.panel p{font-size:clamp(1.12rem,2.4vw,1.28rem);font-weight:600;line-height:1.95;color:#171717}
+.field{gap:10px;margin:18px 0}
+.field label{font-size:1.08rem;font-weight:800}
+.field input,.field select{min-height:58px;padding:14px 15px;border-width:2px;border-radius:14px;font-size:1.12rem;font-weight:650}
+.btn{min-height:60px;padding:14px 24px;font-size:1.1rem;font-weight:850;border-width:2px;border-radius:15px}
+.hint{font-size:1rem!important;font-weight:600!important;line-height:1.8!important}
+.instruction-heading{font-size:clamp(1.55rem,3.5vw,2rem);font-weight:900}
+.instruction-content p{font-size:clamp(1.1rem,2.2vw,1.28rem);font-weight:700;line-height:1.95}
+.instruction-progress{font-size:1rem;font-weight:700}
+.instruction-progress .step-count{font-weight:900}
+.continue-note{font-size:1rem;font-weight:700}
+.choice-card{border-width:2px;border-radius:22px}
+.choice-amount{font-size:clamp(1.85rem,5vw,3.6rem);font-weight:900}
+.choice-detail{font-size:clamp(1.12rem,2.8vw,1.55rem);font-weight:750}
+.example-title{font-size:1.12rem;font-weight:850}
+.example-choice{font-size:1rem;font-weight:750;min-height:82px}
+.example-callout{font-size:1.1rem;font-weight:700}
+.questionnaire-screen{width:min(900px,100%);max-height:calc(100dvh - 24px);overflow:auto}
+.questionnaire-meta{font-size:1rem;font-weight:800}
+.questionnaire-screen h2{font-size:1.2rem;font-weight:850}
+.questionnaire-statement{font-size:clamp(1.2rem,2.8vw,1.55rem)!important;font-weight:850!important;line-height:1.95!important}
+.scale-option,.scale-na{min-height:62px;font-size:1.04rem;font-weight:800;border-width:2px}
+.scale-number{font-size:1.25rem;font-weight:900}
+.questionnaire-save-status{font-size:1rem;font-weight:750}
+.questionnaire-actions .btn{min-height:62px;font-size:1.08rem}
+#consent-checkbox{width:26px;height:26px;flex:none}
+#ethics .consent-label,#ethics label{font-size:1.06rem;font-weight:750;line-height:1.8}
+#participant-code-input{min-height:60px;font-size:1.15rem;font-weight:800}
+#participant-code-error{font-size:1.02rem;font-weight:800}
+.ut-card{font-size:1.08rem!important}
+.ut-card .ut-title{font-size:clamp(1.55rem,4vw,2rem)!important;font-weight:900!important;line-height:1.55!important}
+.ut-card .ut-copy{font-size:1.12rem!important;font-weight:700!important;line-height:1.95!important}
+.ut-card .ut-copy.small{font-size:1rem!important;font-weight:650!important}
+.ut-card .ut-score{font-size:1.08rem!important;font-weight:900!important;padding:10px 15px!important}
+.ut-card .ut-opponent{font-size:1.12rem!important;font-weight:900!important}
+.ut-card .ut-opponent-icon{width:58px!important;height:58px!important;font-size:2.3rem!important}
+.ut-card .ut-actions button,.ut-card button{min-height:58px!important;font-size:1.08rem!important;font-weight:850!important;padding:13px 20px!important}
+.ut-card .ut-rolebox{font-size:1.1rem!important}
+.ut-card .ut-summary-metric-value{font-size:1.6rem!important;font-weight:900!important}
+@media(max-width:760px){
+ html,body{font-size:18px}
+ .screen{height:auto;min-height:100svh;overflow:auto;align-items:flex-start;padding:12px 10px max(18px,env(safe-area-inset-bottom))}
+ .panel{width:100%;max-height:none;overflow:visible;padding:23px 18px;border-radius:20px;line-height:2}
+ .panel h1{font-size:1.55rem;line-height:1.55}
+ .panel p{font-size:1.12rem;line-height:1.95}
+ .field label{font-size:1.08rem}
+ .field input,.field select{min-height:60px;font-size:1.12rem}
+ .btn{width:100%;min-height:62px;font-size:1.12rem}
+ .finish-actions{display:flex;flex-direction:column;align-items:stretch}
+ #stimulus{position:relative;inset:auto;min-height:100svh;overflow:visible;padding:10px 8px 24px}
+ .instruction-screen,.interstitial-screen{width:100%;height:auto;min-height:calc(100svh - 24px);max-height:none;overflow:visible;padding:22px 17px}
+ .instruction-progress{font-size:.98rem}
+ .instruction-heading{font-size:1.55rem}
+ .instruction-content{overflow:visible;gap:17px}
+ .instruction-content p,.instruction-explanation{font-size:1.12rem!important;line-height:2!important;font-weight:750!important}
+ .page-actions{display:flex;flex-direction:column;padding-top:20px}
+ .next-page{width:100%;min-height:64px;font-size:1.12rem;font-weight:900}
+ .example-box{max-width:none;padding:16px 12px}
+ .example-title{font-size:1.08rem}
+ .example-choices{gap:8px}
+ .example-choice{min-height:78px;font-size:.95rem;padding:11px 5px}
+ .example-callout{font-size:1.08rem;padding:15px;line-height:1.95}
+ .trial-layout{width:100%;max-width:none;min-height:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;gap:10px}
+ .choice-card{min-height:clamp(230px,36svh,330px);height:auto;padding:16px 9px;gap:14px;border-radius:17px}
+ .choice-amount{font-size:clamp(1.25rem,5.2vw,1.9rem);font-weight:900}
+ .choice-detail{font-size:clamp(1rem,3.8vw,1.18rem);font-weight:800;line-height:1.8}
+ .or-divider{width:48px;height:48px;font-size:1rem;font-weight:900}
+ .questionnaire-screen{width:100%;max-height:none;padding:19px 14px 22px}
+ .questionnaire-meta{font-size:.95rem}
+ .questionnaire-screen h2{font-size:1.12rem;line-height:1.8}
+ .questionnaire-statement{font-size:1.25rem!important}
+ .questionnaire-scale{display:grid;grid-template-columns:1fr;gap:9px}
+ .scale-option{display:flex;flex-direction:row;justify-content:flex-start;gap:16px;min-height:62px;padding:12px 15px;font-size:1.02rem}
+ .scale-number{min-width:32px;text-align:center}
+ .scale-na{width:100%;min-height:62px;font-size:1rem;padding:12px}
+ .questionnaire-actions{display:flex;flex-direction:column;gap:10px}
+ .questionnaire-actions .btn{width:100%;min-height:64px}
+ .ut-card{width:100%;height:auto;min-height:calc(100svh - 18px);max-height:none;overflow:visible;padding:16px 12px 22px;border-radius:18px}
+ .ut-card .ut-topbar{gap:8px;margin-bottom:14px}
+ .ut-card .ut-score{font-size:1rem!important;padding:9px 11px!important}
+ .ut-card .ut-opponent{font-size:1rem!important;gap:7px}
+ .ut-card .ut-opponent-icon{width:50px!important;height:50px!important;font-size:2rem!important}
+ .ut-card .ut-body{overflow:visible;gap:16px;justify-content:flex-start;padding:8px 0}
+ .ut-card .ut-title{font-size:1.45rem!important}
+ .ut-card .ut-copy{font-size:1.08rem!important}
+ .ut-card .ut-actions{display:flex;flex-direction:column;gap:10px}
+ .ut-card .ut-actions button,.ut-card button{width:100%;min-height:62px!important;font-size:1.08rem!important}
+ .ut-card .ut-summary-metrics{display:grid;grid-template-columns:1fr;gap:10px}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
@@ -735,7 +829,12 @@ const workflow = {
  questionnaireStageState:null,
  currentStage:null,
  stagedRunId:null,
- testModuleOnly:null
+ testModuleOnly:null,
+ flowSteps:[],
+ flowProgress:[],
+ currentFlowStep:null,
+ flowStepId:null,
+ stages:[]
 };
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
@@ -1278,7 +1377,7 @@ function showQuestionnaireIntro(pageIndex=0){
  content.className='instruction-content';
  if(pageIndex===0){
   const paras=[
-   'راننده گرامی،',
+   'بارسانی عزیز،',
    'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
    'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
    'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
@@ -2250,7 +2349,7 @@ async function utFinishUltimatum() {
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
+  utAddText(end.body,"p","ut-copy","بارسانی عزیز، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
  } catch(error) {
   console.error(error);
