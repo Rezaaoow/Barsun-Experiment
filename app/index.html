@@ -735,7 +735,12 @@ const workflow = {
  questionnaireStageState:null,
  currentStage:null,
  stagedRunId:null,
- testModuleOnly:null
+ testModuleOnly:null,
+ workflowSteps:null,
+ activeStepId:null,
+ activeStep:null,
+ activitySessionId:null,
+ pendingActivityStep:null
 };
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
@@ -995,6 +1000,94 @@ async function api(path, body){
  }
  return res.json();
 }
+async function activityEvent(eventName,step){
+ if(!workflow.invitationToken||!workflow.activitySessionId)return;
+ const payload={
+  invitation_token:workflow.invitationToken,
+  activity_session_id:workflow.activitySessionId,
+  event:eventName,
+  step_id:step&&step.step_id?step.step_id:null,
+  module_code:step&&step.stage_code?step.stage_code:null
+ };
+ const keepalive=["pause","close"].includes(eventName);
+ try{
+  await fetch(APP_BASE_PATH+"/api/experiment/activity/event",{
+   method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify(payload),cache:"no-store",keepalive
+  });
+ }catch(error){/* Heartbeat gaps are bounded server-side; activity must never block the experiment. */}
+}
+async function setActivityModule(step){
+ workflow.pendingActivityStep=step||null;
+ if(!workflow.activitySessionId)return;
+ await activityEvent("module",step);
+}
+async function openActivitySession(){
+ if(!workflow.invitationToken)return;
+ try{
+  const opened=await api("/api/experiment/activity/open",{invitation_token:workflow.invitationToken});
+  workflow.activitySessionId=opened.activity_session_id;
+  if(workflow.pendingActivityStep)await activityEvent("module",workflow.pendingActivityStep);
+ }catch(error){console.warn("Activity timer could not start:",error);}
+}
+function startParticipantActivityTracking(){
+ if(!workflow.invitationToken)return;
+ openActivitySession();
+ window.setInterval(function(){
+  if(workflow.activitySessionId&&document.visibilityState==="visible")activityEvent("heartbeat",workflow.pendingActivityStep);
+ },20000);
+ document.addEventListener("visibilitychange",function(){
+  if(!workflow.activitySessionId)return;
+  if(document.visibilityState==="hidden")activityEvent("pause",workflow.pendingActivityStep);
+  else activityEvent("resume",workflow.pendingActivityStep);
+ });
+ window.addEventListener("pagehide",function(){activityEvent("close",workflow.pendingActivityStep);});
+ window.addEventListener("pageshow",function(event){
+  if(event.persisted){workflow.activitySessionId=null;openActivitySession();}
+ });
+}
+startParticipantActivityTracking();
+
+function finishConfiguredWorkflow(message){
+ activityEvent("close",null);
+ workflow.currentStage=null;
+ workflow.activeStepId=null;
+ const title=message||"ممنون از مشارکت شما";
+ workflowMessage("آزمایش به پایان رسید",title+" تمام مراحل برنامهٔ تعیین‌شده برای این لینک تکمیل شده‌اند. از زمانی که گذاشتید سپاسگزاریم.","پایان");
+}
+async function launchConfiguredWorkflowStep(step){
+ if(!step){finishConfiguredWorkflow();return;}
+ workflow.activeStep=step;
+ workflow.activeStepId=step.step_id;
+ workflow.currentStage=step.stage_code;
+ await setActivityModule({step_id:step.step_id,stage_code:step.stage_code});
+ if(step.stage_code==="questionnaire"){
+  const draft=step.draft_payload||{};
+  workflow.questionnaireStageState=step;
+  workflow.questionnaireAnswers=draft.answers&&typeof draft.answers==="object"?{...draft.answers}:{};
+  workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
+  workflow.questionIndex=Number.isInteger(draft.current_question_index)?Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,draft.current_question_index)):0;
+  showQuestionnaireIntro(0);
+ }else if(step.stage_code==="dd_lifetrade"){
+  await startAssignedDDStage();
+ }else if(step.stage_code==="ultimatum"){
+  await startUltimatumInstructions();
+ }else{
+  throw new Error("Unknown workflow module: "+step.stage_code);
+ }
+}
+async function advanceConfiguredWorkflow(){
+ if(!Array.isArray(workflow.workflowSteps)){return false;}
+ const currentIndex=workflow.workflowSteps.findIndex(step=>step.step_id===workflow.activeStepId);
+ const next=workflow.workflowSteps[currentIndex+1];
+ if(next){
+  await launchConfiguredWorkflowStep(next);
+ }else{
+  finishConfiguredWorkflow();
+ }
+ return true;
+}
+
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function utApiWithRetry(path,payload,attempts=4){
  let lastError;
