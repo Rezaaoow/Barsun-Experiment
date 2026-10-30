@@ -1614,21 +1614,21 @@ async function beginParticipantFlow(){
   workflow.participantCode=identity.participant_code;
   workflow.conditionCode=identity.condition_code;
   workflow.testModuleOnly=identity.test_module_only||null;
+  workflow.workflowTemplate=Array.isArray(identity.workflow)&&identity.workflow.length?identity.workflow.slice():['questionnaire','dd_lifetrade','ultimatum'];
+  workflow.workflowSteps=identity.workflow_steps||[];
+  workflow.currentStepIndex=Number.isInteger(identity.current_step_index)?identity.current_step_index:0;
   workflow.currentStage=identity.current_stage;
-  const stages=identity.stages||[];
-  const qstate=stages.find(stage=>stage.stage_code==='questionnaire');
+  const currentStep=workflow.workflowSteps.find(step=>Number(step.step_index)===workflow.currentStepIndex);
+  const qstate=currentStep&&currentStep.stage_code==='questionnaire'?currentStep:null;
   workflow.questionnaireStageState=qstate||null;
   workflow.questionnaireAnswers=(qstate&&qstate.draft_payload&&qstate.draft_payload.answers)||{};
   workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
   workflow.questionIndex=qstate&&Number.isInteger(qstate.draft_payload&&qstate.draft_payload.current_question_index)?qstate.draft_payload.current_question_index:0;
-  if(identity.current_stage==='questionnaire'){
-   showQuestionnaireIntro(0);
-  }else if(identity.current_stage==='dd_lifetrade'){
-   await startAssignedDDStage();
-  }else if(identity.current_stage==='ultimatum'){
-   await startUltimatumInstructions();
+  startParticipantActivityTracking();
+  if(identity.current_step_index===null||identity.current_stage===null){
+   workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','تمام مراحل برنامهٔ انتخاب‌شده برای این کد تکمیل شده‌اند.','پایان');
   }else{
-   workflowMessage('تمام مراحل ثبت‌شده تکمیل شده‌اند','طبق سوابق موجود، همهٔ مراحل این برنامه تکمیل شده‌اند. برای اصلاح یا بازکردن دوبارهٔ مشارکت با تیم پژوهش هماهنگ کنید.','بازگشت');
+   await launchWorkflowStep(workflow.currentStepIndex);
   }
  }catch(error){
   console.error(error);
@@ -2290,6 +2290,7 @@ async function utFinishUltimatum() {
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    stage_code:"ultimatum",
+   workflow_step_index:ultimatumState.workflowStepIndex,
    run_id:ultimatumState.runId,
    final_payload:{
     schema_version:1,
@@ -2309,8 +2310,13 @@ async function utFinishUltimatum() {
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
-  utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
+  utAddText(end.body,"p","ut-copy","بارسانی عزیز، این ماژول با موفقیت به پایان رسید.");
+  utAddText(end.body,"p","ut-copy","از وقتی که برای این بخش گذاشتید متشکریم.");
+  const actions=utNode("div","ut-actions");end.body.appendChild(actions);
+  utButton(actions,"ادامه",function(){
+   workflowStepsCompletedLocally();
+   continueWorkflow();
+  },"");
  } catch(error) {
   console.error(error);
   utShowError("ثبت نهایی موفق نشد. داده‌های دورها در سرور نگه داشته شده‌اند؛ برای تکمیل ثبت، دوباره تلاش کنید.",utFinishUltimatum);
