@@ -718,7 +718,7 @@ class StageDraftIn(ExperimentIdentityIn):
     stage_code: Literal["questionnaire"] = "questionnaire"
     run_id: str = Field(min_length=1, max_length=100)
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
-    draft_payload: dict[str, Any>
+    draft_payload: dict[str, Any]
 
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
