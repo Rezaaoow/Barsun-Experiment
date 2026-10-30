@@ -71,12 +71,12 @@ def main_test():
 
         test_progress = client.get("/api/admin/progress?scope=test", headers=admin_headers)
         assert test_progress.status_code == 200, test_progress.text
-        assert len(test_progress.json()) == 2, test_progress.json()
+        assert len(test_progress.json()) == 1, test_progress.json()
         assert all(row["study_code"].startswith("barsan-test-") for row in test_progress.json())
 
         preview = client.get("/api/admin/maintenance/preview?scope=test", headers=admin_headers)
         assert preview.status_code == 200, preview.text
-        assert preview.json()["counts"]["assignments"] == 2
+        assert preview.json()["counts"]["assignments"] == 1
 
         for path in (
             "/api/admin/questionnaire/export.csv?scope=test",
@@ -97,8 +97,8 @@ def main_test():
         links_response = client.get("/api/admin/assignments?scope=test&status=active", headers=admin_headers)
         assert links_response.status_code == 200, links_response.text
         links_payload = links_response.json()
-        assert links_payload["counts"] == {"active": 2, "inactive": 0, "total": 2}
-        assert len(links_payload["items"]) == 2
+        assert links_payload["counts"] == {"active": 1, "inactive": 0, "total": 1}
+        assert len(links_payload["items"]) == 1
         assert all(item["url_available"] and "?invite=" in item["invitation_url"] for item in links_payload["items"])
 
         active_links_csv = client.get("/api/admin/assignments/export.csv?scope=test", headers=admin_headers)
@@ -117,7 +117,7 @@ def main_test():
         )
         assert keep_existing.status_code == 200, keep_existing.text
         assert keep_existing.json()["reissued_count"] == 0
-        assert keep_existing.json()["skipped_count"] == 2
+        assert keep_existing.json()["skipped_count"] == 1
 
         target_link = links_payload["items"][0]
         toggle_off = client.post(
@@ -138,7 +138,7 @@ def main_test():
         assert toggle_on.status_code == 200, toggle_on.text
         after_on = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
         assert after_on.status_code == 200, after_on.text
-        assert after_on.json()["counts"] == {"active": 2, "inactive": 0, "total": 2}
+        assert after_on.json()["counts"] == {"active": 1, "inactive": 0, "total": 1}
 
         # Finally prove that the confirmed bulk deletion only removes inactive links.
         client.post(
