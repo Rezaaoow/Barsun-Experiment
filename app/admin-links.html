@@ -247,7 +247,7 @@ button{min-height:50px;font-size:.98rem;font-weight:850;padding:12px 16px}
 <p class="hint">ابتدا ترتیب ماژول‌های آزمایش را در Timeline بچین و ذخیره کن؛ هر ماژول را می‌توانی چند بار اضافه کنی. سپس کد کارکنان، گروه و فایل CSV را وارد کن و لینک بساز. این روند روی لینک‌های جدید اعمال می‌شود.</p>
 <div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
  <h3 id="workflowBuilderTitle">طراحی روند آزمایش</h3>
- <p class="workflow-builder-note">ماژول‌ها را بکش و در Timeline رها کن، یا با دکمهٔ + اضافه کن. برای موبایل از + و دکمه‌های جابه‌جایی استفاده کن. تکرار ماژول‌ها آزاد است (حداکثر ۴۰ جایگاه).</p>
+ <p class="workflow-builder-note">ماژول‌ها را بکش و در Timeline رها کن، یا با دکمهٔ + اضافه کن. برای موبایل از + و دکمه‌های جابه‌جایی استفاده کن. تکرار ماژول‌ها آزاد است و می‌توانی هر تعداد جایگاه به روند اضافه کنی.</p>
  <div class="workflow-layout">
   <div class="workflow-palette">
    <div class="workflow-palette-title">ماژول‌های در دسترس</div>
@@ -464,7 +464,6 @@ function renderWorkflow(){
 }
 function addWorkflowModule(code,index=workflowItems.length){
  if(!Object.prototype.hasOwnProperty.call(workflowModuleLabels,code))return;
- if(workflowItems.length>=40){setStatus("workflowStatus","حداکثر ۴۰ جایگاه در روند آزمایش مجاز است.","error");return;}
  const target=Math.max(0,Math.min(workflowItems.length,index));
  workflowItems.splice(target,0,code);renderWorkflow();markWorkflowDirty();
 }
