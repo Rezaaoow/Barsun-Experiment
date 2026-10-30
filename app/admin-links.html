@@ -154,6 +154,40 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  th,td{padding:13px 11px}
  .status{font-size:.97rem}
 }
+
+/* Compact workflow-aware participant monitoring and link controls. */
+.test-link-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:15px;padding:13px 15px;border:1px solid #dce5f2;border-radius:13px;background:#f8faff}
+.test-link-tools>div{min-width:0}.test-link-tools strong{font-size:.96rem;color:#273c60}.test-link-tools .small{margin:3px 0 0}.test-link-tools button{flex:none}
+.bulk-link-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+.bulk-link-actions select{width:auto;min-width:220px;max-width:100%;flex:1 1 240px}
+.bulk-link-actions button{white-space:nowrap}
+.workflow-monitor-table table{min-width:980px}
+.workflow-progress-cell{min-width:330px;white-space:normal}
+.workflow-progress-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;font-size:.82rem;color:#53627a}
+.progress-count-box{display:inline-flex;align-items:center;justify-content:center;min-width:55px;padding:4px 9px;border:1px solid #d8e1ef;border-radius:9px;background:#f4f7fc;font-size:.92rem;font-weight:900;font-variant-numeric:tabular-nums;color:#243b60;direction:ltr}
+.progress-rail{height:7px;overflow:hidden;border-radius:99px;background:#e9edf4;margin-bottom:8px}
+.progress-rail span{display:block;height:100%;border-radius:inherit;background:#5278b9}
+.workflow-progress-steps{display:flex;flex-wrap:wrap;gap:6px}
+.progress-step{display:grid;grid-template-columns:23px minmax(0,1fr);align-items:center;gap:3px 7px;padding:6px 8px;border:1px solid #e1e7ef;border-radius:10px;background:#fff;min-width:130px}
+.progress-step-order{grid-row:1 / span 2;width:23px;height:23px;display:grid;place-items:center;border:1px solid #dce4ef;border-radius:7px;background:#f2f5fa;font-size:.78rem;font-weight:900;direction:ltr}
+.progress-step-label{font-size:.8rem;font-weight:850;color:#293b58;white-space:normal}
+.progress-step-status{font-size:.72rem;color:#707d90}
+.progress-step.done{border-color:#cde8d7;background:#f6fbf7}
+.progress-step.done .progress-step-order{background:#e5f5eb;border-color:#cce7d6;color:#206f43}
+.progress-step.current{border-color:#d7e2f5;background:#f6f9ff}
+.progress-step.current .progress-step-order{background:#e6efff;color:#28549b}
+.link-mgmt-table td:nth-child(4){font-weight:750;color:#324b70}
+@media(max-width:680px){
+ .test-link-tools{align-items:stretch;flex-direction:column}
+ .test-link-tools button{width:100%}
+ .bulk-link-actions{display:grid;grid-template-columns:minmax(0,1fr) auto}
+ .bulk-link-actions .link-selection{grid-column:1/-1}
+ .bulk-link-actions select{min-width:0;width:100%;grid-column:1/2}
+ .bulk-link-actions button{width:100%;padding-inline:9px;white-space:normal}
+ .bulk-link-actions #deleteInactiveLinks{grid-column:1/-1}
+ .workflow-monitor-table table{min-width:900px}
+ .progress-step{min-width:112px}
+}
 </style>
 </head>
 <body>
@@ -162,7 +196,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 <div>
 <div class="eyebrow">BARسان · RESEARCH CONTROL PANEL</div>
 <h1>پنل مدیریت آزمایش بارسان</h1>
-<p class="subtitle">ساخت لینک، اجرای مستقل ماژول‌ها، پایش پیشرفت شرکت‌کنندگان، دریافت خروجی و مدیریت امن محدودهٔ داده‌ها.</p>
+<p class="subtitle">تنظیم روند آزمایش، ساخت لینک، پایش پیشرفت شرکت‌کنندگان، دریافت خروجی و مدیریت امن داده‌ها.</p>
 </div>
 <div class="header-mark">دسترسی مدیریتی · محافظت‌شده با توکن</div>
 </header>
@@ -208,7 +242,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 
 <section class="card" aria-labelledby="linkTitle">
 <h2 id="linkTitle">۲. روند آزمایش و ساخت لینک</h2>
-<p class="hint">ابتدا ترتیب ماژول‌ها را در تایم‌لاین مشخص کن. سپس کد کارکنان را وارد کن یا فایل CSV را بارگذاری کن. قالب پذیرفته‌شده: <span class="code">participant_code,group</span>، برای مثال <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. ستون‌های <span class="code">participant_code</span> / <span class="code">code</span> و <span class="code">group</span> / <span class="code">condition_code</span> شناخته می‌شوند. گروه پیش‌فرض برای خط‌هایی است که گروه ندارند. حداکثر ۵۰۰ کد در هر بار.</p>
+<p class="hint">ترتیب ماژول‌ها را در تایم‌لاین مشخص کن؛ برای هر شرکت‌کننده گروه Frame یا Control را در فایل یا فهرست کدها تعیین کن. قالب: <span class="code">participant_code,group</span>، مانند <span class="code">BS-001,Frame</span> یا <span class="code">BS-002,Control</span>. هر شرکت‌کننده نسخهٔ متناسب اولتیماتوم را دریافت می‌کند. گروه برای هیچ ردیفی به‌صورت پیش‌فرض حدس زده نمی‌شود. حداکثر ۵۰۰ کد در هر بار.</p>
 
 <div class="workflow-builder" aria-labelledby="workflowBuilderTitle">
  <div class="workflow-builder-heading">
@@ -218,7 +252,8 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <div class="workflow-palette" aria-label="ماژول‌های قابل افزودن">
   <button type="button" class="workflow-module" draggable="true" data-add-module="questionnaire">پرسشنامه <span>+ افزودن</span></button>
   <button type="button" class="workflow-module" draggable="true" data-add-module="dd_lifetrade">DD / Life-Trade <span>+ افزودن</span></button>
-  <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum">Ultimatum <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum_frame">Ultimatum — Frame <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum_control">Ultimatum — Control <span>+ افزودن</span></button>
  </div>
  <div class="workflow-timeline-head"><strong>تایم‌لاین آزمایش</strong><span id="workflowStepCount" class="pill">۰ ماژول</span></div>
  <ol id="workflowTimeline" class="workflow-timeline" aria-label="ترتیب اجرای ماژول‌ها"></ol>
@@ -229,20 +264,14 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <p class="small workflow-note">ترتیب ذخیره‌شده برای لینک‌های جدید استفاده می‌شود. لینک‌هایی که قبلاً ساخته‌ای، روند زمان ساخت خودشان را حفظ می‌کنند.</p>
  <div id="workflowStatus" class="status" role="status" aria-live="polite"></div>
 </div>
-<div class="grid">
-<div class="field">
-<label for="defaultGroup">گروه پیش‌فرض</label>
-<select id="defaultGroup"><option value="Frame">Frame</option><option value="Control">Control</option></select>
-</div>
 <div class="field">
 <label for="assignmentCsv">بارگذاری فایل CSV</label>
 <input id="assignmentCsv" type="file" accept=".csv,text/csv">
-<div class="small">فایل UTF-8 یا UTF-8 با BOM پیشنهاد می‌شود.</div>
-</div>
+<div class="small">هر ردیف باید کد و گروه Frame/Control داشته باشد؛ فایل UTF-8 یا UTF-8 با BOM پیشنهاد می‌شود.</div>
 </div>
 <div class="field">
 <label for="codes">کدهای کارکنان و گروه‌ها</label>
-<textarea id="codes" spellcheck="false" placeholder="BS-001,Frame&#10;BS-002,Control&#10;BS-003"></textarea>
+<textarea id="codes" spellcheck="false" placeholder="BS-001,Frame&#10;BS-002,Control"></textarea>
 </div>
 <div class="actions">
 <button id="createAssignments" type="button">ساخت لینک‌ها</button>
@@ -251,6 +280,13 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </div>
 <div id="assignmentStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentOutput"></div>
+
+<div class="test-link-tools">
+ <div><strong>آزمون روند ذخیره‌شده</strong><p class="small">دو لینک تست با کد TEST می‌سازد: یکی برای Frame و دیگری برای Control؛ هر دو دقیقاً از روند فعلی و نسخهٔ اولتیماتوم گروه خودشان استفاده می‌کنند.</p></div>
+ <button id="createFullTestLinks" class="secondary" type="button">ساخت لینک تست (Frame و Control)</button>
+</div>
+<div id="moduleTestStatus" class="status" role="status" aria-live="polite"></div>
+<div id="fullTestOutput"></div>
 
 <div class="divider"></div>
 <div class="card-head">
@@ -279,43 +315,24 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
   <button id="downloadActiveLinks" class="secondary" type="button">دریافت CSV لینک‌های فعال</button>
  </div>
 </div>
-<div class="actions">
+<div class="bulk-link-actions">
  <label class="link-selection"><input id="selectVisibleLinks" type="checkbox"> انتخاب همهٔ موارد نمایش‌داده‌شده</label>
- <button id="activateSelectedLinks" class="secondary" type="button">فعال‌کردن انتخاب‌شده‌ها</button>
- <button id="deactivateSelectedLinks" class="secondary" type="button">غیرفعال‌کردن انتخاب‌شده‌ها</button>
- <button id="reissueMissingSelectedLinks" class="tertiary" type="button">صدور مجدد URLهای غیرقابل‌بازیابی</button>
- <button id="deleteInactiveLinks" class="danger" type="button">حذف همهٔ لینک‌های غیرفعال</button>
+ <select id="bulkLinkAction" aria-label="عملیات گروهی لینک‌های انتخاب‌شده">
+  <option value="">عملیات گروهی روی انتخاب‌شده‌ها…</option>
+  <option value="activate">فعال‌کردن</option>
+  <option value="deactivate">غیرفعال‌کردن</option>
+  <option value="reissue">صدور مجدد URLهای غیرقابل‌بازیابی</option>
+ </select>
+ <button id="applyBulkLinkAction" class="secondary" type="button">اعمال عملیات</button>
+ <button id="deleteInactiveLinks" class="danger" type="button">حذف لینک‌های غیرفعال</button>
 </div>
 <div class="link-manager-note">غیرفعال‌کردن لینک دسترسی با URL فعلی را مسدود می‌کند و با فعال‌کردن دوباره، همان URL قابل استفاده می‌شود. حذف لینک غیرفعال فقط تخصیص لینک را حذف می‌کند و پاسخ‌ها/داده‌های پژوهشی قبلی را پاک نمی‌کند. برای لینک‌های قدیمی که توکن قابل بازیابی ندارند، «صدور URL جدید» لینک قبلی را باطل می‌کند.</div>
 <div id="linkManagementStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentManagementTable" class="table-wrap link-mgmt-table"><p class="hint" style="padding:12px">برای دیدن لینک‌ها، «بارگذاری لینک‌ها» را بزن.</p></div>
 </section>
 
-<section class="card" aria-labelledby="testTitle">
-<h2 id="testTitle">۳. تست مستقل ماژول‌ها</h2>
-<p class="hint">هر دکمه یک لینک جداگانه با کد ورود <span class="pill">TEST</span> می‌سازد. لینک مستقیماً وارد همان ماژول می‌شود؛ برای تست DD/Life-Trade و Ultimatum لازم نیست کل آزمایش اجرا شود. مراحل قبلی در فضای تست به‌صورت مصنوعی کامل علامت می‌خورند و با پرچم مشخص در متادیتا می‌مانند. خروجی‌ها فقط در محدودهٔ تست هستند.</p>
-<div class="grid">
-<div class="field">
-<label for="moduleTestGroup">گروه برای لینک تست مستقل</label>
-<select id="moduleTestGroup"><option value="A">Frame</option><option value="B">Control</option></select>
-</div>
-<div class="field">
-<label for="moduleTestStage">ماژول</label>
-<select id="moduleTestStage">
-<option value="questionnaire">پرسشنامه</option>
-<option value="dd_lifetrade">DD / Life-Trade</option>
-<option value="ultimatum">Ultimatum</option>
-</select>
-</div>
-</div>
-<div class="actions"><button id="createModuleTest" type="button">ساخت لینک ماژول انتخاب‌شده</button><button id="createFullTestLinks" class="secondary" type="button">ساخت دو لینک تست کامل</button></div>
-<div id="moduleTestStatus" class="status" role="status" aria-live="polite"></div>
-<div id="moduleTestOutput"></div>
-<div id="fullTestOutput"></div>
-</section>
-
 <section class="card" aria-labelledby="exportTitle">
-<h2 id="exportTitle">۴. خروجی داده‌ها</h2>
+<h2 id="exportTitle">۳. خروجی داده‌ها</h2>
 <p class="hint">فایل‌های هر ماژول جداگانه دریافت می‌شوند. خروجی کامل، هر سه فایل ماژول به‌همراه پایش شرکت‌کنندگان را در یک ZIP قرار می‌دهد. محدودهٔ انتخاب‌شده در بالای پنل استفاده می‌شود.</p>
 <div class="export-grid">
 <button class="secondary" data-export="questionnaire" type="button">خروجی پرسشنامه CSV</button>
@@ -327,7 +344,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </section>
 
 <section class="card" aria-labelledby="databaseTitle">
-<h2 id="databaseTitle">۵. مدیریت و پاک‌سازی داده‌ها</h2>
+<h2 id="databaseTitle">۴. مدیریت و پاک‌سازی داده‌ها</h2>
 <p class="hint">ابتدا پیش‌نمایش بگیر تا تعداد ردیف‌هایی را که پاک خواهند شد ببینی. پاک‌سازی فقط محدودهٔ انتخاب‌شده را حذف می‌کند؛ تعریف ابزارها و جدول کدهای شرکت‌کننده نگه داشته می‌شود. پاک‌سازی دادهٔ اصلی لینک‌ها و پیشرفت‌های اصلی را نیز حذف می‌کند و برای شروع دوباره باید لینک‌های جدید بسازی.</p>
 <div class="warning-box">این عملیات برگشت‌پذیر نیست. قبل از پاک‌سازی آزمایش اصلی، از PostgreSQL بکاپ مستقل بگیر. پاک‌سازی داده‌های تست، تمام لینک‌ها و داده‌های تمام نسل‌های تست را باطل می‌کند.</div>
 <div class="actions"><button id="previewReset" class="secondary" type="button">پیش‌نمایش تعداد داده‌ها</button></div>
@@ -441,7 +458,9 @@ function csvToTextarea(text){
 const workflowModuleLabels={
  questionnaire:"پرسشنامه",
  dd_lifetrade:"DD / Life-Trade",
- ultimatum:"بازی Ultimatum"
+ ultimatum:"بازی Ultimatum (قدیمی)",
+ ultimatum_frame:"بازی Ultimatum — Frame",
+ ultimatum_control:"بازی Ultimatum — Control"
 };
 function newWorkflowStepId(){
  const suffix=(window.crypto&&typeof window.crypto.randomUUID==="function")
@@ -542,7 +561,8 @@ $("resetWorkflow").addEventListener("click",()=>{
  workflowSteps=[
   {step_id:"default-questionnaire",module_code:"questionnaire"},
   {step_id:"default-dd-lifetrade",module_code:"dd_lifetrade"},
-  {step_id:"default-ultimatum",module_code:"ultimatum"}
+  {step_id:"default-ultimatum-frame",module_code:"ultimatum_frame"},
+  {step_id:"default-ultimatum-control",module_code:"ultimatum_control"}
  ];
  renderWorkflowBuilder();setStatus("workflowStatus","ترتیب پیش‌فرض نمایش داده شد؛ برای اعمال آن دکمهٔ «ذخیره روند آزمایش» را بزن.","info");
 });
@@ -553,8 +573,8 @@ function parseAssignments(){
  for(let i=0;i<lines.length;i++){
   const raw=lines[i].trim();if(!raw||raw.startsWith("#"))continue;
   const parts=raw.split(/[,;\t]/).map(v=>v.trim());
-  if(parts.length>2||!parts[0])throw new Error("خط "+(i+1)+" باید به شکل CODE یا CODE,Frame/Control باشد.");
-  const group=groupLabel(parts[1])||$("defaultGroup").value;
+  if(parts.length!==2||!parts[0]||!parts[1])throw new Error("خط "+(i+1)+" باید کد و گروه داشته باشد؛ قالب درست: CODE,Frame یا CODE,Control.");
+  const group=groupLabel(parts[1]);
   const code=parts[0].toUpperCase();
   if(seen.has(code))throw new Error("کد تکراری در ورودی: "+code);
   seen.add(code);assignments.push({participant_code:code,condition_code:group==="Frame"?"A":"B",group});
@@ -606,7 +626,7 @@ function renderAssignmentManagement(data){
   return;
  }
  const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
- ["انتخاب","کد","گروه","وضعیت لینک","URL","تاریخ ساخت","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ ["انتخاب","کد","گروه","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
  thead.appendChild(headRow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(item=>{
@@ -615,6 +635,7 @@ function renderAssignmentManagement(data){
   check.type="checkbox";check.className="assignment-select";check.dataset.id=item.assignment_id;check.setAttribute("aria-label","انتخاب لینک "+item.participant_code);selectCell.appendChild(check);tr.appendChild(selectCell);
   const codeCell=document.createElement("td");codeCell.className="row-code";codeCell.textContent=item.participant_code;tr.appendChild(codeCell);
   const groupCell=document.createElement("td");groupCell.textContent=item.group|| (item.condition_code==="A"?"Frame":"Control");tr.appendChild(groupCell);
+  const variantCell=document.createElement("td");variantCell.textContent=item.ultimatum_variant||"—";tr.appendChild(variantCell);
   const stateCell=document.createElement("td"),state=document.createElement("span");state.className="link-state "+(item.active?"active":"inactive");state.textContent=item.active?"فعال":"غیرفعال";stateCell.appendChild(state);tr.appendChild(stateCell);
   const urlCell=document.createElement("td");
   if(item.url_available){
@@ -696,7 +717,7 @@ async function downloadActiveAssignmentsCsv(){
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{button.disabled=false;}
 }
-function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum"})[code]||code;}
+function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum (قدیمی)",ultimatum_frame:"Ultimatum — Frame",ultimatum_control:"Ultimatum — Control"})[code]||code;}
 function progressStateLabel(state){
  return ({not_started:"شروع نکرده",in_progress:"در حال انجام",stale_incomplete:"متوقف / پیگیری",completed:"کامل"})[state]||state||"نامشخص";
 }
@@ -725,17 +746,38 @@ function renderProgress(){
  const root=$("participantTable");root.replaceChildren();
  if(!rows.length){root.className="table-wrap";const p=document.createElement("p");p.className="hint";p.style.padding="12px";p.textContent=progressRows.length?"با این فیلتر موردی پیدا نشد.":"در این محدوده هنوز لینک فعالی ثبت نشده است.";root.appendChild(p);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),hrow=document.createElement("tr");
- ["کد","گروه","وضعیت کلی","مرحلهٔ فعلی","پرسشنامه","Life-Trade","Ultimatum","زمان کل فعال","زمان پرسشنامه","زمان Life-Trade","زمان Ultimatum","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
+ ["کد","گروه","وضعیت","پیشرفت روند اختصاصی","ماژول فعلی","زمان فعال","آخرین فعالیت"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hrow.appendChild(th);});thead.appendChild(hrow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(r=>{
   const tr=document.createElement("tr");
-  const times=r.module_time_seconds||{};
-  const cells=[r.participant_code,r.condition_code==="A"?"Frame":"Control",progressStateLabel(r.progress_state),currentStageLabel(r.current_stage),stageStatusLabel(r.questionnaire_status),stageStatusLabel(r.dd_lifetrade_status),stageStatusLabel(r.ultimatum_status),formatDuration(r.total_active_seconds),formatDuration(times.questionnaire),formatDuration(times.dd_lifetrade),formatDuration(times.ultimatum),r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—"];
-  cells.forEach((value,i)=>{const td=document.createElement("td");if(i===2){const span=document.createElement("span");span.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");span.textContent=value;td.appendChild(span);}else td.textContent=value;tr.appendChild(td);});
+  const code=document.createElement("td");code.className="row-code";code.textContent=r.participant_code;tr.appendChild(code);
+  const group=document.createElement("td");group.textContent=r.condition_code==="A"?"Frame":"Control";tr.appendChild(group);
+  const state=document.createElement("td"),badge=document.createElement("span");
+  badge.className="badge "+(r.progress_state==="completed"?"ok":r.progress_state==="stale_incomplete"?"warn":r.progress_state==="in_progress"?"":"neutral");
+  badge.textContent=progressStateLabel(r.progress_state);state.appendChild(badge);tr.appendChild(state);
+  const progress=document.createElement("td");progress.className="workflow-progress-cell";
+  const meta=document.createElement("div");meta.className="workflow-progress-meta";
+  const count=document.createElement("strong");count.className="progress-count-box";count.textContent=Number(r.completed_steps||0).toLocaleString("fa-IR")+"/"+Number(r.total_steps||0).toLocaleString("fa-IR");
+  const percent=document.createElement("span");percent.textContent=Number(r.progress_percent||0).toLocaleString("fa-IR")+"٪";
+  meta.append(count,percent);progress.appendChild(meta);
+  const rail=document.createElement("div");rail.className="progress-rail";
+  const fill=document.createElement("span");fill.style.width=Math.max(0,Math.min(100,Number(r.progress_percent)||0))+"%";rail.appendChild(fill);progress.appendChild(rail);
+  const chips=document.createElement("div");chips.className="workflow-progress-steps";
+  (r.workflow_steps||[]).forEach(step=>{
+   const chip=document.createElement("div");chip.className="progress-step "+(step.status==="completed"?"done":step.status==="in_progress"?"current":"pending");
+   const order=document.createElement("span");order.className="progress-step-order";order.textContent=Number(step.step_order).toLocaleString("fa-IR");
+   const label=document.createElement("span");label.className="progress-step-label";label.textContent=step.module_label||stageLabel(step.module_code);
+   const statusText=document.createElement("span");statusText.className="progress-step-status";statusText.textContent=step.status==="completed"?"کامل":step.status==="in_progress"?"در حال انجام":"شروع نشده";
+   chip.append(order,label,statusText);chips.appendChild(chip);
+  });
+  progress.appendChild(chips);tr.appendChild(progress);
+  const current=document.createElement("td");current.textContent=r.current_stage_label||currentStageLabel(r.current_stage);tr.appendChild(current);
+  const duration=document.createElement("td");duration.textContent=formatDuration(r.total_active_seconds);tr.appendChild(duration);
+  const last=document.createElement("td");last.textContent=r.last_activity_at?new Date(r.last_activity_at).toLocaleString("fa-IR"):"—";tr.appendChild(last);
   tbody.appendChild(tr);
  });
- table.appendChild(tbody);root.className="table-wrap";root.appendChild(table);
- const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";footer.textContent="نمایش "+rows.length+" از "+progressRows.length+" لینک فعال.";root.appendChild(footer);
+ table.appendChild(tbody);root.className="table-wrap workflow-monitor-table";root.appendChild(table);
+ const footer=document.createElement("p");footer.className="small";footer.style.padding="0 10px 10px";footer.textContent="نمایش "+rows.length.toLocaleString("fa-IR")+" از "+progressRows.length.toLocaleString("fa-IR")+" لینک فعال؛ ترتیب ماژول‌ها مطابق روند ذخیره‌شده برای هر لینک است.";root.appendChild(footer);
 }
 async function refreshProgress(){
  clearStatus("monitorStatusMessage");$("refreshButton").disabled=true;$("connectButton").disabled=true;
@@ -776,20 +818,23 @@ $("clearAssignments").addEventListener("click",()=>{$("codes").value="";$("assig
 $("refreshAssignments").addEventListener("click",refreshAssignments);
 $("linkStatusFilter").addEventListener("change",refreshAssignments);
 $("downloadActiveLinks").addEventListener("click",downloadActiveAssignmentsCsv);
-$("activateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),true));
-$("deactivateSelectedLinks").addEventListener("click",()=>changeAssignmentStatuses(selectedAssignmentIds(),false));
-$("reissueMissingSelectedLinks").addEventListener("click",async()=>{
- const ids=selectedAssignmentIds();
+$("applyBulkLinkAction").addEventListener("click",async()=>{
+ const ids=selectedAssignmentIds(),action=$("bulkLinkAction").value;
  if(!ids.length){setStatus("linkManagementStatus","ابتدا لینک‌های موردنظر را انتخاب کن.","error");return;}
- if(!window.confirm("از میان "+ids.length+" لینک انتخاب‌شده فقط مواردی که URL آن‌ها قابل بازیابی نیست دوباره صادر می‌شوند. لینک قبلی همین موارد باطل می‌شود؛ وضعیت فعال/غیرفعال تغییر نمی‌کند. ادامه می‌دهی؟"))return;
- const button=$("reissueMissingSelectedLinks");button.disabled=true;
- try{
-  const response=await adminFetch("/api/admin/assignments/reissue-missing-links",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_ids:ids})});
-  const data=await response.json();
-  setStatus("linkManagementStatus",data.reissued_count+" URL جدید صادر شد؛ "+data.skipped_count+" لینک از قبل URL قابل بازیابی داشت و تغییر نکرد.","success");
-  await refreshAssignments();
- }catch(e){setStatus("linkManagementStatus",e.message,"error");}
- finally{button.disabled=false;}
+ if(!action){setStatus("linkManagementStatus","یک عملیات گروهی انتخاب کن.","info");return;}
+ if(action==="activate"){await changeAssignmentStatuses(ids,true);return;}
+ if(action==="deactivate"){await changeAssignmentStatuses(ids,false);return;}
+ if(action==="reissue"){
+  if(!window.confirm("فقط از میان لینک‌های انتخاب‌شده URLهای غیرقابل‌بازیابی دوباره صادر می‌شوند. لینک قبلی این موارد باطل خواهد شد. ادامه می‌دهی؟"))return;
+  const button=$("applyBulkLinkAction");button.disabled=true;
+  try{
+   const response=await adminFetch("/api/admin/assignments/reissue-missing-links",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_ids:ids})});
+   const data=await response.json();
+   setStatus("linkManagementStatus",data.reissued_count+" URL جدید صادر شد؛ "+data.skipped_count+" لینک نیازی به صدور مجدد نداشت.","success");
+   await refreshAssignments();
+  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
+  finally{button.disabled=false;$("bulkLinkAction").value="";}
+ }
 });
 
 $("selectVisibleLinks").addEventListener("change",()=>{
@@ -809,22 +854,12 @@ $("deleteInactiveLinks").addEventListener("click",async()=>{
  finally{button.disabled=false;}
 });
 
-$("createModuleTest").addEventListener("click",async()=>{
- clearStatus("moduleTestStatus");$("moduleTestOutput").replaceChildren();const button=$("createModuleTest");button.disabled=true;
- try{
-  const stage=$("moduleTestStage").value;
-  const response=await adminFetch("/api/admin/module-test-links",{method:"POST",body:JSON.stringify({stage_code:stage,condition_code:$("moduleTestGroup").value})});
-  const item=await response.json();makeLinkTable("moduleTestOutput",[item]);if($("monitorScope").value==="test")refreshAssignments();
-  setStatus("moduleTestStatus","لینک مستقل "+stageLabel(stage)+" با کد TEST ساخته شد. این لینک فقط همان ماژول را اجرا می‌کند و داده‌اش در خروجی تست می‌ماند.","success");
- }catch(e){setStatus("moduleTestStatus",e.message,"error");}
- finally{button.disabled=false;}
-});
 $("createFullTestLinks").addEventListener("click",async()=>{
  clearStatus("moduleTestStatus");$("fullTestOutput").replaceChildren();const button=$("createFullTestLinks");button.disabled=true;
  try{
   const steps=await saveWorkflow();
   const response=await adminFetch("/api/admin/test-links",{method:"POST",body:JSON.stringify({steps})});const data=await response.json();makeLinkTable("fullTestOutput",data.assignments);if($("monitorScope").value==="test")refreshAssignments();
-  setStatus("moduleTestStatus","دو لینک تست کامل ایجاد شد: Frame و Control؛ کد ورود هر دو TEST است.","success");
+  setStatus("moduleTestStatus","دو لینک تست از روند فعلی ساخته شد: نسخهٔ Frame و نسخهٔ Control؛ کد ورود هر دو TEST است.","success");
  }catch(e){setStatus("moduleTestStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
