@@ -138,34 +138,47 @@ def csv_rows(client, path):
     return list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
 
 
-def test_test_links_use_code_test_and_create_separate_frame_control_studies(client):
+def test_test_link_uses_one_exact_saved_workflow_and_not_a_frame_control_pair(client):
+    steps = [
+        {"step_id": "test-questionnaire", "module_code": "questionnaire"},
+        {"step_id": "test-control", "module_code": "ultimatum_control"},
+        {"step_id": "test-dd-again", "module_code": "dd_lifetrade"},
+    ]
+    saved = client.post(
+        "/api/admin/workflow",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"steps": steps},
+    )
+    assert saved.status_code == 200, saved.text
+
     response = client.post("/api/admin/test-links", headers={"x-admin-token": "test-admin-token"})
     assert response.status_code == 200, response.text
     data = response.json()
 
     assert data["test_code"] == "TEST"
-    assert data["created_count"] == 2
-    assert [(row["participant_code"], row["group"], row["condition_code"]) for row in data["assignments"]] == [
-        ("TEST", "Frame", "A"),
-        ("TEST", "Control", "B"),
-    ]
-    assert len({row["study_code"] for row in data["assignments"]}) == 2
-    assert all(row["study_code"].startswith(main.TEST_STUDY_PREFIX) for row in data["assignments"])
+    assert data["created_count"] == 1
+    assert data["workflow_modules"] == ["questionnaire", "ultimatum_control", "dd_lifetrade"]
+    assert data["ultimatum_variant"] == "Control"
+    assert len(data["assignments"]) == 1
+    link = data["assignments"][0]
+    assert link["participant_code"] == "TEST"
+    assert link["ultimatum_variant"] == "Control"
+    assert link["study_code"].startswith(main.TEST_STUDY_PREFIX)
 
-    for row in data["assignments"]:
-        token = invite_token(row)
-        identity = {"invitation_token": token, "participant_code": "TEST"}
-        consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
-        assert consent.status_code == 200, consent.text
-        identified = client.post("/api/experiment/identify", json=identity)
-        assert identified.status_code == 200, identified.text
-        assert identified.json()["condition_code"] == row["condition_code"]
+    token = invite_token(link)
+    identity = {"invitation_token": token, "participant_code": "TEST"}
+    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    assert consent.status_code == 200, consent.text
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    payload = identified.json()
+    assert [step["module_code"] for step in payload["workflow_steps"]] == data["workflow_modules"]
 
     page = client.get("/admin/links")
     assert page.status_code == 200
     assert "پنل مدیریت آزمایش" in page.text
-    assert "ساخت لینک تست (Frame و Control)" in page.text
-
+    assert "ساخت لینک تست" in page.text
+    assert "ساخت لینک تست (Frame و Control)" not in page.text
 
 def test_main_and_test_exports_are_separated_across_all_modules(client):
     main_assignment = create_main_assignment(client)
