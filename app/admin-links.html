@@ -360,6 +360,94 @@ const basePath=window.location.pathname.replace(/\/admin(?:\/links)?\/?$/,"").re
 const token=()=>$("adminToken").value.trim();
 let progressRows=[];
 let lastAssignmentLinks=[];
+let workflowItems=['questionnaire','dd_lifetrade','ultimatum'];
+let workflowDirty=false;
+const workflowModuleLabels={questionnaire:'پرسشنامه',dd_lifetrade:'DD / Life-Trade',ultimatum:'بازی اولتیماتوم'};
+const workflowModuleHints={questionnaire:'پرسشنامهٔ تجربهٔ همکاری',dd_lifetrade:'تکلیف تصمیم‌گیری و ترجیح زمانی',ultimatum:'بازی تقسیم امتیاز'};
+
+function markWorkflowDirty(){
+ workflowDirty=true;
+ $("workflowSaveState").textContent="تغییرات ذخیره نشده است";
+ $("workflowSaveState").className="workflow-dirty";
+}
+function renderWorkflow(){
+ const list=$("workflowStepList");list.replaceChildren();
+ $("workflowCount").textContent=workflowItems.length.toLocaleString("fa-IR");
+ if(!workflowItems.length){
+  const empty=document.createElement("div");empty.className="workflow-empty";
+  empty.textContent="Timeline خالی است. یک ماژول را با + اضافه کن یا آن را به این قسمت بکش.";
+  list.appendChild(empty);return;
+ }
+ workflowItems.forEach((code,index)=>{
+  const item=document.createElement("div");item.className="workflow-step";item.draggable=true;item.dataset.index=String(index);
+  const number=document.createElement("span");number.className="workflow-step-number";number.textContent=String(index+1).toLocaleString("fa-IR");
+  const name=document.createElement("div");name.className="workflow-step-name";name.textContent=workflowModuleLabels[code]||code;
+  const hint=document.createElement("small");hint.textContent=workflowModuleHints[code]||"";name.appendChild(hint);
+  const actions=document.createElement("div");actions.className="workflow-step-actions";
+  const up=document.createElement("button");up.type="button";up.className="secondary";up.textContent="↑";up.title="انتقال به بالا";up.setAttribute("aria-label","انتقال "+(index+1)+" به بالا");up.disabled=index===0;
+  up.addEventListener("click",()=>moveWorkflowStep(index,index-1));
+  const down=document.createElement("button");down.type="button";down.className="secondary";down.textContent="↓";down.title="انتقال به پایین";down.setAttribute("aria-label","انتقال "+(index+1)+" به پایین");down.disabled=index===workflowItems.length-1;
+  down.addEventListener("click",()=>moveWorkflowStep(index,index+1));
+  const remove=document.createElement("button");remove.type="button";remove.className="danger remove-step";remove.textContent="حذف";remove.addEventListener("click",()=>{workflowItems.splice(index,1);renderWorkflow();markWorkflowDirty();});
+  actions.append(up,down,remove);item.append(number,name,actions);
+  item.addEventListener("dragstart",event=>{
+   event.dataTransfer.setData("application/x-barsan-workflow-step",String(index));
+   event.dataTransfer.effectAllowed="move";item.classList.add("dragging");
+  });
+  item.addEventListener("dragend",()=>item.classList.remove("dragging"));
+  item.addEventListener("dragover",event=>{event.preventDefault();event.dataTransfer.dropEffect="move";});
+  item.addEventListener("drop",event=>{
+   event.preventDefault();
+   const moving=event.dataTransfer.getData("application/x-barsan-workflow-step");
+   if(moving!==""){
+    const from=Number(moving);if(Number.isInteger(from)&&from>=0&&from<workflowItems.length)moveWorkflowStep(from,index);
+    return;
+   }
+   const module=event.dataTransfer.getData("application/x-barsan-workflow-module");
+   if(module)addWorkflowModule(module,index);
+  });
+  list.appendChild(item);
+ });
+}
+function addWorkflowModule(code,index=workflowItems.length){
+ if(!Object.prototype.hasOwnProperty.call(workflowModuleLabels,code))return;
+ if(workflowItems.length>=40){setStatus("workflowStatus","حداکثر ۴۰ جایگاه در روند آزمایش مجاز است.","error");return;}
+ const target=Math.max(0,Math.min(workflowItems.length,index));
+ workflowItems.splice(target,0,code);renderWorkflow();markWorkflowDirty();
+}
+function moveWorkflowStep(from,to){
+ if(from<0||from>=workflowItems.length||to<0||to>=workflowItems.length||from===to)return;
+ const [item]=workflowItems.splice(from,1);workflowItems.splice(to,0,item);
+ renderWorkflow();markWorkflowDirty();
+}
+async function loadWorkflow(){
+ try{
+  const response=await adminFetch("/api/admin/workflow",{method:"GET"});
+  const data=await response.json();
+  workflowItems=Array.isArray(data.workflow)?data.workflow.slice():[];
+  workflowDirty=false;renderWorkflow();
+  $("workflowSaveState").textContent="روند ذخیره‌شده";
+  $("workflowSaveState").className="workflow-clean";
+  clearStatus("workflowStatus");
+ }catch(e){
+  setStatus("workflowStatus",e.message,"error");
+  $("workflowSaveState").textContent="دریافت روند ناموفق بود";
+  $("workflowSaveState").className="workflow-dirty";
+ }
+}
+async function saveWorkflow(){
+ if(!workflowItems.length){setStatus("workflowStatus","برای ساخت لینک، حداقل یک ماژول به Timeline اضافه کن.","error");return false;}
+ const button=$("saveWorkflow");button.disabled=true;
+ try{
+  const response=await adminFetch("/api/admin/workflow",{method:"PUT",body:JSON.stringify({workflow:workflowItems})});
+  const data=await response.json();workflowItems=data.workflow||workflowItems;workflowDirty=false;renderWorkflow();
+  $("workflowSaveState").textContent="روند ذخیره شد · "+workflowItems.length+" جایگاه";
+  $("workflowSaveState").className="workflow-clean";
+  setStatus("workflowStatus","روند آزمایش ذخیره شد. از این لحظه لینک‌های جدید با همین ترتیب ساخته می‌شوند؛ لینک‌های قبلی تغییر نمی‌کنند.","success");
+  return true;
+ }catch(e){setStatus("workflowStatus",e.message,"error");return false;}
+ finally{button.disabled=false;}
+}
 function setStatus(id,message,type){const el=$(id);el.textContent=message;el.className="status show "+(type||"info");}
 function clearStatus(id){const el=$(id);el.textContent="";el.className="status";}
 function escapeHtml(value){return String(value==null?"":value).replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
@@ -626,7 +714,40 @@ async function refreshProgress(){
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
  finally{$("refreshButton").disabled=false;$("connectButton").disabled=false;}
 }
-$("connectButton").addEventListener("click",refreshProgress);
+$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();});
+
+document.querySelectorAll("[data-workflow-module]").forEach(button=>{
+ const code=button.dataset.workflowModule;
+ button.addEventListener("click",()=>addWorkflowModule(code));
+ button.addEventListener("dragstart",event=>{
+  event.dataTransfer.setData("application/x-barsan-workflow-module",code);
+  event.dataTransfer.effectAllowed="copy";
+ });
+});
+$("workflowTimeline").addEventListener("dragover",event=>{
+ event.preventDefault();$("workflowTimeline").classList.add("drag-over");event.dataTransfer.dropEffect="copy";
+});
+$("workflowTimeline").addEventListener("dragleave",event=>{
+ if(!$("workflowTimeline").contains(event.relatedTarget))$("workflowTimeline").classList.remove("drag-over");
+});
+$("workflowTimeline").addEventListener("drop",event=>{
+ event.preventDefault();$("workflowTimeline").classList.remove("drag-over");
+ const module=event.dataTransfer.getData("application/x-barsan-workflow-module");
+ if(module){addWorkflowModule(module);return;}
+ const step=event.dataTransfer.getData("application/x-barsan-workflow-step");
+ if(step!=="")moveWorkflowStep(Number(step),workflowItems.length-1);
+});
+$("saveWorkflow").addEventListener("click",saveWorkflow);
+$("clearWorkflow").addEventListener("click",()=>{
+ if(!workflowItems.length)return;
+ if(!window.confirm("تمام جایگاه‌های Timeline حذف شوند؟ تا زمان ذخیره، روند ذخیره‌شده تغییر نمی‌کند."))return;
+ workflowItems=[];renderWorkflow();markWorkflowDirty();clearStatus("workflowStatus");
+});
+$("resetWorkflow").addEventListener("click",()=>{
+ if(!window.confirm("Timeline به ترتیب پیش‌فرض برگردد؟ برای اعمال روی لینک‌های بعدی باید ذخیره‌اش کنی."))return;
+ workflowItems=["questionnaire","dd_lifetrade","ultimatum"];renderWorkflow();markWorkflowDirty();
+});
+
 $("refreshButton").addEventListener("click",refreshProgress);
 $("monitorScope").addEventListener("change",()=>{refreshProgress();refreshAssignments();});
 $("monitorSearch").addEventListener("input",renderProgress);
@@ -639,6 +760,8 @@ $("assignmentCsv").addEventListener("change",async event=>{
 $("createAssignments").addEventListener("click",async()=>{
  clearStatus("assignmentStatus");$("assignmentOutput").replaceChildren();const button=$("createAssignments");button.disabled=true;
  try{
+  if(workflowDirty){throw new Error("ابتدا تغییرات Timeline را ذخیره کن، سپس لینک بساز.");}
+  if(!workflowItems.length){throw new Error("Timeline خالی است؛ حداقل یک ماژول اضافه کن.");}
   const assignments=parseAssignments();
   const response=await adminFetch("/api/admin/assignments",{method:"POST",body:JSON.stringify({assignments:assignments.map(({participant_code,condition_code})=>({participant_code,condition_code}))})});
   const data=await response.json();lastAssignmentLinks=data.assignments.map(item=>({...item,group:item.condition_code==="A"?"Frame":"Control"}));
