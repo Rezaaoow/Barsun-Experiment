@@ -2027,18 +2027,23 @@ def save_questionnaire_draft(data: StageDraftIn):
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
-            "SELECT status,current_run_id FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], data.stage_code),
+            "SELECT status,current_run_id FROM experiment_workflow_steps "
+            "WHERE participation_id=" + marker + " AND current_run_id=" + marker + " AND module_code='questionnaire'",
+            (assignment["participation_id"], data.run_id),
         ).fetchone()
         if not state or state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
         if state["status"] == "completed":
             raise HTTPException(409, "پرسشنامه قبلاً تکمیل شده است.")
         connection.execute(
+            "UPDATE experiment_workflow_steps SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND current_run_id=" + marker,
+            (_json_param(data.draft_payload), now(), assignment["participation_id"], data.run_id),
+        )
+        connection.execute(
             "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(data.draft_payload), now(), assignment["participation_id"], data.stage_code),
+            + " WHERE participation_id=" + marker + " AND stage_code='questionnaire'",
+            (_json_param(data.draft_payload), now(), assignment["participation_id"]),
         )
     return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id}
 
@@ -2053,9 +2058,9 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
         _require_consent(connection, assignment["assignment_id"])
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
-            "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], "questionnaire"),
+            "SELECT status,current_run_id,draft_payload FROM experiment_workflow_steps "
+            "WHERE participation_id=" + marker + " AND current_run_id=" + marker + " AND module_code='questionnaire'",
+            (assignment["participation_id"], data.run_id),
         ).fetchone()
         if not state or state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
@@ -2084,9 +2089,14 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
         draft["answers"] = answers
         draft["current_question_index"] = data.current_question_index
         connection.execute(
+            "UPDATE experiment_workflow_steps SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE participation_id=" + marker + " AND current_run_id=" + marker,
+            (_json_param(draft), timestamp, assignment["participation_id"], data.run_id),
+        )
+        connection.execute(
             "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+            + " WHERE participation_id=" + marker + " AND stage_code='questionnaire'",
+            (_json_param(draft), timestamp, assignment["participation_id"]),
         )
     return {
         "saved": True,
@@ -2099,9 +2109,9 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
 def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -> None:
     marker = "%s" if DATABASE_URL else "?"
     state = connection.execute(
-        "SELECT status,current_run_id FROM experiment_stage_progress "
-        "WHERE participation_id=" + marker + " AND stage_code='ultimatum'",
-        (participation_id,),
+        "SELECT status,current_run_id FROM experiment_workflow_steps "
+        "WHERE participation_id=" + marker + " AND current_run_id=" + marker + " AND module_code='ultimatum'",
+        (participation_id, run_id),
     ).fetchone()
     if not state or state["status"] != "in_progress" or state["current_run_id"] != run_id:
         raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
@@ -2185,8 +2195,8 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
         marker = "%s" if DATABASE_URL else "?"
         stage_state = connection.execute(
-            "SELECT draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code='ultimatum' "
+            "SELECT draft_payload FROM experiment_workflow_steps "
+            "WHERE participation_id=" + marker + " AND module_code='ultimatum' "
             "AND current_run_id=" + marker + " AND status='in_progress'",
             (assignment["participation_id"], data.run_id),
         ).fetchone()
