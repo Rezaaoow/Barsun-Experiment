@@ -678,12 +678,69 @@ button{-webkit-tap-highlight-color:transparent}
   }
 }
 
+
+@media(max-width:680px){
+ body{font-size:17px}
+ .panel{padding:20px 16px;border-radius:20px}
+ .panel h1{font-size:clamp(1.7rem,7vw,2.15rem);line-height:1.55;font-weight:900}
+ .panel>p,.panel p,.subtitle,.hintline{font-size:1.08rem;line-height:1.95;font-weight:600}
+ .eyebrow{font-size:.94rem;font-weight:850}
+ .btn,.page-actions .btn,.questionnaire-actions .btn{min-height:56px;padding:12px 17px;font-size:1.1rem;font-weight:850;border-radius:14px}
+ input,select,textarea{min-height:54px;font-size:1.08rem;padding:12px 14px}
+ .instruction-heading{font-size:1.55rem;line-height:1.6;font-weight:900}
+ .instruction-content,.instruction-content p{font-size:1.12rem;line-height:2;font-weight:600}
+ .instruction-content p{margin-block:10px}
+ .instruction-progress,.step-count{font-size:1rem;font-weight:800}
+ .questionnaire-screen{padding:16px 12px}
+ .questionnaire-screen h2{font-size:1.18rem;line-height:1.8;font-weight:850}
+ .questionnaire-meta{font-size:1rem;font-weight:800}
+ .questionnaire-statement{font-size:1.35rem;line-height:1.9;font-weight:850}
+ .questionnaire-scale{gap:8px}
+ .scale-option{min-height:68px;padding:9px 5px;border-radius:14px}
+ .scale-number{font-size:1.35rem;font-weight:950}
+ .scale-label{font-size:.98rem;line-height:1.55;font-weight:800}
+ .scale-na{min-height:58px;font-size:1rem;font-weight:850}
+ .questionnaire-save-status{font-size:.96rem;font-weight:750}
+ .questionnaire-actions{gap:10px;padding-top:12px}
+ .questionnaire-actions .btn{min-height:56px;font-size:1.02rem}
+ .trial-layout{gap:12px}
+ .choice-card{min-height:104px;padding:16px 12px;font-size:1.25rem;line-height:1.65;font-weight:900;border-radius:17px}
+ .trial-screen .hintline,.trial-screen .statusline{font-size:1.05rem;line-height:1.8;font-weight:750}
+ .statusline{font-size:1.05rem;font-weight:800}
+ .ut-card{width:100%;height:calc(100dvh - 8px);padding:16px 13px;border-radius:17px}
+ .ut-topbar{margin-bottom:10px}
+ .ut-score{font-size:1rem;font-weight:900;padding:9px 12px}
+ .ut-opponent{font-size:1.08rem;font-weight:850}
+ .ut-opponent-icon{width:52px;height:52px;font-size:2.15rem}
+ .ut-progress{font-size:.94rem;font-weight:750}
+ .ut-title{font-size:1.48rem;line-height:1.55;font-weight:950}
+ .ut-copy{font-size:1.12rem;line-height:1.9;font-weight:650}
+ .ut-copy.small{font-size:.98rem}
+ .ut-rolebox strong{font-size:1.22rem}
+ .ut-rolebox span{font-size:1.02rem;line-height:1.8}
+ .ut-total,.ut-question{font-size:1.1rem;font-weight:850}
+ .ut-slider{height:42px}
+ .ut-share{font-size:1rem;font-weight:850;padding:12px 8px}
+ .ut-btn{min-height:56px;padding:12px 13px;font-size:1.08rem;font-weight:900}
+ .ut-result-main{font-size:1.48rem;font-weight:950}
+ .ut-result-detail{font-size:1.16rem;font-weight:850}
+ .ut-result-note{font-size:1rem}
+ .ut-summary-metric-label{font-size:.95rem;font-weight:850}
+ .ut-summary-metric-value{font-size:2rem;font-weight:950}
+}
+@media(max-width:680px) and (max-height:620px){
+ .ut-card{height:auto;min-height:calc(100dvh - 8px);overflow-y:auto}
+ .ut-body{overflow:visible}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
   <p class="eyebrow">پژوهش میدانی بارسان</p>
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <p>در این برنامه، ابتدا به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری پاسخ می‌دهید. سپس دو تکلیف تصمیم‌گیری و در ادامه یک بازی کوتاه تعاملی انجام خواهید داد.</p>
+  <p>در این برنامه، بر اساس روندی که برای شما در نظر گرفته شده، یک یا چند بخش کوتاه شامل پرسشنامه، تکلیف تصمیم‌گیری یا بازی تعاملی را انجام خواهید داد.</p>
   <div class="welcome-steps" aria-label="مراحل برنامه">
     <div class="welcome-step"><span>۱</span><div><strong>پرسشنامه</strong><small>تجربه و دیدگاه‌های شما</small></div></div>
     <div class="welcome-step"><span>۲</span><div><strong>تکلیف تصمیم‌گیری</strong><small>انتخاب بین دو گزینه</small></div></div>
@@ -735,7 +792,12 @@ const workflow = {
  questionnaireStageState:null,
  currentStage:null,
  stagedRunId:null,
- testModuleOnly:null
+ testModuleOnly:null,
+ workflowMode:false,
+ workflowSteps:[],
+ workflowStepIndex:-1,
+ currentStepId:null,
+ timerActive:false
 };
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
@@ -995,6 +1057,57 @@ async function api(path, body){
  }
  return res.json();
 }
+let workflowTimerHeartbeat=null;
+function stepTimePayload(event){
+ return {
+  invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,
+  step_id:workflow.currentStepId,
+  stage_code:workflow.currentStage,
+  event
+ };
+}
+async function postStepTime(event,keepalive=false){
+ if(!workflow.workflowMode||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return;
+ const payload=stepTimePayload(event);
+ if(keepalive){
+  try{
+   await fetch(APP_BASE_PATH+'/api/experiment/time',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),cache:'no-store',keepalive:true
+   });
+  }catch(error){console.warn('Time tracking beacon failed',error);}
+  return;
+ }
+ return api('/api/experiment/time',payload);
+}
+async function startStepTimer(){
+ if(!workflow.workflowMode||!workflow.currentStepId||workflow.timerActive)return;
+ workflow.timerActive=true;
+ try{await postStepTime('start');}
+ catch(error){workflow.timerActive=false;console.warn('Time tracking start failed',error);}
+ if(!workflowTimerHeartbeat){
+  workflowTimerHeartbeat=window.setInterval(()=>{
+   if(workflow.timerActive)postStepTime('heartbeat').catch(error=>console.warn('Time heartbeat failed',error));
+  },15000);
+ }
+}
+async function pauseStepTimer(){
+ if(!workflow.timerActive)return;
+ workflow.timerActive=false;
+ try{await postStepTime('pause');}catch(error){console.warn('Time tracking pause failed',error);}
+}
+async function finishStepTimer(){
+ if(!workflow.workflowMode||!workflow.currentStepId)return;
+ workflow.timerActive=false;
+ try{await postStepTime('complete');}catch(error){console.warn('Time tracking completion failed',error);}
+}
+document.addEventListener('visibilitychange',()=>{
+ if(!workflow.workflowMode||!workflow.currentStepId)return;
+ if(document.hidden)pauseStepTimer();
+ else startStepTimer();
+});
+window.addEventListener('pagehide',()=>{if(workflow.timerActive){workflow.timerActive=false;postStepTime('pause',true);}});
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function utApiWithRetry(path,payload,attempts=4){
  let lastError;
@@ -1278,7 +1391,7 @@ function showQuestionnaireIntro(pageIndex=0){
  content.className='instruction-content';
  if(pageIndex===0){
   const paras=[
-   'راننده گرامی،',
+   'بارسانی عزیز،',
    'هدف این پرسشنامه شناخت بهتر تجربه همکاری، شرایط کاری و عوامل احتمالی مرتبط با کاهش فعالیت یا تمایل به قطع همکاری است.',
    'پاسخ درست یا غلطی وجود ندارد؛ لطفاً بر اساس تجربه واقعی خود پاسخ دهید.',
    'پاسخ‌ها با شناسهٔ پژوهشی ثبت می‌شوند و نتایج در سطح گروهی گزارش می‌شوند. لطفاً نام، نام خانوادگی، شماره ملی یا شماره تلفن خود را در پاسخ‌ها ننویسید.'
@@ -2250,7 +2363,7 @@ async function utFinishUltimatum() {
   const scoreBox=utNode("div","ut-summary-box");
   utAddText(scoreBox,"div","ut-final-score",utFa(ultimatumState.score));
   end.body.appendChild(scoreBox);
-  utAddText(end.body,"p","ut-copy","راننده گرامی، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
+  utAddText(end.body,"p","ut-copy","بارسانی عزیز، آزمون و بازی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.");
   utAddText(end.body,"p","ut-copy","ممنون از وقتی که گذاشتید.");
  } catch(error) {
   console.error(error);
