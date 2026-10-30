@@ -178,10 +178,10 @@ def test_workflow_template_is_saved_and_repeated_modules_are_independent(client)
     ]
 
 
-def test_full_test_links_snapshot_the_supplied_workflow(client):
+def test_full_test_link_is_one_snapshot_of_the_supplied_workflow(client):
     steps = [
         {"step_id": "test-dd", "module_code": "dd_lifetrade"},
-        {"step_id": "test-ultimatum", "module_code": "ultimatum"},
+        {"step_id": "test-ultimatum-frame", "module_code": "ultimatum_frame"},
         {"step_id": "test-dd-again", "module_code": "dd_lifetrade"},
     ]
     response = client.post(
@@ -190,16 +190,21 @@ def test_full_test_links_snapshot_the_supplied_workflow(client):
         json={"steps": steps},
     )
     assert response.status_code == 200, response.text
-    for link in response.json()["assignments"]:
-        identity = {"invitation_token": token_from_link(link), "participant_code": "TEST"}
-        consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
-        assert consent.status_code == 200, consent.text
-        identified = client.post("/api/experiment/identify", json=identity)
-        assert identified.status_code == 200, identified.text
-        payload = identified.json()
-        assert [step["step_id"] for step in payload["workflow_steps"]] == [
-            "test-dd", "test-ultimatum", "test-dd-again"
-        ]
+    data = response.json()
+    assert data["created_count"] == 1
+    assert data["workflow_modules"] == ["dd_lifetrade", "ultimatum_frame", "dd_lifetrade"]
+    assert data["ultimatum_variant"] == "Frame"
+    assert len(data["assignments"]) == 1
+    link = data["assignments"][0]
+    identity = {"invitation_token": token_from_link(link), "participant_code": "TEST"}
+    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    assert consent.status_code == 200, consent.text
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    payload = identified.json()
+    assert [step["step_id"] for step in payload["workflow_steps"]] == [
+        "test-dd", "test-ultimatum-frame", "test-dd-again"
+    ]
 
 
 def test_active_time_is_aggregated_by_module_for_monitoring_only(client):
@@ -366,36 +371,38 @@ def test_public_welcome_outline_rejects_invalid_or_inactive_invites(client):
     assert inactive.status_code == 404
 
 
-def test_frame_control_variants_keep_group_specific_workflow_and_dynamic_completion(client):
-    steps = [
-        {"step_id": "variant-q", "module_code": "questionnaire"},
-        {"step_id": "variant-dd-one", "module_code": "dd_lifetrade"},
-        {"step_id": "variant-frame", "module_code": "ultimatum_frame"},
-        {"step_id": "variant-dd-two", "module_code": "dd_lifetrade"},
-        {"step_id": "variant-control", "module_code": "ultimatum_control"},
+def test_workflow_variants_are_selected_by_timeline_and_reported_independently(client):
+    frame_steps = [
+        {"step_id": "frame-q", "module_code": "questionnaire"},
+        {"step_id": "frame-dd-one", "module_code": "dd_lifetrade"},
+        {"step_id": "frame-game", "module_code": "ultimatum_frame"},
+        {"step_id": "frame-dd-two", "module_code": "dd_lifetrade"},
     ]
-    created = client.post(
+    control_steps = [
+        {"step_id": "control-q", "module_code": "questionnaire"},
+        {"step_id": "control-game", "module_code": "ultimatum_control"},
+    ]
+    frame_created = client.post(
         "/api/admin/assignments",
         headers={"x-admin-token": "test-admin-token"},
-        json={
-            "assignments": [
-                {"participant_code": "VARIANT-FRAME", "condition_code": "Frame"},
-                {"participant_code": "VARIANT-CONTROL", "condition_code": "Control"},
-            ],
-            "steps": steps,
-        },
+        json={"assignments": [{"participant_code": "VARIANT-FRAME"}], "steps": frame_steps},
     )
-    assert created.status_code == 200, created.text
-    links = {row["participant_code"]: row for row in created.json()["assignments"]}
-
-    expected = {
-        "VARIANT-FRAME": [
-            "questionnaire", "dd_lifetrade", "ultimatum_frame", "dd_lifetrade"
-        ],
-        "VARIANT-CONTROL": [
-            "questionnaire", "dd_lifetrade", "dd_lifetrade", "ultimatum_control"
-        ],
+    control_created = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"assignments": [{"participant_code": "VARIANT-CONTROL"}], "steps": control_steps},
+    )
+    assert frame_created.status_code == 200, frame_created.text
+    assert control_created.status_code == 200, control_created.text
+    links = {
+        "VARIANT-FRAME": frame_created.json()["assignments"][0],
+        "VARIANT-CONTROL": control_created.json()["assignments"][0],
     }
+    expected = {
+        "VARIANT-FRAME": ["questionnaire", "dd_lifetrade", "ultimatum_frame", "dd_lifetrade"],
+        "VARIANT-CONTROL": ["questionnaire", "ultimatum_control"],
+    }
+
     with main.conn() as connection:
         assignments = {
             code: main._lookup_assignment(connection, token_from_link(link), code)
@@ -405,24 +412,19 @@ def test_frame_control_variants_keep_group_specific_workflow_and_dynamic_complet
         for code, assignment in assignments.items():
             stored = json.loads(assignment["workflow_json"])
             assert [step["module_code"] for step in stored] == expected[code]
+            assert assignment["condition_code"] == ("A" if code == "VARIANT-FRAME" else "B")
             for index, step in enumerate(stored):
-                completed = not (code == "VARIANT-CONTROL" and index == 3)
+                complete = not (code == "VARIANT-CONTROL" and index == 1)
                 connection.execute(
                     "INSERT INTO experiment_workflow_progress("
                     "assignment_id,participation_id,step_instance_id,step_order,stage_code,status,"
                     "attempt_number,started_at,completed_at,updated_at) "
                     "VALUES(?,?,?,?,?,?,?,?,?,?)",
                     (
-                        assignment["assignment_id"],
-                        assignment["participation_id"],
-                        step["step_id"],
-                        index + 1,
-                        main._canonical_workflow_stage(step["module_code"]),
-                        "completed" if completed else "in_progress",
-                        1,
-                        timestamp,
-                        timestamp if completed else None,
-                        timestamp,
+                        assignment["assignment_id"], assignment["participation_id"], step["step_id"],
+                        index + 1, main._canonical_workflow_stage(step["module_code"]),
+                        "completed" if complete else "in_progress", 1, timestamp,
+                        timestamp if complete else None, timestamp,
                     ),
                 )
 
@@ -433,10 +435,6 @@ def test_frame_control_variants_keep_group_specific_workflow_and_dynamic_complet
         )
         assert public.status_code == 200, public.text
         assert [step["module_code"] for step in public.json()["steps"]] == expected_modules
-        if code == "VARIANT-FRAME":
-            assert public.json()["steps"][2]["title"] == "بازی اولتیماتوم — Frame"
-        else:
-            assert public.json()["steps"][3]["title"] == "بازی اولتیماتوم — Control"
 
     monitor = client.get(
         "/api/admin/progress?scope=main&include_timing=true",
@@ -448,9 +446,11 @@ def test_frame_control_variants_keep_group_specific_workflow_and_dynamic_complet
     control = rows["VARIANT-CONTROL"]
     assert (frame["completed_steps"], frame["total_steps"], frame["progress_percent"]) == (4, 4, 100)
     assert frame["progress_state"] == "completed"
+    assert frame["ultimatum_variant"] == "Frame"
     assert [step["module_code"] for step in frame["workflow_steps"]] == expected["VARIANT-FRAME"]
-    assert (control["completed_steps"], control["total_steps"], control["progress_percent"]) == (3, 4, 75)
+    assert (control["completed_steps"], control["total_steps"], control["progress_percent"]) == (1, 2, 50)
     assert control["progress_state"] == "in_progress"
+    assert control["ultimatum_variant"] == "Control"
     assert control["workflow_steps"][-1]["module_label"] == "Ultimatum — Control"
 
     preview = client.get(
@@ -460,6 +460,15 @@ def test_frame_control_variants_keep_group_specific_workflow_and_dynamic_complet
     assert preview.status_code == 200, preview.text
     assert preview.json()["counts"]["completed_experiments"] == 1
 
+
+def test_workflow_config_accepts_a_single_ultimatum_variant(client):
+    response = client.post(
+        "/api/admin/workflow",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"steps": [{"step_id": "frame-only", "module_code": "ultimatum_frame"}]},
+    )
+    assert response.status_code == 200, response.text
+    assert [step["module_code"] for step in response.json()["steps"]] == ["ultimatum_frame"]
 
 def test_workflow_config_requires_both_ultimatum_variants(client):
     response = client.post(
