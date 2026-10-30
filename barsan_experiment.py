@@ -284,7 +284,8 @@ if DATABASE_URL:
                 "first_seen_at TEXT NOT NULL, last_activity_at TEXT NOT NULL, "
                 "total_active_seconds INTEGER NOT NULL DEFAULT 0)"
             )
-
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
                 "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
                 "stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
                 "status TEXT NOT NULL DEFAULT 'not_started' "
