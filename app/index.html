@@ -1068,26 +1068,34 @@ if(invitationToken){
   .catch(error=>console.warn('Invitation open time was not saved',error));
 }
 
-function startParticipantActivityTracking(){
- if(workflow.activityTimer)clearInterval(workflow.activityTimer);
- let previous=performance.now();
- workflow.activityTimer=setInterval(()=>{
-  const current=performance.now();
-  const delta=Math.min(60,Math.max(0,(current-previous)/1000));
-  previous=current;
-  if(document.hidden||!workflow.participantCode||!workflow.invitationToken||delta<=0)return;
-  const pingId=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():
-   ("ping-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
-  api('/api/experiment/activity/ping',{
+let activityLastTick=0;
+async function sendParticipantActivityPing(force=false){
+ const current=performance.now();
+ const delta=Math.min(60,Math.max(0,(current-activityLastTick)/1000));
+ activityLastTick=current;
+ if((document.hidden&&!force)||!workflow.participantCode||!workflow.invitationToken||delta<=0)return;
+ const pingId=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():
+  ("ping-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+ try{
+  await api('/api/experiment/activity/ping',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    ping_id:pingId,
    run_id:workflow.activeRunId||null,
    workflow_step_index:workflow.currentStepIndex,
    active_seconds:delta
-  }).catch(error=>console.warn('Activity time ping was not saved',error));
- },15000);
- document.addEventListener('visibilitychange',()=>{previous=performance.now();});
+  });
+ }catch(error){console.warn('Activity time ping was not saved',error);}
+}
+function startParticipantActivityTracking(){
+ if(workflow.activityTimer)clearInterval(workflow.activityTimer);
+ activityLastTick=performance.now();
+ workflow.activityTimer=setInterval(()=>sendParticipantActivityPing(false),10000);
+ document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)sendParticipantActivityPing(true);
+  else activityLastTick=performance.now();
+ });
+ window.addEventListener('pagehide',()=>sendParticipantActivityPing(true));
 }
 async function launchWorkflowStep(index){
  if(!Number.isInteger(index)||index<0||index>=workflow.workflowTemplate.length){
@@ -1102,6 +1110,7 @@ async function launchWorkflowStep(index){
  else if(workflow.currentStage==='ultimatum')await startUltimatumInstructions(index);
 }
 async function continueWorkflow(){
+ await sendParticipantActivityPing(true);
  workflow.activeRunId=null;
  const nextIndex=workflow.currentStepIndex+1;
  if(nextIndex<workflow.workflowTemplate.length){
