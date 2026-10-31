@@ -92,6 +92,11 @@ a{color:#245fc0;overflow-wrap:anywhere}
 .link-selection{display:inline-flex;align-items:center;gap:7px;font-size:.83rem;color:#56647a;font-weight:650}
 .link-selection input{width:auto}
 .compact-input{max-width:280px}
+.group-link-result{padding:13px;border:1px solid #dce6f6;background:#f6f9ff;border-radius:12px;margin:12px 0}
+.group-link-result .code{display:block;overflow-wrap:anywhere;white-space:normal;margin:7px 0 10px}
+.group-link-result p{margin:0;color:#5d6d84;font-size:.86rem}
+.group-link-table table{min-width:800px}
+.group-link-table td{white-space:nowrap}
 footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
 @media(max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -274,6 +279,29 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 </div>
 <div id="assignmentStatus" class="status" role="status" aria-live="polite"></div>
 <div id="assignmentOutput"></div>
+
+<div class="divider"></div>
+<div class="card-head">
+ <div><h3>لینک گروهی مشترک</h3><p class="hint" style="margin-bottom:0">یک لینک برای همه بساز. هر فرد پس از ورود، کد خودش را وارد می‌کند یا درخواست کد تصادفی می‌دهد؛ سپس لینک اختصاصی و داده‌های مستقل برای همان فرد ساخته می‌شود.</p></div>
+ <span class="badge neutral">GROUP LINK</span>
+</div>
+<div class="grid">
+ <div class="field">
+  <label for="groupLinkLabel">عنوان لینک (اختیاری)</label>
+  <input id="groupLinkLabel" type="text" maxlength="100" placeholder="مثلاً رویداد کارکنان بارسان">
+ </div>
+ <div class="field">
+  <label for="groupLinkScope">محدودهٔ ساخت لینک</label>
+  <select id="groupLinkScope"><option value="main">آزمایش اصلی</option><option value="test">فضای تست</option></select>
+ </div>
+</div>
+<div class="actions">
+ <button id="createGroupLink" type="button">ساخت لینک گروهی</button>
+ <button id="refreshGroupLinks" class="secondary" type="button">به‌روزرسانی لینک‌های گروهی</button>
+</div>
+<div id="groupLinkStatus" class="status" role="status" aria-live="polite"></div>
+<div id="groupLinkOutput"></div>
+<div id="groupLinksTable" class="table-wrap"><p class="hint" style="padding:12px">برای مشاهدهٔ لینک‌های گروهی، پنل را متصل کن.</p></div>
 
 <div class="test-link-tools">
  <div><strong>لینک تست روند</strong><p class="small">یک لینک تست با کد TEST می‌سازد که دقیقاً تمام ماژول‌ها و ترتیب تایم‌لاین فعلی را اجرا می‌کند؛ نوع Ultimatum هم از همان روند مشخص می‌شود.</p></div>
@@ -645,6 +673,49 @@ async function refreshAssignments(){
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{if(button)button.disabled=false;}
 }
+function renderGroupLinkResult(item){
+ const root=$("groupLinkOutput");root.replaceChildren();
+ const card=document.createElement("div");card.className="group-link-result";
+ const title=document.createElement("strong");title.textContent=item.label+" · "+(item.scope==="test"?"فضای تست":"آزمایش اصلی");
+ const link=document.createElement("a");link.className="code";link.href=item.invitation_url;link.target="_blank";link.rel="noopener noreferrer";link.textContent=item.invitation_url;
+ const note=document.createElement("p");note.textContent="این نشانی را با همهٔ شرکت‌کنندگان به اشتراک بگذار. هر نفر پس از ورود، هویت مستقل خود را انتخاب می‌کند.";
+ const copy=document.createElement("button");copy.type="button";copy.className="secondary";copy.textContent="کپی لینک گروهی";
+ copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";}catch(_){window.prompt("لینک گروهی را کپی کن:",item.invitation_url);}});
+ card.append(title,link,note,copy);root.appendChild(card);
+}
+function renderGroupLinks(data){
+ const root=$("groupLinksTable");root.replaceChildren();
+ const items=data.items||[];
+ if(!items.length){const empty=document.createElement("p");empty.className="hint";empty.style.padding="12px";empty.textContent="هنوز لینک گروهی در این محدوده ساخته نشده است.";root.className="table-wrap group-link-table";root.appendChild(empty);return;}
+ const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
+ ["عنوان","کد مطالعه","تعداد افراد","وضعیت","لینک","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ thead.appendChild(headRow);table.appendChild(thead);
+ const tbody=document.createElement("tbody");
+ items.forEach(item=>{
+  const tr=document.createElement("tr");
+  const label=document.createElement("td");label.textContent=item.label;tr.appendChild(label);
+  const study=document.createElement("td");study.className="code";study.textContent=item.study_code;tr.appendChild(study);
+  const count=document.createElement("td");count.textContent=Number(item.claimed_count||0).toLocaleString("fa-IR");tr.appendChild(count);
+  const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge "+(item.active?"ok":"neutral");badge.textContent=item.active?"فعال":"غیرفعال";state.appendChild(badge);tr.appendChild(state);
+  const url=document.createElement("td");
+  if(item.url_available){const copy=document.createElement("button");copy.type="button";copy.className="secondary";copy.textContent="کپی لینک";copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";}catch(_){window.prompt("لینک گروهی را کپی کن:",item.invitation_url);}});url.appendChild(copy);}
+  else{const missing=document.createElement("span");missing.className="badge warn";missing.textContent="URL در دسترس نیست";url.appendChild(missing);}
+  tr.appendChild(url);
+  const action=document.createElement("td"),toggle=document.createElement("button");toggle.type="button";toggle.className=item.active?"danger":"secondary";toggle.textContent=item.active?"غیرفعال کردن":"فعال‌سازی";
+  toggle.addEventListener("click",async()=>{const next=!item.active;if(next&&!window.confirm("با فعال‌سازی، افراد جدید دوباره می‌توانند از این لینک گروهی استفاده کنند. ادامه می‌دهی؟"))return;if(!next&&!window.confirm("لینک گروهی غیرفعال شود؟ افرادی که قبلاً لینک اختصاصی گرفته‌اند همچنان می‌توانند ادامه دهند."))return;toggle.disabled=true;try{const response=await adminFetch("/api/admin/group-links/status",{method:"POST",body:JSON.stringify({scope:$("groupLinkScope").value,group_link_ids:[item.group_link_id],active:next})});const result=await response.json();setStatus("groupLinkStatus",result.updated_count+" لینک گروهی به‌روزرسانی شد. لینک‌های اختصاصی صادرشده برای افراد قبلی تغییر نمی‌کنند.","success");await refreshGroupLinks();}catch(e){setStatus("groupLinkStatus",e.message,"error");}finally{toggle.disabled=false;}});
+  action.appendChild(toggle);tr.appendChild(action);tbody.appendChild(tr);
+ });
+ table.appendChild(tbody);root.className="table-wrap group-link-table";root.appendChild(table);
+}
+async function refreshGroupLinks(){
+ const button=$("refreshGroupLinks");if(button)button.disabled=true;
+ try{
+  const scope=$("groupLinkScope").value;
+  const response=await adminFetch("/api/admin/group-links?scope="+encodeURIComponent(scope),{method:"GET"});
+  const data=await response.json();renderGroupLinks(data);
+ }catch(e){setStatus("groupLinkStatus",e.message,"error");}
+ finally{if(button)button.disabled=false;}
+}
 function selectedAssignmentIds(){
  return Array.from(document.querySelectorAll(".assignment-select:checked")).map(el=>el.dataset.id).filter(Boolean);
 }
@@ -758,9 +829,22 @@ async function refreshProgress(){
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
  finally{$("refreshButton").disabled=false;$("connectButton").disabled=false;}
 }
-$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();});
+$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();await refreshGroupLinks();});
 $("refreshButton").addEventListener("click",refreshProgress);
-$("monitorScope").addEventListener("change",()=>{refreshProgress();refreshAssignments();});
+$("monitorScope").addEventListener("change",()=>{$("groupLinkScope").value=$("monitorScope").value;refreshProgress();refreshAssignments();refreshGroupLinks();});
+$("groupLinkScope").addEventListener("change",refreshGroupLinks);
+$("refreshGroupLinks").addEventListener("click",refreshGroupLinks);
+$("createGroupLink").addEventListener("click",async()=>{
+ clearStatus("groupLinkStatus");$("groupLinkOutput").replaceChildren();const button=$("createGroupLink");button.disabled=true;
+ try{
+  const steps=await saveWorkflow();
+  const response=await adminFetch("/api/admin/group-links",{method:"POST",body:JSON.stringify({scope:$("groupLinkScope").value,label:$("groupLinkLabel").value.trim(),steps})});
+  const data=await response.json();renderGroupLinkResult(data);
+  setStatus("groupLinkStatus","لینک گروهی ساخته شد. هر بار استفاده از این لینک، برای یک کد شرکت‌کننده یک لینک اختصاصی مستقل ایجاد می‌کند.","success");
+  await refreshGroupLinks();
+ }catch(e){setStatus("groupLinkStatus",e.message,"error");}
+ finally{button.disabled=false;}
+});
 $("monitorSearch").addEventListener("input",renderProgress);
 $("monitorStatus").addEventListener("change",renderProgress);
 $("assignmentCsv").addEventListener("change",async event=>{
@@ -842,7 +926,7 @@ $("previewReset").addEventListener("click",async()=>{
  clearStatus("maintenanceStatus");$("maintenancePreview").hidden=true;const button=$("previewReset");button.disabled=true;
  try{
   const scope=$("monitorScope").value;const response=await adminFetch("/api/admin/maintenance/preview?scope="+scope,{method:"GET"});const data=await response.json();
-  const labels={participants:"کدهای شرکت‌کننده",assignments:"تخصیص‌ها / لینک‌ها",participations:"مشارکت‌ها",runs:"اجرای ماژول‌ها",questionnaire_responses:"پاسخ‌های پرسشنامه",lifetrade_trials:"دورهای Life-Trade",ultimatum_trials:"دورهای Ultimatum",completed_experiments:"آزمایش کامل",test_studies:"فضاهای تست"};
+  const labels={participants:"کدهای شرکت‌کننده",assignments:"تخصیص‌ها / لینک‌ها",group_links:"لینک‌های گروهی",participations:"مشارکت‌ها",runs:"اجرای ماژول‌ها",questionnaire_responses:"پاسخ‌های پرسشنامه",lifetrade_trials:"دورهای Life-Trade",ultimatum_trials:"دورهای Ultimatum",completed_experiments:"آزمایش کامل",test_studies:"فضاهای تست"};
   const table=document.createElement("table");const head=document.createElement("thead"),hr=document.createElement("tr");
   ["نوع داده","تعداد"].forEach(x=>{const th=document.createElement("th");th.textContent=x;hr.appendChild(th)});head.appendChild(hr);table.appendChild(head);
   const body=document.createElement("tbody");Object.entries(data.counts).forEach(([key,value])=>{const tr=document.createElement("tr"),td1=document.createElement("td"),td2=document.createElement("td");td1.textContent=labels[key]||key;td2.textContent=value;tr.append(td1,td2);body.appendChild(tr)});table.appendChild(body);
