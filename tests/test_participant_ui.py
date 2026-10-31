@@ -7,7 +7,7 @@ HTML = HTML_PATH.read_text(encoding="utf-8")
 
 def section_by_id(source: str, element_id: str) -> str:
     match = re.search(
-        rf'<section\b[^>]*id="{re.escape(element_id)}"[^>]*>([\s\S]*?)</section>',
+        rf'<section\\b[^>]*id="{re.escape(element_id)}"[^>]*>([\\s\\S]*?)</section>',
         source,
         flags=re.IGNORECASE,
     )
@@ -22,12 +22,61 @@ def function_body(source: str, start: str, end: str) -> str:
     return source[start_at:end_at]
 
 
-def test_welcome_screen_discloses_only_brand_and_continue():
+def test_welcome_screen_shows_public_heading_and_ordered_step_list_only():
     welcome = section_by_id(HTML, "welcome")
-    assert "<h1>بازی باشگاه رانندگان بارسان</h1>" in welcome
+    assert "<h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>" in welcome
+    assert '<ol class="welcome-steps" id="welcome-steps"' in welcome
     assert 'id="welcome-continue"' in welcome
-    for forbidden in ("اولتیماتوم", "Frame", "Control", "مرحله", "ماژول"):
+    assert 'id="welcome-plan-status"' in welcome
+    # The status node is hidden except for a loading/error condition; there is no prose description.
+    assert 'class="welcome-note hidden"' in welcome
+    assert "بخش‌های برنامهٔ شما در ادامه" not in welcome
+    for forbidden in (
+        "اولتیماتوم",
+        "Ultimatum",
+        "Frame",
+        "Control",
+        "dd_lifetrade",
+        "ultimatum_frame",
+        "ultimatum_control",
+    ):
         assert forbidden not in welcome
+
+
+def test_public_workflow_labels_hide_internal_module_names_and_descriptions():
+    labels = function_body(
+        HTML,
+        "function participantWorkflowTitle(moduleCode){",
+        "async function loadWelcomeWorkflow(){",
+    )
+    assert "questionnaire:'پرسشنامه'" in labels
+    assert "dd_lifetrade:'بازی انتخاب'" in labels
+    assert "ultimatum:'بازی باشگاه رانندگان بارسان'" in labels
+    assert "ultimatum_frame:'بازی باشگاه رانندگان بارسان'" in labels
+    assert "ultimatum_control:'بازی باشگاه رانندگان بارسان'" in labels
+
+    loader = function_body(
+        HTML,
+        "async function loadWelcomeWorkflow(){",
+        "loadWelcomeWorkflow();",
+    )
+    assert "/api/experiment/workflow?invite=" in loader
+    assert "encodeURIComponent(workflow.invitationToken)" in loader
+    assert "step.description" not in loader
+    assert "step.title" not in loader
+    assert "if(payload.legacy_default&&!includesUltimatum)" in loader
+    assert "steps.push({module_code:'ultimatum'})" in loader
+
+
+def test_dd_and_life_trade_instruction_title_is_participant_facing():
+    intro = function_body(
+        HTML,
+        "function showInstructionPage(taskKey, pageIndex){",
+        "function showFixation(){",
+    )
+    assert "const title='بازی انتخاب';" in intro
+    assert "5-Trial DD Task" not in intro
+    assert "Life-Trade Reward" not in intro
 
 
 def test_removed_consent_warning_does_not_return():
@@ -94,6 +143,32 @@ def test_final_score_is_single_titled_and_prominent():
     assert ".ut-card .ut-final-score-box .ut-metric-value" in HTML
 
 
+def test_titles_and_copy_use_centered_vertical_content_groups_in_all_modules():
+    show_info = function_body(HTML, "function showInfo(", "function showInstructionPage(")
+    questionnaire_intro = function_body(
+        HTML,
+        "function showQuestionnaireIntro(",
+        "async function startQuestionnaireRun(",
+    )
+    questionnaire_question = function_body(
+        HTML,
+        "function showQuestionnaireQuestion(",
+        "async function completeQuestionnaire(",
+    )
+    ultimatum_screen = function_body(HTML, "function utMakeScreen(", "function utAddRoleBox(")
+
+    assert "main.className='instruction-main'" in show_info
+    assert "main.className='instruction-main'" in questionnaire_intro
+    assert "main.className='questionnaire-main'" in questionnaire_question
+    assert 'utNode("div","ut-main")' in ultimatum_screen
+
+    assert ".instruction-main{flex:1 1 auto" in HTML
+    assert "justify-content:center" in HTML
+    assert ".questionnaire-main{flex:1 1 auto" in HTML
+    assert ".ut-main{flex:1 1 auto" in HTML
+    assert ".screen,.screen.trial-screen{align-items:center!important;justify-content:center!important}" in HTML
+
+
 def test_participant_copy_and_score_layout_are_centered():
     assert "#screen .panel{text-align:center}" in HTML
-    assert ".ut-card,.ut-card *{text-align:center!important}" in HTML
+    assert ".ut-card,.ut-card .ut-body,.ut-card .ut-header,.ut-card .ut-copy,.ut-card h1,.ut-card h2,.ut-card p" in HTML
