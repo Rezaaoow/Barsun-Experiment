@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 CONFIRMATION = "I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT"
 PRODUCTION_HOSTS = {"my-experiment.ir"}
+ALLOWED_STAGING_HOSTS = {"staging.my-experiment.ir"}
 BATCH_SIZE = 500
 WORKFLOW_STEPS = [
     {"step_id": "load-questionnaire", "module_code": "questionnaire"},
@@ -65,9 +66,10 @@ def require_postgresql_health(endpoint: str) -> dict:
         or health.get("ok") is not True
         or health.get("database") != "postgresql"
         or health.get("database_connected") is not True
+        or not str(health.get("study_code", "")).startswith("barsan-staging-")
     ):
         raise RuntimeError(
-            "staging API must report ok=true and a connected PostgreSQL database"
+            "staging API must report ok=true, a connected PostgreSQL database, and a dedicated staging study code"
         )
     return health
 
@@ -113,11 +115,16 @@ def main() -> int:
     if not base_url.startswith("https://"):
         print("BASE_URL must be an HTTPS staging application URL.", file=sys.stderr)
         return 2
-    host = (urlsplit(base_url).hostname or "").lower()
-    if not host or host in PRODUCTION_HOSTS or any(
-        host.endswith("." + production) for production in PRODUCTION_HOSTS
+    parsed_base = urlsplit(base_url)
+    host = (parsed_base.hostname or "").lower()
+    path = parsed_base.path.rstrip("/")
+    if not host or host in PRODUCTION_HOSTS or (
+        host.endswith(".my-experiment.ir") and host not in ALLOWED_STAGING_HOSTS
     ):
-        print("The configured host is the production domain; refusing to create load-test links.", file=sys.stderr)
+        print("The configured host is the production domain or an unapproved production subdomain; refusing to create load-test links.", file=sys.stderr)
+        return 2
+    if host not in ALLOWED_STAGING_HOSTS or path != "/lifetrade":
+        print("The configured host/path is not the explicitly allowlisted staging application; refusing to create load-test links.", file=sys.stderr)
         return 2
     if not admin_token:
         print("ADMIN_TOKEN is missing from the environment.", file=sys.stderr)

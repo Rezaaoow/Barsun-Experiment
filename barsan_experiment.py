@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import hashlib
 import io
@@ -7,6 +8,7 @@ import os
 import random
 import secrets
 import sqlite3
+import threading
 import uuid
 import zipfile
 from contextlib import contextmanager
@@ -183,23 +185,58 @@ if DATABASE_URL:
     from psycopg.types.json import Jsonb
     from psycopg_pool import ConnectionPool, PoolTimeout, TooManyRequests
 
-    DB_POOL = ConnectionPool(
-        DATABASE_URL,
-        min_size=min(DB_POOL_MIN_SIZE, DB_POOL_MAX_SIZE),
-        max_size=DB_POOL_MAX_SIZE,
-        timeout=DB_POOL_TIMEOUT,
-        max_waiting=DB_POOL_MAX_WAITING,
-        num_workers=1,
-        kwargs={
-            "row_factory": dict_row,
-            "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
-            "application_name": "barsan-experiment-api",
-        },
-        open=True,
-    )
+    def _build_db_pool() -> ConnectionPool:
+        return ConnectionPool(
+            DATABASE_URL,
+            min_size=min(DB_POOL_MIN_SIZE, DB_POOL_MAX_SIZE),
+            max_size=DB_POOL_MAX_SIZE,
+            timeout=DB_POOL_TIMEOUT,
+            max_waiting=DB_POOL_MAX_WAITING,
+            num_workers=1,
+            kwargs={
+                "row_factory": dict_row,
+                "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
+                "application_name": "barsan-experiment-api",
+            },
+            open=True,
+        )
+
+    # Passenger/LSAPI may fork a preloaded application. A psycopg pool and its
+    # sockets/worker thread must never be shared across those process boundaries.
+    DB_POOL = _build_db_pool()
+    _DB_POOL_PID = os.getpid()
+    _DB_POOL_REBUILD_LOCK = threading.Lock()
+    _INHERITED_DB_POOLS: list[ConnectionPool] = []
+
+    def _reset_db_pool_after_fork() -> None:
+        global DB_POOL, _DB_POOL_PID, _DB_POOL_REBUILD_LOCK
+        # Keep the inherited pool referenced: its destructor waits for worker
+        # threads which do not survive fork, delaying the first request.
+        if DB_POOL is not None:
+            _INHERITED_DB_POOLS.append(DB_POOL)
+        DB_POOL = None
+        _DB_POOL_PID = -1
+        _DB_POOL_REBUILD_LOCK = threading.Lock()
+
+    if hasattr(os, "register_at_fork"):
+        os.register_at_fork(after_in_child=_reset_db_pool_after_fork)
+
+    def _ensure_db_pool_for_process() -> None:
+        global DB_POOL, _DB_POOL_PID
+        current_pid = os.getpid()
+        if _DB_POOL_PID == current_pid:
+            return
+        with _DB_POOL_REBUILD_LOCK:
+            if _DB_POOL_PID != current_pid:
+                if DB_POOL is not None:
+                    _INHERITED_DB_POOLS.append(DB_POOL)
+                DB_POOL = _build_db_pool()
+                _DB_POOL_PID = current_pid
+
 
     @contextmanager
     def conn() -> Iterator[Any]:
+        _ensure_db_pool_for_process()
         try:
             with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
                 yield connection
@@ -3939,7 +3976,7 @@ async def _read_streaming_response(response: StreamingResponse) -> bytes:
 
 
 @app.get("/api/admin/export-all.zip")
-async def export_all_modules_zip(
+def export_all_modules_zip(
     x_admin_token: str | None = Header(default=None),
     scope: Literal["main", "test"] = "main",
 ):
@@ -3954,7 +3991,7 @@ async def export_all_modules_zip(
     archive_buffer = io.BytesIO()
     with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for filename, response in responses:
-            archive.writestr(filename, await _read_streaming_response(response))
+            archive.writestr(filename, asyncio.run(_read_streaming_response(response)))
         participant_rows = experiment_progress(x_admin_token, scope)
         progress_buffer = io.StringIO(newline="")
         progress_buffer.write("\ufeff")

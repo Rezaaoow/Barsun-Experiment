@@ -35,6 +35,28 @@ def test_load_user_generator_refuses_production_domain_without_network_call(
     assert "must-not-be-printed" not in captured.out + captured.err
 
 
+
+def test_load_user_generator_rejects_unapproved_production_subdomain(
+    tmp_path, monkeypatch, capsys
+):
+    output = tmp_path / "participants.json"
+    monkeypatch.setenv("BASE_URL", "https://other.my-experiment.ir/lifetrade")
+    monkeypatch.setenv("ADMIN_TOKEN", "must-not-be-printed")
+    monkeypatch.setenv("LOAD_TEST_CONFIRM", load_users.CONFIRMATION)
+    monkeypatch.setenv("LOAD_TEST_USERS", "10")
+    monkeypatch.setenv("PARTICIPANTS_FILE", str(output))
+
+    def forbidden_network(*args, **kwargs):
+        pytest.fail("An unapproved production subdomain must be rejected before network access.")
+
+    monkeypatch.setattr(load_users, "urlopen", forbidden_network)
+    assert load_users.main() == 2
+    assert not output.exists()
+    captured = capsys.readouterr()
+    assert "production domain or an unapproved production subdomain" in captured.err
+    assert "must-not-be-printed" not in captured.out + captured.err
+
+
 def test_load_user_generator_requires_explicit_staging_confirmation(
     tmp_path, monkeypatch, capsys
 ):
@@ -95,7 +117,7 @@ def test_load_generator_rejects_unhealthy_or_non_postgresql_staging(
 
 
 def test_load_generator_accepts_healthy_postgresql_staging(monkeypatch):
-    expected = {"ok": True, "database": "postgresql", "database_connected": True}
+    expected = {"ok": True, "database": "postgresql", "database_connected": True, "study_code": "barsan-staging-test"}
 
     class FakeResponse:
         def __enter__(self):
