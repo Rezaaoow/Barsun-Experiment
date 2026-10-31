@@ -61,20 +61,20 @@ k6 را روی کامپیوتر جداگانه نصب کنید. سپس از ری
 
 **Burst تقریباً هم‌زمان:** cohort دوم را با فایل جدا بسازید:
 
-    BASE_URL="https://staging.example.org/lifetrade" \\
-    ADMIN_TOKEN="..." \\
-    LOAD_TEST_CONFIRM="I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT" \\
-    LOAD_TEST_USERS=600 \\
-    PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \\
+    BASE_URL="https://staging.example.org/lifetrade" \
+    ADMIN_TOKEN="..." \
+    LOAD_TEST_CONFIRM="I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT" \
+    LOAD_TEST_USERS=600 \
+    PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \
     python3 tests/load/create_load_test_users.py
 
 سپس اجرا کنید:
 
-    k6 run \\
-      -e BASE_URL="https://staging.example.org/lifetrade" \\
-      -e PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \\
-      -e EXPECTED_USERS=600 \\
-      -e LOAD_PROFILE=burst \\
+    k6 run \
+      -e BASE_URL="https://staging.example.org/lifetrade" \
+      -e PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \
+      -e EXPECTED_USERS=600 \
+      -e LOAD_PROFILE=burst \
       tests/load/k6_experiment.js
 
 پروفایل burst از executor نوع per-vu-iterations با ۶۰۰ VU و یک iteration برای هر VU استفاده می‌کند و برای تکمیل حداکثر ۸ دقیقه فرصت دارد. ramp-up و burst را هم‌زمان اجرا نکنید؛ آن‌ها را در دو اجرای مستقل و با دو cohort جدا بسنجید.
