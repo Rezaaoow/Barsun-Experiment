@@ -70,7 +70,7 @@ BarSan Experiment سامانهٔ پژوهشی آنلاین با Python/FastAPI،
 - test studyها با prefix `barsan-test-` از main جدا هستند. synthetic prerequisite rows با `test_prerequisite=true` مشاهدهٔ رفتاری واقعی نیستند. خروجی‌ها را با `scope=main|test` جدا نگه دارید.
 
 ### Ultimatum: فرض‌های موقت
-مستندات فعلی چهار بلوک proposer/agent، responder/agent، proposer/coworker و responder/coworker را شرح می‌دهند؛ هر بلوک پنج دور اصلی دارد و دو دور تمرین جدا هستند. پارامترهای مدل تصمیم opponent و نمایش coworker حاضر در سالن، فرض‌های موقت‌اند. در شرط coworker رابط فرد حاضر را نشان می‌دهد اما تصمیم در کد فعلی توسط الگوریتم سمت سرور تولید می‌شود. هیچ عامل یا توسعه‌دهنده‌ای نباید این دستکاری را اخلاقاً تأییدشده معرفی کند یا بدون پژوهشگر تغییر دهد. تأیید پروتکل، الگوریتم و debriefing با مسئول پژوهش/کمیتهٔ اخلاق است.
+مستندات فعلی چهار بلوک proposer/agent، responder/agent، proposer/coworker و responder/coworker را شرح می‌دهند؛ هر بلوک پنج دور اصلی دارد و دو دور تمرین جدا هستند. پیشنهاد ربات در نقش پیشنهاددهنده از نرمال گسسته با میانگین ۵ و پارامتر انحراف معیار ۴، محدود به اعداد صحیح ۰ تا ۱۰ نمونه‌گیری می‌شود؛ انحراف معیار واقعی توزیع نهایی پس از گسسته‌سازی و محدودسازی حدود ۲٫۷۹ است. الگوریتم پاسخ ربات در نقش پاسخ‌دهنده همچنان همان مدل دوجمله‌ای موقت (`n=10`، احتمال موفقیت برابر سهم پیشنهادی به ربات تقسیم بر ۱۰، و پذیرش در صورت حداقل ۵ موفقیت) است و با این تغییر عوض نمی‌شود. این پارامترها فرض‌های عملیاتی موقت‌اند و باید با پژوهشگر نهایی شوند. در شرط coworker رابط فرد حاضر را نشان می‌دهد اما تصمیم در کد فعلی توسط الگوریتم سمت سرور تولید می‌شود. هیچ عامل یا توسعه‌دهنده‌ای نباید این دستکاری را اخلاقاً تأییدشده معرفی کند یا بدون پژوهشگر تغییر دهد. تأیید پروتکل، الگوریتم و debriefing با مسئول پژوهش/کمیتهٔ اخلاق است.
 
 ## 5. معماری واقعی cPanel / Passenger — حیاتی
 
@@ -190,6 +190,14 @@ Python مجازی cPanel مسیر بالا و Python 3.12 است؛ CI نیز 3.1
 - `POST /api/admin/maintenance/reset` destructive است؛ فقط پس از backup مستقل، preview scoped و تأیید صریح.
 - در deploy عادی هیچ `DROP`، `DELETE`، reset، re-seed یا انتقال SQLite اجرا نکن.
 - جدول‌های اصلی شامل `studies`، `participants`، `study_participations`، `experiment_assignments`، `experiment_consents`، `experiment_stage_progress`، `study_workflows`، `experiment_workflow_progress`، `experiment_time_tracking`، `instrument_runs`، `lifetrade_trials`، `questionnaire_responses` و `ultimatum_trials` هستند. جزئیات دقیق در `DATABASE_ARCHITECTURE.md`.
+
+## ممیزی ظرفیت و عملکرد رویداد ۶۰۰نفره
+
+سه پاس بهینه‌سازی Backend در PR #17 و شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation در مسیرهای پرتکرار، time tracking اتمیک، حذف readهای تکراری در start و questionnaire، و aggregate/projection محدود برای Ultimatum prepare. CI روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` با ۶۱ تست SQLite، PostgreSQL 16 smoke test، تست هم‌زمانی ۲۴ شرکت‌کننده و validation ابزارهای staging موفق شده است ([run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). ابزار read-only تشخیص cPanel/PostgreSQL در `tests/load/host_diagnostics.py` و ابزار staging-only بار با دو profile مستقل ramp و burst در `tests/load/` قرار دارند؛ قبل از استفاده، README همان پوشه را بخوانید. آزمون واقعی ۶۰۰ VU هنوز اجرا نشده و ظرفیت هاست تأیید نشده است.
+
+قبل از اعلام آمادگی production، گزارش کارایی و آزمون بار را بخوانید: docs/PERFORMANCE_AND_LOAD_TESTING_FA.md. یافته‌های قطعی کد را با محدودیت‌های ناشناختهٔ هاست قاطی نکنید: تعداد processهای Passenger، memory/CPU limit، سقف connection دیتابیس و reverse-proxy concurrency باید از cPanel/provider گرفته و با آزمایش staging سنجیده شوند. تعداد ۶۰۰ کاربر مرورگر با ۶۰۰ request هم‌زمان در هر لحظه یکسان نیست، اما burst اولیه و مرحله‌های ذخیرهٔ پرسشنامه باید عمداً در سناریوی load test پوشش داده شوند.
+
+تغییرات performance نباید protocol، تعداد trialها، ترتیب ماژول‌ها، randomization، scoring، RT semantics یا ظاهر participant UI را تغییر دهند. خروجی موفق CI نیز به‌تنهایی اثبات ظرفیت واقعی ۶۰۰ شرکت‌کننده نیست.
 
 ## 8. سابقهٔ خطای deploy — حتماً قبل از deploy بخوان
 

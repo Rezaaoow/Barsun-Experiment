@@ -68,6 +68,14 @@ Do not distribute generated links for live data collection until the full partic
 
 The common welcome and ethics/consent pages, questionnaire, DD/Life-Trade module, and initial Ultimatum frontend/backend are present in GitHub. The schema is additive (`CREATE TABLE IF NOT EXISTS`) and does not delete previous trial data. Before production use, the code must pass CI and an end-to-end pilot on the actual cPanel/PostgreSQL deployment; the provisional AI decision parameters and the apparent-coworker deception also require investigator/ethics review.
 
+## Indexes, query shape and concurrent writes
+
+- هر query پرتکرار باید با کلیدهای اصلی/Unique یا index متناسب پوشش داده شود؛ indexهای اضافه نیز هزینهٔ write دارند و باید با EXPLAIN ANALYZE BUFFERS روی staging ارزیابی شوند.
+- احراز هویت لینک، رضایت و اجرای فعال در مسیرهای مشارکت‌کننده به‌صورت queryهای محدود و index-supported انجام می‌شود. شروع workflow جدید نباید stage snapshot قدیمی را بخواند؛ نسخه‌های ثابت instrument در startup seed می‌شوند تا start فقط lookup کند. مسیرهای پرسشنامه می‌توانند assignment/consent و وضعیت run/draft را در یک read join کنند. در مسیر زمان‌سنجی، heartbeat نباید موجب چند round-trip غیرضروری شود.
+- ثبت Ultimatum باید idempotent بماند؛ قید یکتای run/phase/block/trial و وضعیت prepared/completed مرجع صحت‌اند. prepare باید فقط ستون‌های موردنیاز اعتبارسنجی دورهای گذشته را بخواند و می‌تواند count/order/existing را در aggregate SQL محاسبه کند؛ payload کامل فقط برای retry همان round واکشی شود. بهینه‌سازی aggregateها نباید نتایج trial یا امتیاز را تغییر دهد.
+- تعداد اتصال کل = DB_POOL_MAX_SIZE ضرب‌در تعداد processهای Passenger، به‌علاوهٔ اتصال‌های مدیریتی/پشتیبان. پارامتر pool بدون ظرفیت واقعی DB و تعداد processهای هاست تنظیم نشود.
+- سنجش ۶۰۰ کاربر باید با دیتابیس staging جدا، لینک‌های ساختگی و اجرای تمام APIهای workflow انجام شود؛ هرگز load test را روی دادهٔ اصلی اجرا نکنید.
+
 ## PostgreSQL and deployment
 
 PostgreSQL is the intended production database for concurrent participation. SQLite remains supported for local tests. Schema initialization is additive and must not drop existing tables.

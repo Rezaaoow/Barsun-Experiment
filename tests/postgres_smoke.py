@@ -1,6 +1,7 @@
 import io
 import sys
 import zipfile
+from urllib.parse import parse_qs, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -68,6 +69,42 @@ def main_test():
         admin_headers = {"x-admin-token": "ci-admin-token"}
         test_links = client.post("/api/admin/test-links", headers=admin_headers)
         assert test_links.status_code == 200, test_links.text
+
+        # Exercise the single-query consent check and atomic PostgreSQL time tracking.
+        full_test_link = test_links.json()["assignments"][0]
+        full_test_identity = {
+            "invitation_token": parse_qs(urlparse(full_test_link["invitation_url"]).query)["invite"][0],
+            "participant_code": "TEST",
+        }
+        consent = client.post(
+            "/api/experiment/consent",
+            json={**full_test_identity, "accepted": True},
+        )
+        assert consent.status_code == 200, consent.text
+        identified = client.post("/api/experiment/identify", json=full_test_identity)
+        assert identified.status_code == 200, identified.text
+        questionnaire_start = client.post(
+            "/api/experiment/stages/start",
+            json={
+                **full_test_identity,
+                "stage_code": "questionnaire",
+                "step_id": "default-questionnaire",
+            },
+        )
+        assert questionnaire_start.status_code == 200, questionnaire_start.text
+        for event in ("start", "heartbeat", "pause"):
+            tracked = client.post(
+                "/api/experiment/time",
+                json={
+                    **full_test_identity,
+                    "stage_code": "questionnaire",
+                    "step_id": "default-questionnaire",
+                    "event": event,
+                },
+            )
+            assert tracked.status_code == 200, f"{event}: {tracked.text}"
+        assert tracked.json()["is_active"] is False
+
 
         test_progress = client.get("/api/admin/progress?scope=test", headers=admin_headers)
         assert test_progress.status_code == 200, test_progress.text
@@ -156,6 +193,99 @@ def main_test():
         after_delete = client.get("/api/admin/assignments?scope=test&status=all", headers=admin_headers)
         assert after_delete.status_code == 200, after_delete.text
         assert after_delete.json()["counts"] == {"active": 0, "inactive": 0, "total": 0}
+
+        # Exercise Ultimatum prepare/resolve/idempotency and the grouped scoring
+        # query against PostgreSQL without creating any live-study records.
+        module_link_response = client.post(
+            "/api/admin/module-test-links",
+            headers=admin_headers,
+            json={"stage_code": "ultimatum", "condition_code": "A"},
+        )
+        assert module_link_response.status_code == 200, module_link_response.text
+        module_link = module_link_response.json()
+        ultimatum_identity = {
+            "invitation_token": parse_qs(urlparse(module_link["invitation_url"]).query)["invite"][0],
+            "participant_code": "TEST",
+        }
+        ultimatum_consent = client.post(
+            "/api/experiment/consent",
+            json={**ultimatum_identity, "accepted": True},
+        )
+        assert ultimatum_consent.status_code == 200, ultimatum_consent.text
+        ultimatum_start = client.post(
+            "/api/experiment/stages/start",
+            json={
+                **ultimatum_identity,
+                "stage_code": "ultimatum",
+                "step_id": "module-test-ultimatum",
+            },
+        )
+        assert ultimatum_start.status_code == 200, ultimatum_start.text
+        ultimatum_run_id = ultimatum_start.json()["run_id"]
+
+        def play_postgres_ultimatum_round(phase, block_code, block_order, trial, sequence, role):
+            prepared = client.post(
+                "/api/experiment/ultimatum/prepare",
+                json={
+                    **ultimatum_identity,
+                    "run_id": ultimatum_run_id,
+                    "phase": phase,
+                    "block_code": block_code,
+                    "block_order": block_order,
+                    "trial_in_block": trial,
+                    "trial_sequence": sequence,
+                },
+            )
+            assert prepared.status_code == 200, prepared.text
+            round_id = prepared.json()["round_id"]
+            decision = {
+                **ultimatum_identity,
+                "run_id": ultimatum_run_id,
+                "round_id": round_id,
+            }
+            if role == "proposer":
+                decision["participant_offer_to_opponent"] = 5
+            else:
+                decision["participant_decision"] = "accept"
+            resolved = client.post("/api/experiment/ultimatum/resolve", json=decision)
+            assert resolved.status_code == 200, resolved.text
+            # A repeated resolve must return the original result, not score twice.
+            repeated = client.post("/api/experiment/ultimatum/resolve", json=decision)
+            assert repeated.status_code == 200, repeated.text
+            assert repeated.json() == resolved.json()
+            return resolved.json()
+
+        proposer_practice = play_postgres_ultimatum_round(
+            "practice", "practice_proposer_agent", 0, 1, 0, "proposer"
+        )
+        responder_practice = play_postgres_ultimatum_round(
+            "practice", "practice_responder_coworker", 0, 1, 0, "responder"
+        )
+        assert proposer_practice["phase"] == "practice"
+        assert responder_practice["phase"] == "practice"
+
+        first_block = ultimatum_start.json()["draft_payload"]["block_order"][0]
+        first_role = main.ULTIMATUM_BLOCKS[first_block]["role"]
+        first_main_result = play_postgres_ultimatum_round(
+            "main", first_block, 1, 1, 1, first_role
+        )
+        assert first_main_result["phase"] == "main"
+        assert first_main_result["total_score"] == first_main_result["block_score"]
+        assert first_main_result["total_potential_lost"] == first_main_result["block_potential_lost"]
+
+        event_save = client.post(
+            "/api/experiment/ultimatum/events",
+            json={
+                **ultimatum_identity,
+                "run_id": ultimatum_run_id,
+                "round_id": first_main_result["round_id"],
+                "event_timestamps": {
+                    "result_screen_shown_at": main.now(),
+                    "advance_clicked_at": main.now(),
+                },
+            },
+        )
+        assert event_save.status_code == 200, event_save.text
 
         completed = client.post(
             "/api/complete",
