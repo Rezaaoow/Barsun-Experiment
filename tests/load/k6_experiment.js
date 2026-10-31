@@ -107,9 +107,16 @@ function timestamp() {
 function startTimeTracking(identity, stageCode, stepId) {
   const payload = { ...identity, stage_code: stageCode, step_id: stepId };
   post("/api/experiment/time", { ...payload, event: "start" });
-  // Exercise the same heartbeat interval used by the participant browser.
-  sleep(15);
-  post("/api/experiment/time", { ...payload, event: "heartbeat" });
+  let lastHeartbeatAt = Date.now();
+
+  // Called during participant activity; emits a heartbeat at the same 15-second
+  // interval as the browser without using background timers in a k6 VU.
+  return function heartbeatIfDue() {
+    if (Date.now() - lastHeartbeatAt >= 15000) {
+      post("/api/experiment/time", { ...payload, event: "heartbeat" });
+      lastHeartbeatAt = Date.now();
+    }
+  };
 }
 
 function completeTimeTracking(identity, stageCode, stepId) {
@@ -121,7 +128,7 @@ function completeTimeTracking(identity, stageCode, stepId) {
   });
 }
 
-function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial, sequence) {
+function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial, sequence, heartbeatIfDue) {
   const prepared = post("/api/experiment/ultimatum/prepare", {
     ...identity,
     run_id: runId,
@@ -136,6 +143,13 @@ function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial,
   const role = phase === "practice"
     ? (blockCode === "practice_proposer_agent" ? "proposer" : "responder")
     : blocks[blockCode];
+
+  // Reproduce the fixed AI wait and randomized coworker wait used by the participant UI.
+  const waitSeconds = blockCode.indexOf("agent") >= 0
+    ? 2
+    : 3 + Math.floor(Math.random() * 3001) / 1000;
+  sleep(waitSeconds);
+  heartbeatIfDue();
 
   const resolvePayload = {
     ...identity,
@@ -196,9 +210,11 @@ export function participantFlow() {
     stage_code: "questionnaire",
     step_id: "load-questionnaire"
   });
-  startTimeTracking(identity, "questionnaire", "load-questionnaire");
+  const questionnaireHeartbeat = startTimeTracking(identity, "questionnaire", "load-questionnaire");
   const answers = {};
   for (let index = 0; index < questionCodes.length; index++) {
+    // Synthetic but plausible short reading/decision interval for each question.
+    sleep(3);
     const code = questionCodes[index];
     const value = String((index % 5) + 1);
     answers[code] = value;
@@ -220,6 +236,7 @@ export function participantFlow() {
         schema_version: 1
       }
     });
+    questionnaireHeartbeat();
   }
   post("/api/experiment/stages/complete", {
     ...identity,
@@ -240,7 +257,7 @@ export function participantFlow() {
     stage_code: "dd_lifetrade",
     step_id: "load-dd"
   });
-  startTimeTracking(identity, "dd_lifetrade", "load-dd");
+  const ddHeartbeat = startTimeTracking(identity, "dd_lifetrade", "load-dd");
   const trialRows = [];
   for (let index = 0; index < 30; index++) {
     trialRows.push({
@@ -259,10 +276,13 @@ export function participantFlow() {
   }
   // The participant UI normally flushes the local queue every five responses.
   for (let offset = 0; offset < trialRows.length; offset += 5) {
+    // Five trial intervals (about 1.5 seconds each) precede each local-queue flush.
+    sleep(7.5);
     post("/api/trials", {
       session_id: dd.run_id,
       trials: trialRows.slice(offset, offset + 5)
     });
+    ddHeartbeat();
   }
   post("/api/complete", {
     session_id: dd.run_id,
@@ -283,10 +303,10 @@ export function participantFlow() {
     stage_code: "ultimatum",
     step_id: "load-ultimatum"
   });
-  startTimeTracking(identity, "ultimatum", "load-ultimatum");
+  const ultimatumHeartbeat = startTimeTracking(identity, "ultimatum", "load-ultimatum");
   const runId = ultimatum.run_id;
-  runUltimatumRound(identity, runId, "practice", "practice_proposer_agent", 0, 1, 0);
-  runUltimatumRound(identity, runId, "practice", "practice_responder_coworker", 0, 1, 0);
+  runUltimatumRound(identity, runId, "practice", "practice_proposer_agent", 0, 1, 0, ultimatumHeartbeat);
+  runUltimatumRound(identity, runId, "practice", "practice_responder_coworker", 0, 1, 0, ultimatumHeartbeat);
 
   const blockOrder = ultimatum.draft_payload.block_order;
   if (!Array.isArray(blockOrder) || blockOrder.length !== 4 || new Set(blockOrder).size !== 4) {
@@ -302,7 +322,7 @@ export function participantFlow() {
     for (let trial = 1; trial <= 5; trial++) {
       const sequence = (order - 1) * 5 + trial;
       blockResult = runUltimatumRound(
-        identity, runId, "main", blockCode, order, trial, sequence
+        identity, runId, "main", blockCode, order, trial, sequence, ultimatumHeartbeat
       );
       finalResult = blockResult;
     }
