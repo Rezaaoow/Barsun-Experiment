@@ -556,14 +556,29 @@ def test_time_tracking_uses_atomic_updates_and_preserves_elapsed_cap(client):
     )
     assert inactive_heartbeat.status_code == 200, inactive_heartbeat.text
     assert inactive_heartbeat.json()["active_seconds"] == paused_seconds
-    assert inactive_heartbeat.json()["is_active"] is False
+    # Preserve the previous endpoint semantics: an accepted heartbeat marks the step active.
+    assert inactive_heartbeat.json()["is_active"] is True
 
+    # Pause again, move last_seen_at back by two hours, and resume. A start event
+    # after an inactive period must not accrue the paused interval.
+    pause_again = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "pause"},
+    )
+    assert pause_again.status_code == 200, pause_again.text
+    paused_again_seconds = pause_again.json()["active_seconds"]
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 hours') "
+            "WHERE step_instance_id=?",
+            ("atomic-time",),
+        )
     resumed = client.post(
         "/api/experiment/time",
         json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "start"},
     )
     assert resumed.status_code == 200, resumed.text
-    assert resumed.json()["active_seconds"] == paused_seconds
+    assert resumed.json()["active_seconds"] == paused_again_seconds
     assert resumed.json()["is_active"] is True
 
     completed = client.post(
