@@ -841,12 +841,19 @@ h2 {
   <p>این برنامه در چارچوب یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری، شرایط کاری و تصمیم‌گیری انجام می‌شود.</p>
   <p>داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد.</p>
   <p>اطلاعات فردی نباید بدون مجوز و حفاظت مناسب در اختیار افراد غیرمرتبط قرار گیرد.</p>
-  <p>شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
-  <div class="field participant-code-field">
+  <p id="participant-code-instruction">شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
+  <div class="field hidden" id="group-code-choice">
+    <label>روش ثبت کد شرکت‌کننده</label>
+    <label class="group-code-option"><input type="radio" name="group-code-mode" value="own" checked> کد خودم را وارد می‌کنم</label>
+    <label class="group-code-option"><input type="radio" name="group-code-mode" value="random"> نمی‌خواهم کد خودم را وارد کنم؛ یک کد تصادفی برایم ساخته شود</label>
+    <p class="hint">در هر دو حالت، پاسخ‌ها و مراحل فقط به یک کد اختصاصی متصل می‌شوند. کد تصادفی به‌صورت خودکار برای شما ساخته می‌شود.</p>
+  </div>
+  <div class="field participant-code-field" id="participant-code-field">
     <label for="participant-code-input">کد شرکت‌کننده</label>
     <input id="participant-code-input" type="text" name="participant_code" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="کد خود را وارد کنید" dir="ltr" required>
     <p class="hint hidden" id="participant-code-error" role="alert"></p>
   </div>
+  <p class="hint hidden" id="group-code-result" role="status" aria-live="polite"></p>
   <label class="consent-row" for="consent-checkbox">
     <input type="checkbox" id="consent-checkbox" name="consent">
     <span>توضیحات را خوانده‌ام و با شرکت در این پژوهش موافقم.</span>
@@ -866,8 +873,10 @@ const DATA = {"KT":{"1M":[{"index":1,"delay":"1 hr","choice":5,"immED50":0.04167
 const $ = id => document.getElementById(id);
 const stimulus=$('stimulus'), welcome=$('welcome'), ethics=$('ethics'), finish=$('finish'), status=$('status');
 const invitationToken = new URLSearchParams(window.location.search).get('invite') || '';
+const groupInvitationToken = new URLSearchParams(window.location.search).get('group') || '';
 const workflow = {
  invitationToken,
+ groupInvitationToken,
  participantCode:'',
  conditionCode:'',
  stageRunId:null,
@@ -886,6 +895,36 @@ const workflow = {
  currentModuleCode:null,
  timerActive:false
 };
+function selectedGroupCodeMode(){
+ const selected=document.querySelector('input[name="group-code-mode"]:checked');
+ return selected?selected.value:'own';
+}
+function updateGroupCodeMode(){
+ if(!workflow.groupInvitationToken)return;
+ const randomMode=selectedGroupCodeMode()==='random';
+ const codeField=$('participant-code-field');
+ const codeInput=$('participant-code-input');
+ const result=$('group-code-result');
+ codeField.classList.toggle('hidden',randomMode);
+ codeInput.required=!randomMode;
+ codeInput.disabled=randomMode;
+ if(randomMode){
+  result.classList.remove('hidden');
+  result.textContent='پس از ادامه، یک کد تصادفی مستقل برای شما ساخته می‌شود؛ نیازی به وارد کردن یا اعلام کد شخصی نیست.';
+ }else{
+  result.classList.add('hidden');
+  result.textContent='';
+  codeInput.disabled=false;
+ }
+}
+if(workflow.groupInvitationToken){
+ const choice=$('group-code-choice');
+ if(choice)choice.classList.remove('hidden');
+ const instruction=$('participant-code-instruction');
+ if(instruction)instruction.textContent='این لینک برای یک گروه است. برای ثبت پاسخ‌ها، کد خودتان را وارد کنید یا دریافت کد تصادفی مستقل را انتخاب کنید.';
+ document.querySelectorAll('input[name="group-code-mode"]').forEach(input=>input.addEventListener('change',updateGroupCodeMode));
+ updateGroupCodeMode();
+}
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
  if(!Number.isInteger(maxExclusive)||maxExclusive<1||maxExclusive>0x100000000)throw new RangeError('Invalid random range');
@@ -1812,9 +1851,10 @@ async function beginParticipantFlow(){
  const codeInput=$('participant-code-input');
  const codeError=$('participant-code-error');
  const startButton=$('start');
- const enteredCode=codeInput.value.trim();
+ let enteredCode=codeInput.value.trim();
+ const randomGroupCode=Boolean(workflow.groupInvitationToken&&selectedGroupCodeMode()==='random');
  codeError.classList.add('hidden');
- if(!enteredCode){
+ if(!randomGroupCode&&!enteredCode){
   codeError.textContent='لطفاً کد شرکت‌کننده را وارد کنید.';
   codeError.classList.remove('hidden');codeInput.focus();return;
  }
@@ -1822,14 +1862,39 @@ async function beginParticipantFlow(){
   codeError.textContent='برای ادامه، لطفاً موافقت خود با شرکت در پژوهش را ثبت کنید.';
   codeError.classList.remove('hidden');return;
  }
- if(!workflow.invitationToken){
-  codeError.textContent='این نشانی لینک اختصاصی ندارد. برای شرکت در پژوهش، از لینک اختصاصی ارسال‌شده برای خودتان استفاده کنید.';
+ if(!workflow.invitationToken&&!workflow.groupInvitationToken){
+  codeError.textContent='این نشانی لینک اختصاصی ندارد. برای شرکت در پژوهش، از لینک دعوت ارسال‌شده استفاده کنید.';
   codeError.classList.remove('hidden');
   return;
  }
  const original=startButton.textContent;
  startButton.disabled=true;startButton.textContent='در حال ثبت رضایت و بررسی وضعیت مراحل…';
  try{
+  if(workflow.groupInvitationToken){
+   const storageKey='barsan-group-claim:'+workflow.groupInvitationToken;
+   const mode=randomGroupCode?'random':'own';
+   let claim=null;
+   try{
+    const cached=JSON.parse(sessionStorage.getItem(storageKey)||'null');
+    if(cached&&cached.mode===mode&&cached.invitation_token&&cached.participant_code&&
+       (randomGroupCode||cached.participant_code===enteredCode.toUpperCase()))claim=cached;
+   }catch(_){}
+   if(!claim){
+    claim=await api('/api/experiment/group/claim',{
+     group_token:workflow.groupInvitationToken,
+     participant_code:randomGroupCode?null:enteredCode,
+     assign_random:randomGroupCode
+    });
+    try{sessionStorage.setItem(storageKey,JSON.stringify({
+     mode,
+     participant_code:claim.participant_code,
+     invitation_token:claim.invitation_token
+    }))}catch(_){}
+   }
+   enteredCode=claim.participant_code;
+   workflow.invitationToken=claim.invitation_token;
+   codeInput.value=enteredCode;
+  }
   await api('/api/experiment/consent',{
    invitation_token:workflow.invitationToken,
    participant_code:enteredCode,
