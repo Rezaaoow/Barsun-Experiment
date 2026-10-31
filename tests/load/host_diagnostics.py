@@ -100,8 +100,13 @@ def _limit_to_json(value: tuple[int, int]) -> dict[str, int | None]:
 def _postgres_snapshot(database_url: str) -> dict[str, Any]:
     try:
         import psycopg
+        from psycopg.rows import dict_row
 
-        with psycopg.connect(database_url, connect_timeout=5) as connection:
+        with psycopg.connect(
+            database_url,
+            connect_timeout=5,
+            row_factory=dict_row,
+        ) as connection:
             settings = connection.execute(
                 "SELECT current_setting('server_version') AS server_version,"
                 "current_setting('max_connections')::integer AS max_connections,"
