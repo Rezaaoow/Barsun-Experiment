@@ -2295,14 +2295,18 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
     }
 
 
-def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -> None:
-    """Validate the active Ultimatum stage and instrument with one indexed join."""
+def _active_ultimatum_stage_state(
+    connection: Any, participation_id: str, run_id: str
+) -> dict[str, Any]:
+    """Load the active Ultimatum stage, draft and instrument in one indexed read."""
     marker = "%s" if DATABASE_URL else "?"
     row = connection.execute(
-        "SELECT progress.status,progress.current_run_id,iv.instrument_code "
+        "SELECT progress.status,progress.current_run_id,progress.draft_payload,"
+        "instrument.instrument_code "
         "FROM experiment_stage_progress AS progress "
         "LEFT JOIN instrument_runs AS run ON run.run_id=progress.current_run_id "
-        "LEFT JOIN instrument_versions AS iv ON iv.instrument_version_id=run.instrument_version_id "
+        "LEFT JOIN instrument_versions AS instrument "
+        "ON instrument.instrument_version_id=run.instrument_version_id "
         "WHERE progress.participation_id=" + marker
         + " AND progress.stage_code='ultimatum' AND progress.current_run_id=" + marker,
         (participation_id, run_id),
@@ -2311,6 +2315,108 @@ def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -
         raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
     if row["instrument_code"] != "ultimatum":
         raise HTTPException(409, "شناسهٔ اجرای اولتیماتوم معتبر نیست.")
+    return dict(row)
+
+
+def _lookup_active_ultimatum_round(
+    connection: Any,
+    invitation_token: str,
+    participant_code: str,
+    run_id: str,
+    round_id: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate invitation, consent, active run and round in one database round-trip."""
+    marker = "%s" if DATABASE_URL else "?"
+    token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+    query = (
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
+        "sp.participation_id,p.participant_code,"
+        "EXISTS(SELECT 1 FROM experiment_consents AS consent "
+        "WHERE consent.assignment_id=a.assignment_id AND consent.consent_version=" + marker
+        + ") AS consent_accepted,"
+        "progress.status AS active_stage_status,"
+        "progress.current_run_id AS active_run_id,"
+        "instrument.instrument_code AS active_instrument_code,"
+        "trial.* "
+        "FROM experiment_assignments AS a "
+        "JOIN participants AS p ON p.participant_id=a.participant_id "
+        "JOIN study_participations AS sp ON sp.participant_id=a.participant_id "
+        "AND sp.study_code=a.study_code "
+        "LEFT JOIN experiment_stage_progress AS progress "
+        "ON progress.participation_id=sp.participation_id AND progress.stage_code='ultimatum' "
+        "LEFT JOIN instrument_runs AS active_run ON active_run.run_id=progress.current_run_id "
+        "LEFT JOIN instrument_versions AS instrument "
+        "ON instrument.instrument_version_id=active_run.instrument_version_id "
+        "LEFT JOIN ultimatum_trials AS trial ON trial.round_id=" + marker
+        + " AND trial.run_id=" + marker
+        + " WHERE p.participant_code=" + marker
+        + " AND a.invitation_token_hash=" + marker + " AND a.active=1"
+    )
+    row = connection.execute(
+        query,
+        (
+            CONSENT_VERSION,
+            round_id,
+            run_id,
+            normalize_participant_code(participant_code),
+            token_hash,
+        ),
+    ).fetchone()
+    if not row:
+        raise HTTPException(403, "کد شرکت‌کننده یا لینک اختصاصی معتبر نیست.")
+    if not bool(row["consent_accepted"]):
+        raise HTTPException(403, "رضایت برای مشارکت ثبت نشده است.")
+    if row["active_stage_status"] != "in_progress" or row["active_run_id"] != run_id:
+        raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
+    if row["active_instrument_code"] != "ultimatum":
+        raise HTTPException(409, "شناسهٔ اجرای اولتیماتوم معتبر نیست.")
+    if row["round_id"] is None:
+        raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
+
+    joined = dict(row)
+    assignment = {
+        key: joined[key]
+        for key in (
+            "assignment_id",
+            "study_code",
+            "participant_id",
+            "condition_code",
+            "workflow_json",
+            "participation_id",
+            "participant_code",
+        )
+    }
+    trial_columns = (
+        "round_id",
+        "run_id",
+        "phase",
+        "block_code",
+        "block_order",
+        "trial_in_block",
+        "trial_sequence",
+        "role",
+        "opponent_condition",
+        "opponent_actual_type",
+        "status",
+        "participant_share",
+        "opponent_share",
+        "participant_decision",
+        "opponent_decision",
+        "accepted",
+        "points_earned",
+        "potential_points_lost",
+        "reaction_time_ms",
+        "wait_duration_ms",
+        "started_at",
+        "decision_screen_shown_at",
+        "responded_at",
+        "received_at",
+        "completed_at",
+        "payload",
+    )
+    record = {key: joined[key] for key in trial_columns}
+    return assignment, record
+
 
 def _validate_event_timestamps(events: dict[str, str], allowed: frozenset[str]) -> None:
     unknown = set(events) - allowed
@@ -2380,16 +2486,10 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
         )
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
+        stage_state = _active_ultimatum_stage_state(
+            connection, assignment["participation_id"], data.run_id
+        )
         marker = "%s" if DATABASE_URL else "?"
-        stage_state = connection.execute(
-            "SELECT draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code='ultimatum' "
-            "AND current_run_id=" + marker + " AND status='in_progress'",
-            (assignment["participation_id"], data.run_id),
-        ).fetchone()
-        if not stage_state:
-            raise HTTPException(409, "اجرای فعال اولتیماتوم پیدا نشد.")
         run_draft = _json_value(stage_state["draft_payload"])
         server_block_order = run_draft.get("block_order")
 
@@ -2570,18 +2670,14 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
     _validate_event_timestamps(data.client_event_timestamps, ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS)
     with conn() as connection:
-        assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+        assignment, record = _lookup_active_ultimatum_round(
+            connection,
+            data.invitation_token,
+            data.participant_code,
+            data.run_id,
+            data.round_id,
         )
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
         marker = "%s" if DATABASE_URL else "?"
-        row = connection.execute(
-            "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
-            (data.round_id, data.run_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
-        record = dict(row)
 
         def stored_resolve_result(completed_record: dict[str, Any]) -> dict[str, Any]:
             saved_payload = _json_value(completed_record["payload"])
@@ -2736,16 +2832,13 @@ def record_ultimatum_events(data: UltimatumEventsIn):
     _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+        _assignment, row = _lookup_active_ultimatum_round(
+            connection,
+            data.invitation_token,
+            data.participant_code,
+            data.run_id,
+            data.round_id,
         )
-        _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
-        row = connection.execute(
-            "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
-            (data.round_id, data.run_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "دور اولتیماتوم پیدا نشد.")
         if row["status"] != "completed":
             raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
         payload = _json_value(row["payload"])
