@@ -34,9 +34,21 @@ const blocks = {
   responder_coworker: "responder"
 };
 
-export const options = {
-  scenarios: {
-    full_participant_workflow: {
+const loadProfile = String(__ENV.LOAD_PROFILE || "ramp").toLowerCase();
+if (!["ramp", "burst"].includes(loadProfile)) {
+  throw new Error("LOAD_PROFILE must be either ramp or burst.");
+}
+
+const fullWorkflowScenario = loadProfile === "burst"
+  ? {
+      executor: "per-vu-iterations",
+      vus: expectedUsers,
+      iterations: 1,
+      maxDuration: "8m",
+      gracefulStop: "30s",
+      exec: "participantFlow"
+    }
+  : {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
@@ -48,7 +60,11 @@ export const options = {
       ],
       gracefulRampDown: "30s",
       exec: "participantFlow"
-    }
+    };
+
+export const options = {
+  scenarios: {
+    full_participant_workflow: fullWorkflowScenario
   },
   thresholds: {
     http_req_failed: ["rate<0.001"],
