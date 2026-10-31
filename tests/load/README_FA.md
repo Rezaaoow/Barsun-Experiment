@@ -53,7 +53,33 @@ k6 را روی کامپیوتر جداگانه نصب کنید. سپس از ری
 
 هر شرکت‌کننده حدود ۱۱۱ درخواست API تولید می‌کند: ۲۵ پاسخ پرسشنامه، ۳۰ trial در دو batch Life-Trade، ۲۲ دور Ultimatum با سه درخواست در هر دور، به‌علاوهٔ consent/identify، شروع و تکمیل مراحل و ۹ درخواست time tracking (سه start، سه heartbeat و سه complete). برای ۶۰۰ نفر حدود ۶۶٬۶۰۰ درخواست است. این تعداد برآورد استاتیک از خود سناریوست، نه اندازه‌گیری انجام‌شده روی هاست.
 
-## ۴. معنای سناریو و محدودیت‌ها
+## ۴. دو پروفایل بار
+
+هر profile باید با یک cohort جدا اجرا شود. generator برای هر اجرا شناسهٔ تصادفی به participant code اضافه می‌کند؛ بنابراین می‌توانید دو فایل مستقل بسازید.
+
+**Ramp-up تدریجی:** `LOAD_PROFILE=ramp`؛ از ۱۰۰ به ۳۰۰ و سپس ۶۰۰ VU می‌رسد و ظرفیت را سه دقیقه در سطح ۶۰۰ نگه می‌دارد. دستور بالا همین profile را اجرا می‌کند.
+
+**Burst تقریباً هم‌زمان:** cohort دوم را با فایل جدا بسازید:
+
+    BASE_URL="https://staging.example.org/lifetrade" \\
+    ADMIN_TOKEN="..." \\
+    LOAD_TEST_CONFIRM="I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT" \\
+    LOAD_TEST_USERS=600 \\
+    PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \\
+    python3 tests/load/create_load_test_users.py
+
+سپس اجرا کنید:
+
+    k6 run \\
+      -e BASE_URL="https://staging.example.org/lifetrade" \\
+      -e PARTICIPANTS_FILE="$PWD/tests/load/participants-burst.json" \\
+      -e EXPECTED_USERS=600 \\
+      -e LOAD_PROFILE=burst \\
+      tests/load/k6_experiment.js
+
+پروفایل burst از executor نوع per-vu-iterations با ۶۰۰ VU و یک iteration برای هر VU استفاده می‌کند و برای تکمیل حداکثر ۸ دقیقه فرصت دارد. ramp-up و burst را هم‌زمان اجرا نکنید؛ آن‌ها را در دو اجرای مستقل و با دو cohort جدا بسنجید.
+
+## ۵. معنای سناریو و محدودیت‌ها
 
 این آزمون UI مرورگر، رندر، موبایل، زمان تصمیم‌گیری و انتظارهای عمدی بازی را شبیه‌سازی نمی‌کند. همچنین APIها را سریع‌تر از رفتار طبیعی کاربران پشت سر هم فراخوانی می‌کند؛ بنابراین یک آزمون فشار backend است، نه شبیه‌سازی کامل تجربهٔ انسانی.
 
@@ -64,7 +90,7 @@ k6 را روی کامپیوتر جداگانه نصب کنید. سپس از ری
 - HTTP error rate، p50، p95، p99 و تعداد شرکت‌کنندگان تکمیل‌شده؛
 - تعداد رکوردها و صحت کامل شدن ۲۵ پاسخ پرسشنامه، ۳۰ trial آزمایشی DD و ۲۲ دور Ultimatum برای هر شرکت‌کننده.
 
-## ۵. معیار اولیه
+## ۶. معیار اولیه
 
 k6 در این فایل این thresholdها را اعمال می‌کند:
 - خطای HTTP کمتر از ۰٫۱٪؛
