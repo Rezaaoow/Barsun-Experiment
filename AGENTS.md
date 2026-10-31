@@ -51,7 +51,7 @@ See `docs/AI_HANDOFF_FA.md` before writing any deploy command.
 
 - Modules: questionnaire, DD/Life-Trade, Ultimatum. Server owns identity, assignment, consent, workflow order, active attempts, scoring, and persistence.
 - Participant interface is Persian/RTL. Do not expose experiment internals, Frame/Control, block labels, or admin information on participant screens unless requested.
-- Welcome heading currently approved: «بازی باشگاه رانندگان بارسان».
+- Welcome heading currently approved: «به برنامهٔ پژوهشی بارسان خوش آمدید». Its ordered stages must be fetched from `/api/experiment/workflow?invite=...` and mapped to participant-facing labels only: `questionnaire → پرسشنامه`, `dd_lifetrade → بازی انتخاب`, and all Ultimatum variants → `بازی باشگاه رانندگان بارسان`. Never expose module codes, Frame/Control names, or descriptions. For the legacy default flow, include the Ultimatum stage after questionnaire and DD/Life-Trade because the legacy participant journey starts it automatically after DD.
 - Ultimatum opponent parameters and the apparent-coworker manipulation are provisional; never claim ethics approval. Require investigator/ethics confirmation before changing protocol or representing it as production-approved.
 
 ## Runtime / CI
