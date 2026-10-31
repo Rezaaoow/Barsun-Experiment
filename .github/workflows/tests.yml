@@ -51,6 +51,14 @@ jobs:
           PY
           node --check /tmp/lifetrade-inline.js
           node --check /tmp/admin-links-inline.js
+      - name: Validate staging load-test scripts
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          ast.parse(Path("tests/load/create_load_test_users.py").read_text(encoding="utf-8"))
+          PY
+          node --input-type=module --check < tests/load/k6_experiment.js
       - name: Run SQLite API regression tests
         run: pytest -q
       - name: Run PostgreSQL integration smoke test
