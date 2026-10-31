@@ -151,7 +151,7 @@
 | ممیزی UI و نحوهٔ ارسال درخواست‌ها | بررسی اولیه انجام شده |
 | ثبت مشخصات اسمی هاست | ثبت شده؛ جزییات Passenger و DB منتظر خروجی diagnostics |
 | بهینه‌سازی کد اجرایی | دو پاس Backend در PR #17 پیاده‌سازی و در CI تست شده‌اند: query consolidation، time tracking اتمیک و grouped aggregation |
-| تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۶۰ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
+| تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۶۱ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
 | ابزار load test با ۶۰۰ VU | آماده: دو profile مجزای ramp و burst؛ هنوز اجرا نشده |
 | تأیید آمادگی production | انجام نشده |
 
