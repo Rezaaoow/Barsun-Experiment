@@ -2283,21 +2283,19 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
 
 
 def _active_ultimatum_run(connection: Any, participation_id: str, run_id: str) -> None:
+    """Validate attempt state and instrument identity with one indexed database round-trip."""
     marker = "%s" if DATABASE_URL else "?"
     state = connection.execute(
-        "SELECT status,current_run_id FROM experiment_stage_progress "
-        "WHERE participation_id=" + marker + " AND stage_code='ultimatum'",
+        "SELECT sp.status,sp.current_run_id,iv.instrument_code "
+        "FROM experiment_stage_progress sp "
+        "LEFT JOIN instrument_runs ir ON ir.run_id=sp.current_run_id "
+        "LEFT JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
+        "WHERE sp.participation_id=" + marker + " AND sp.stage_code='ultimatum'",
         (participation_id,),
     ).fetchone()
     if not state or state["status"] != "in_progress" or state["current_run_id"] != run_id:
         raise HTTPException(409, "این اجرای اولتیماتوم دیگر فعال نیست.")
-    instrument = connection.execute(
-        "SELECT iv.instrument_code FROM instrument_runs ir "
-        "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
-        "WHERE ir.run_id=" + marker,
-        (run_id,),
-    ).fetchone()
-    if not instrument or instrument["instrument_code"] != "ultimatum":
+    if state["instrument_code"] != "ultimatum":
         raise HTTPException(409, "شناسهٔ اجرای اولتیماتوم معتبر نیست.")
 
 
