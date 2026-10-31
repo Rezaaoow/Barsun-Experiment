@@ -1,0 +1,356 @@
+# BarSan Experiment — راهنمای جامع انتقال دانش و عملیات
+
+> سند مرجع برای عامل هوش مصنوعی/توسعه‌دهنده‌ای که بدون تاریخچهٔ مکالمه وارد پروژه می‌شود. این snapshot بر اساس شواهد بررسی‌شده تا ۳۱ اکتبر ۲۰۲۶ است؛ قبل از هر عملیات، وضعیت فعلی GitHub، CI و هاست را دوباره بررسی کنید.
+
+## 1. ترتیب شروع کار
+
+1. `AGENTS.md` را بخوانید.
+2. `README_FA.md` را بخوانید.
+3. همین سند را بخوانید؛ به‌خصوص مسیرهای واقعی Passenger و سابقهٔ خطای deploy.
+4. برای جزئیات رفتار پژوهش و schema به `EXPERIMENT_ARCHITECTURE.md` و `DATABASE_ARCHITECTURE.md` رجوع کنید.
+5. برای تغییر URL عمومی فقط، `CPANEL_RENAME.md` را بررسی کنید.
+6. قبل از تغییر، branch، `git status`، آخرین SHA شاخهٔ `main`، فایل‌های واقعی و CI همان SHA را بررسی کنید.
+
+قاعدهٔ توسعهٔ اجباری پروژه: **اول README و مستند مرتبط را به‌روز کنید، سپس کد را تغییر دهید؛ مستندات، کد و تست مرتبط باید در یک commit/PR منسجم باشند.** بعد از تغییر، تست‌ها و CI همان SHA را بررسی کنید. GitHub merge مساوی deploy نیست و deploy مساوی live verification نیست.
+
+## 2. ماهیت محصول
+
+BarSan Experiment سامانهٔ پژوهشی آنلاین با Python/FastAPI، رابط Persian RTL و PostgreSQL برای production است. سه ماژول مستقل در یک workflow مشترک دارد:
+
+1. **Questionnaire:** پرسشنامهٔ ۲۵ سؤالی؛ یک سؤال در هر صفحه؛ پاسخ‌ها با کد داخلی سؤال ذخیره می‌شوند و draft قابل بازیابی است.
+2. **DD / Life-Trade:** تسک تأخیر در پاداش در برابر معاملهٔ زمان زندگی؛ داده‌های قدیمی این ماژول باید سازگار باقی بمانند.
+3. **Ultimatum Game:** دو دور تمرین و چهار بلوک اصلی پنج‌دوری (۲۰ دور اصلی).
+
+ترتیب اصلی مستندشده: `questionnaire → dd_lifetrade → ultimatum`. Backend مرجع نهایی identity، invitation، condition، consent، workflow sequence، active attempt، scoring و persistence است؛ به مقادیر حساس/شرطی ارسالی از مرورگر اعتماد نکنید.
+
+پنل admin در `/admin` و `/admin/links` است و عملیات حساس آن با header `X-Admin-Token` محافظت می‌شود.
+
+## 3. نقشهٔ فایل‌های مهم
+
+| مسیر مخزن | کاربرد |
+|---|---|
+| `barsan_experiment.py` | Backend canonical، FastAPI، DB، APIها، workflow و homepage loader |
+| `main.py` | ورودی سازگاری؛ `app` را از `barsan_experiment` می‌گیرد؛ cPanel فعلی همین import را انجام می‌دهد |
+| `app.py` | ورودی سازگاری دوم برای `app:app` |
+| `app/index.html` | رابط شرکت‌کننده و JavaScript ماژول‌ها |
+| `app/admin-links.html` | پنل مدیریت لینک |
+| `app/conditions.json` | پیکربندی condition |
+| `app/Stimuli/` | محرک‌های تصویری DD/Life-Trade؛ runtime assets |
+| `tests/test_api.py` | API regression |
+| `tests/test_workflow.py` | workflow و assignment |
+| `tests/test_ultimatum.py` | Ultimatum |
+| `tests/test_admin_links.py` | admin links و تفکیک scope |
+| `tests/test_participant_ui.py` | copy و UI regression |
+| `tests/postgres_smoke.py` | PostgreSQL integration/concurrency |
+| `.github/workflows/tests.yml` | CI |
+| `requirements.txt`, `requirements-dev.txt` | runtime/dev dependencies |
+| `EXPERIMENT_ARCHITECTURE.md` | جریان آزمایش |
+| `DATABASE_ARCHITECTURE.md` | schema و روابط |
+| `CPANEL_RENAME.md` | راهنمای تغییر URL |
+| `README_FA.md` | راهنمای کلی |
+| `AGENTS.md` | دستورالعمل AI agents |
+| `docs/AI_HANDOFF_FA.md` | این راهنمای عملیاتی |
+
+ممکن است در مخزن `lifetrade.sqlite3`، `__pycache__` و فایل‌های محلی/تولیدی وجود داشته باشد. وجود آن‌ها مجوز انتشار به production نیست. SQLite را به PostgreSQL کپی نکنید.
+
+## 4. رفتار پژوهش و ملاحظات داده
+
+### Assignment و invitation
+- Frame/Control در پنل مدیریت به کدهای A/B نگاشت می‌شوند: `Frame → A` و `Control → B` (بر اساس README و کد موجود، در هر تغییر مجدداً بررسی شود).
+- برای هر assignment لینک token opaque ساخته می‌شود. condition از query parameter مرورگر پذیرفته نمی‌شود؛ از دیتابیس resolve می‌شود.
+- token خام برای اعتبارسنجی به‌صورت SHA-256 hash نگهداری می‌شود و نسخهٔ URL قابل‌بازیابی با Fernet رمزنگاری می‌شود.
+- شرکت‌کننده باید invitation token و participant code متناظر را وارد کند.
+- رضایت با consent version و timestamp سمت سرور ثبت می‌شود و دسترسی به مراحل نیازمند رضایت معتبر است.
+
+### Attempts و exports
+- پاسخ پرسشنامه با question code داخلی در `questionnaire_responses` ذخیره می‌شود؛ draft برای ادامه قابل بازیابی است.
+- تلاش ناقص DD/Life-Trade یا Ultimatum با حذف داده حل نمی‌شود: attempt قبلی `superseded` می‌شود و attempt جدید ساخته می‌شود. دادهٔ قبلی برای audit حفظ می‌شود.
+- stage completion در سرور نگهداری می‌شود؛ stage تکمیل‌شده نباید دوباره اجرا شود.
+- دادهٔ Ultimatum در `ultimatum_trials` است و نباید با `lifetrade_trials` مخلوط شود.
+- test studyها با prefix `barsan-test-` از main جدا هستند. synthetic prerequisite rows با `test_prerequisite=true` مشاهدهٔ رفتاری واقعی نیستند. خروجی‌ها را با `scope=main|test` جدا نگه دارید.
+
+### Ultimatum: فرض‌های موقت
+مستندات فعلی چهار بلوک proposer/agent، responder/agent، proposer/coworker و responder/coworker را شرح می‌دهند؛ هر بلوک پنج دور اصلی دارد و دو دور تمرین جدا هستند. پارامترهای مدل تصمیم opponent و نمایش coworker حاضر در سالن، فرض‌های موقت‌اند. در شرط coworker رابط فرد حاضر را نشان می‌دهد اما تصمیم در کد فعلی توسط الگوریتم سمت سرور تولید می‌شود. هیچ عامل یا توسعه‌دهنده‌ای نباید این دستکاری را اخلاقاً تأییدشده معرفی کند یا بدون پژوهشگر تغییر دهد. تأیید پروتکل، الگوریتم و debriefing با مسئول پژوهش/کمیتهٔ اخلاق است.
+
+## 5. معماری واقعی cPanel / Passenger — حیاتی
+
+### مسیرهای تأییدشده
+
+| مورد | مقدار مشاهده‌شده |
+|---|---|
+| Public URL | `https://my-experiment.ir/lifetrade/` |
+| API health | `https://my-experiment.ir/lifetrade/api/health` |
+| Passenger Application Root | `/home/myexperi/lifetrade` |
+| Git clone | `/home/myexperi/lifetrade/repo` |
+| Passenger bootstrap | `/home/myexperi/lifetrade/passenger_wsgi.py` |
+| active `.htaccess` | `/home/myexperi/public_html/lifetrade/.htaccess` |
+| Python virtualenv | `/home/myexperi/virtualenv/lifetrade/3.12/bin/python` |
+| Restart trigger | `/home/myexperi/lifetrade/tmp/restart.txt` |
+| adapter log | `/home/myexperi/lifetrade/adapter-debug.log` |
+| deploy SSH key path | `/home/myexperi/.ssh/lifetrade_deploy` — مسیر را بدانید، محتوا را هرگز نخوانید/چاپ نکنید |
+| PostgreSQL DB name | `myexperi_lifetrade_study` — نام DB است، نه connection string کامل |
+
+### چرا Application Root مسیر کد فعال نیست؟
+
+فایل واقعی `passenger_wsgi.py` روی هاست مشاهده شده و حاوی این منطق است:
+
+```python
+APP_ROOT = "/home/myexperi/lifetrade/repo"
+sys.path.insert(0, APP_ROOT)
+
+from a2wsgi import ASGIMiddleware
+from main import app as fastapi_app
+```
+
+در نتیجه Passenger bootstrap را از Application Root پیدا می‌کند، اما bootstrap ماژول `main` را از کلون `repo` import می‌کند. `main.py` نیز app را از `barsan_experiment.py` می‌گیرد. در Backend مقدار `ROOT` از مسیر خود `barsan_experiment.py` محاسبه می‌شود؛ بنابراین HTML و Stimuli هم از `repo/app/` خوانده می‌شوند.
+
+ساختار واقعی:
+
+```text
+/home/myexperi/lifetrade/                 # Passenger Application Root
+├── passenger_wsgi.py                     # bootstrap خارج Git؛ بدون دلیل تغییر نده
+├── tmp/restart.txt                       # restart trigger
+├── adapter-debug.log                     # PID/request/status/chunk logs
+└── repo/                                 # Python import root فعال
+    ├── main.py
+    ├── app.py
+    ├── barsan_experiment.py
+    ├── requirements.txt
+    └── app/
+        ├── index.html                    # HTML فعال شرکت‌کننده
+        ├── admin-links.html
+        ├── conditions.json
+        └── Stimuli/
+```
+
+`.htaccess` در `/home/myexperi/public_html/lifetrade/` در snapshot چنین تنظیمی داشت:
+
+```apache
+PassengerAppRoot "/home/myexperi/lifetrade"
+PassengerBaseURI "/lifetrade"
+PassengerPython "/home/myexperi/virtualenv/lifetrade/3.12/bin/python"
+```
+
+دایرکتوری `/home/myexperi/public_html/lifetrade/` در بررسی انجام‌شده فقط `.htaccess` داشت و فایل index استاتیک دیده نشد؛ صفحه از Passenger ارائه می‌شود.
+
+### مسیر انتشار درست و غلط
+
+| کار | درست | اشتباه |
+|---|---|---|
+| Backend | `/home/myexperi/lifetrade/repo/barsan_experiment.py` | `/home/myexperi/lifetrade/barsan_experiment.py` |
+| entry point | `/home/myexperi/lifetrade/repo/main.py` | `/home/myexperi/lifetrade/main.py` |
+| participant HTML | `/home/myexperi/lifetrade/repo/app/index.html` | `/home/myexperi/lifetrade/app/index.html` |
+| app assets | `/home/myexperi/lifetrade/repo/app/` | `/home/myexperi/lifetrade/app/` |
+
+**هر deploy به parent Application Root در این میزبانی می‌تواند فایل‌های غیر فعال را عوض کند و سایت را به‌روز نکند.** این تفاوت مهم‌ترین علت خطای deploy قبلی بوده است.
+
+### Homepage cache و restart
+
+در `barsan_experiment.py` تابع `load_homepage()` با `@lru_cache(maxsize=1)` تعریف شده و `ROOT/app/index.html` را می‌خواند. تغییر فایل بدون restart ممکن است در پاسخ Passenger دیده نشود. بعد از انتشار:
+
+```bash
+touch /home/myexperi/lifetrade/tmp/restart.txt
+```
+
+### Adapter log
+
+`passenger_wsgi.py` از `a2wsgi.ASGIMiddleware` استفاده می‌کند و در این فایل log می‌نویسد:
+
+```bash
+tail -n 100 /home/myexperi/lifetrade/adapter-debug.log
+```
+
+اطلاعات مشاهده‌شده: PID، event-loop state، method، `SCRIPT_NAME`، `PATH_INFO`، response status و اندازهٔ chunk. اگر صفحه زنده قدیمی است، log و PID را با درخواست تازه تطبیق دهید؛ صرفاً cache را مقصر فرض نکنید.
+
+## 6. محیط و secrets
+
+| متغیر | معنا |
+|---|---|
+| `DATABASE_URL` | connection string کامل PostgreSQL؛ secret |
+| `ADMIN_TOKEN` | توکن API مدیریت؛ secret |
+| `STUDY_CODE` | شناسه مطالعه؛ default `main-study` |
+| `PUBLIC_EXPERIMENT_URL` | base URL ساخت لینک دعوت؛ در snapshot مقدارش خالی نبود، اما دوباره بررسی شود |
+| `DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE` | تنظیمات اندازه pool |
+| `DB_POOL_TIMEOUT`, `DB_POOL_MAX_WAITING` | timeout/صف pool |
+| `DB_CONNECT_TIMEOUT` | timeout اتصال DB |
+| `SQLITE_BUSY_TIMEOUT_MS` | timeout SQLite |
+
+Python مجازی cPanel مسیر بالا و Python 3.12 است؛ CI نیز 3.12 دارد. `requirements.txt` شامل FastAPI، Uvicorn، psycopg، psycopg-pool، a2wsgi و cryptography است؛ نسخهٔ دقیق را همیشه از فایل فعلی بخوان. `requirements-dev.txt` شامل pytest و httpx است.
+
+`Procfile` و `render.yaml` برای اجرای Uvicorn/Render هستند؛ این‌ها نحوهٔ اجرای Passenger cPanel را تعیین نمی‌کنند. فقط اگر requirements تغییر کرده، dependency را در virtualenv واقعی نصب کن.
+
+ممنوع: درخواست/چاپ/ثبت مقدار secretها، invitation token خام، SSH private key، Fernet key. فایل `.barsan_invitation_tokens.key` باید بیرون Git و web root باقی بماند؛ از دست رفتنش می‌تواند URLهای رمزنگاری‌شدهٔ قدیمی را غیرقابل بازیابی کند.
+
+## 7. ایمنی دیتابیس
+
+- PostgreSQL برای production است؛ SQLite برای local/test.
+- DB name شناخته‌شده `myexperi_lifetrade_study` به‌تنهایی `DATABASE_URL` نیست.
+- `init_db()` هنگام import/startup اجرا می‌شود؛ schema initialization فعلی از `CREATE TABLE IF NOT EXISTS` و `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` استفاده می‌کند. هر تغییر باید دقیقاً بررسی شود.
+- Rollback فایل‌ها migration/DDL را rollback نمی‌کند.
+- `POST /api/admin/maintenance/reset` destructive است؛ فقط پس از backup مستقل، preview scoped و تأیید صریح.
+- در deploy عادی هیچ `DROP`، `DELETE`، reset، re-seed یا انتقال SQLite اجرا نکن.
+- جدول‌های اصلی شامل `studies`، `participants`، `study_participations`، `experiment_assignments`، `experiment_consents`، `experiment_stage_progress`، `study_workflows`، `experiment_workflow_progress`، `experiment_time_tracking`، `instrument_runs`، `lifetrade_trials`، `questionnaire_responses` و `ultimatum_trials` هستند. جزئیات دقیق در `DATABASE_ARCHITECTURE.md`.
+
+## 8. سابقهٔ خطای deploy — حتماً قبل از deploy بخوان
+
+در تلاش قبلی، اسکریپت runtime files را در `/home/myexperi/lifetrade/` کپی کرد. این اشتباه بود، چون `passenger_wsgi.py` از `/home/myexperi/lifetrade/repo/` import می‌کند.
+
+نتایج مشاهده‌شده:
+- دریافت commit و staging موفق شد.
+- فایل‌ها به مسیر parent Application Root رفتند، نه مسیر فعال clone.
+- API health HTTP 200 و `database_connected=true` بود؛ این به معنی درست بودن HTML فعال نبود.
+- صفحهٔ زنده همچنان welcome copy قدیمی را برمی‌گرداند و markerهای `ut-final-score-box` و متن جدید پایان تمرین را نداشت.
+- live HTML verification شکست خورد و script فایل‌های parent را از backup restore کرد.
+- بررسی `passenger_wsgi.py` مسیر active runtime را قطعی کرد: `/home/myexperi/lifetrade/repo/`.
+
+بنابراین deploy بعدی باید در `repo/` باشد. snapshot آخر ۳۱ اکتبر ۲۰۲۶ هنوز live page قدیمی را نشان می‌داد؛ این سند **ادعا نمی‌کند** که انتشار درست بعدی انجام شده است. وضعیت live را با درخواست تازه verify کنید.
+
+## 9. Runbook انتشار امن
+
+### قبل از انتشار
+- SHA فعلی `main` را بخوان و commit/PR مقصد را بررسی کن.
+- CI موفق همان SHA را تأیید کن.
+- مسیرهای cPanel و `passenger_wsgi.py` را دوباره بررسی کن؛ اگر تغییر کرده‌اند، این سند را نیز به‌روزرسانی کن.
+- از runtime فعال در `/home/myexperi/lifetrade/repo/` backup بگیر.
+- اگر schema تغییر می‌کند، backup مستقل PostgreSQL بگیر.
+- بررسی کن `requirements.txt` تغییر کرده یا خیر.
+
+### بستهٔ runtime
+برای کد فعلی عموماً این‌ها از commit دقیق منتشر می‌شوند:
+- `app.py`
+- `main.py`
+- `barsan_experiment.py`
+- `requirements.txt` (نصب dependency فقط در صورت نیاز)
+- کل `app/` شامل `index.html`، `admin-links.html`، `conditions.json` و `Stimuli/`
+
+از commit SHA دقیق archive بساز؛ کل working tree را کورکورانه کپی نکن. `tests/` و docs در runtime لازم نیستند. `lifetrade.sqlite3`، `.git/`، `__pycache__/`، secrets، `passenger_wsgi.py`، `.htaccess` و virtualenv را در release package وارد نکن. از `rsync --delete` استفاده نکن مگر فایل‌های local بررسی شده باشند.
+
+### توالی انتشار
+1. stage directory بساز و archive دقیق SHA را استخراج کن.
+2. فایل‌های ضروری و markerهای نسخه را پیش از انتشار بررسی کن.
+3. از فایل‌های فعال `repo/` backup قابل خواندن بگیر.
+4. runtime files را در **`/home/myexperi/lifetrade/repo/`** جایگزین کن.
+5. app assets را همگام کن؛ فایل local را بدون بررسی حذف نکن.
+6. `touch /home/myexperi/lifetrade/tmp/restart.txt`.
+7. `/lifetrade/api/health` را بررسی کن؛ JSON باید `ok: true` و `database_connected: true` داشته باشد.
+8. HTML زنده را با query یکتا و `Cache-Control: no-cache` بگیر و markerهای مشخص commit همان release را بررسی کن.
+9. اگر هر check شکست خورد، backup runtime را restore و Passenger را restart کن؛ ابتدا علت را پیدا کن، سپس retry.
+
+### Health / Live checks
+
+```bash
+curl -i --max-time 20 https://my-experiment.ir/lifetrade/api/health
+```
+
+```bash
+curl -sS -L --compressed --max-time 30 \
+  -H 'Cache-Control: no-cache, no-store' \
+  -o /tmp/barsan-live.html \
+  -w 'HTTP %{http_code} | %{size_download} bytes\n' \
+  "https://my-experiment.ir/lifetrade/?deploy_check=UNIQUE_VALUE"
+
+grep -F 'ut-final-score-box' /tmp/barsan-live.html
+grep -F 'دور‌های تمرینی به پایان رسید' /tmp/barsan-live.html
+```
+
+Markerها را با محتوای همان commit تطبیق بده؛ welcome title به‌تنهایی کافی نیست چون نسخهٔ قدیمی نیز نام بارسان را نشان می‌داد. HTTP 200 به‌تنهایی deploy موفق را ثابت نمی‌کند.
+
+### اگر live page قدیمی ماند
+1. `grep` و `sha256sum` روی `/home/myexperi/lifetrade/repo/app/index.html`.
+2. بررسی import pathهای `repo/main.py` و `repo/barsan_experiment.py`.
+3. restart با `tmp/restart.txt`.
+4. بررسی `tail -n 100 /home/myexperi/lifetrade/adapter-debug.log`.
+5. تطبیق PID، `SCRIPT_NAME`، `PATH_INFO` و response status.
+6. خواندن مجدد `.htaccess`؛ آن را بی‌دلیل ویرایش نکن.
+7. تا روشن‌شدن علت، cache را تنها فرضیه ندان و فایل را چندبار کپی نکن.
+
+در cPanel Terminal تمام اسکریپت‌هایی را که `set -e` و `exit` دارند داخل subshell یعنی `( ... )` اجرا کن تا failure ترمینال تعاملی را نبندد. trap باید stage/line/exit code را اعلام کند و پس از شروع انتشار backup را restore کند.
+
+## 10. CI و تست
+
+Workflow: `.github/workflows/tests.yml`
+
+1. Python 3.12.
+2. نصب `requirements.txt` و `requirements-dev.txt`.
+3. استخراج inline JS از `app/index.html` و `app/admin-links.html` و `node --check`.
+4. `pytest -q` (SQLite/API/regression).
+5. `tests/postgres_smoke.py` روی PostgreSQL 16.
+
+در CI run مربوط به merge commit `82d35ced5e63873178511a05334dcecb6f3a8d9c` در ۳۱ اکتبر ۲۰۲۶، conclusion موفق بود و snapshot تست SQLite شامل ۴۶ تست موفق بود. این اطلاعات تاریخی‌اند؛ CI commit جاری را دوباره بررسی کن.
+
+Local:
+
+```bash
+python -m pip install -r requirements.txt -r requirements-dev.txt
+pytest -q
+python tests/postgres_smoke.py
+```
+
+PostgreSQL smoke test فقط با دیتابیس disposable تست اجرا شود، نه connection string production.
+
+## 11. API و پنل admin
+
+Admin header:
+
+```text
+X-Admin-Token: <ADMIN_TOKEN>
+```
+
+Endpointهای مستندشده:
+- `GET /api/health`
+- `POST /api/admin/assignments`
+- `GET /api/admin/assignments`
+- `POST /api/admin/assignments/status`
+- `POST /api/admin/assignments/delete-inactive` (destructive)
+- `POST /api/admin/assignments/reissue-link`
+- `POST /api/admin/test-links`
+- `POST /api/admin/module-test-links`
+- `GET /api/admin/progress?scope=main|test`
+- `GET /api/admin/questionnaire/export.csv?scope=main|test`
+- `GET /api/admin/export.csv?scope=main|test`
+- `GET /api/admin/ultimatum/export.csv?scope=main|test`
+- `GET /api/admin/export-all.zip?scope=main|test`
+- `GET /api/admin/maintenance/preview?scope=main|test`
+- `POST /api/admin/maintenance/reset` (destructive)
+
+پنل `/admin` و `/admin/links` است. خروجی main و test را مخلوط نکن. synthetic prerequisiteهای test، behavioral data واقعی نیستند.
+
+## 12. رابط شرکت‌کننده و copy مصوب
+
+صفحهٔ خوش‌آمدگویی باید فقط عنوان «بازی باشگاه رانندگان بارسان» و دکمهٔ «ادامه» داشته باشد. جزئیات داخلی آزمایش، Ultimatum، Frame/Control، تعداد مراحل و نام بلوک‌ها نباید در welcome ظاهر شوند.
+
+Copy مهم:
+- معرفی: «شما در این بازی برای کسب امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید.»
+- نقش‌ها: «پیشنهاد دهنده» و «پاسخ دهنده».
+- آموزش تمرین: «قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود اما امتیازها و داده‌های این دو دور در امتیاز نهایی و برنامه پژوهشی لحاظ نمی‌شوند.»
+- پایان تمرین: «دور‌های تمرینی به پایان رسید. الان بازی اصلی شروع می‌شود.»
+- خلاصه: «در ۵ دور قبلی شما:» به‌همراه دو شاخص امتیاز به‌دست‌آمده و امتیاز ازدست‌رفته.
+- دکمهٔ گذار: «دور بعدی».
+- صفحهٔ پایانی: یک عنوان «امتیاز نهایی» و باکس امتیاز بسیار بزرگ.
+- پیام پایان: «بارسانی عزیز، بازی و برنامه ‌پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل خواهد شد.»
+
+UI فارسی/RTL، متن‌های تعاملی وسط‌چین و عددهای امتیاز خوانا و بزرگ باشند. حذف یک پاراگراف خاص consent به معنی حذف توضیحات اخلاق پژوهش و اختیار مشارکت نیست. برای copy تغییر یافته، `tests/test_participant_ui.py` را نیز به‌روز کنید.
+
+## 13. فرض نکنید
+
+- GitHub merge همان cPanel deploy نیست.
+- HTTP 200 به معنی DB health یا version-correct HTML نیست.
+- Passenger Application Root همان Python import root نیست.
+- `/home/myexperi/lifetrade/app/` مسیر HTML فعال نیست.
+- نام دیتابیس همان `DATABASE_URL` نیست.
+- `Procfile` / `render.yaml` پیکربندی Passenger نیستند.
+- rollback فایل‌ها DDL دیتابیس را rollback نمی‌کند.
+- healthcheck موفق به معنی تأیید پروتکل اخلاقی، UX کامل یا آماده‌بودن برای جمع‌آوری نهایی نیست.
+- دسترسی GitHub به معنی SSH مستقیم به هاست نیست؛ عامل AI باید از کاربر خروجی command بگیرد و هرگز secret درخواست نکند.
+
+## 14. Snapshot تاریخی و موارد باز
+
+تا ۳۱ اکتبر ۲۰۲۶:
+- `main` روی merge commit مربوط به PR شمارهٔ ۱۳ با SHA `82d35ced5e63873178511a05334dcecb6f3a8d9c` بود؛ پیش از اقدام جدید SHA/CI را دوباره بخوانید.
+- PR شمارهٔ ۱۳ شامل README، UI و UI tests بود؛ کد Backend را تغییر نداد.
+- CI مربوط به merge موفق شد.
+- تلاش انتشار قبلی فایل‌ها را در parent Application Root گذاشت؛ live verification شکست خورد و backup restore شد.
+- آخرین HTML زندهٔ مشاهده‌شده هنوز copy قدیمی را داشت. مسیر صحیح runtime کشف شده است؛ **انتشار موفق به `repo/` و تأیید زندهٔ پس از آن هنوز نباید مفروض گرفته شود.**
+- API health و اتصال DB یک بار موفق بررسی شده بود؛ این را جایگزین live HTML verification نکنید.
+
+هر عامل بعدی باید پس از تغییر main، SHA/CI و وضعیت deploy را با شواهد جدید به‌روز کند.
