@@ -138,6 +138,7 @@
 مخزن اکنون ابزار محلی staging-only برای ساخت ۶۰۰ assignment و یک سناریوی k6 برای workflow کامل دارد:
 - `tests/load/create_load_test_users.py` — بررسی health/PostgreSQL، سپس ساخت لینک‌ها با ADMIN_TOKEN محیطی و خروجی خصوصی؛
 - `tests/load/k6_experiment.js` — health preflight، دو profile مستقل ramp و burst تا ۶۰۰ VU، heartbeat و اجرای سه ماژول از طریق API؛
+- `tests/load/host_diagnostics.py` — snapshot read-only از CPU/RAM quota، process limits، pool و PostgreSQL؛
 - `tests/load/README_FA.md` — روش اجرا، ایمنی و تفسیر نتایج.
 
 وجود ابزار به معنی اجرای آزمون یا تأیید ظرفیت نیست. فایل کاربران تولیدی و tokenها نباید commit یا برای محیط اصلی استفاده شوند.
@@ -148,7 +149,7 @@
 |---|---|
 | ممیزی ساختار Backend و APIها | بررسی اولیه انجام شده |
 | ممیزی UI و نحوهٔ ارسال درخواست‌ها | بررسی اولیه انجام شده |
-| ثبت مشخصات هاست | ثبت شده؛ جزییات process/DB هنوز نامشخص |
+| ثبت مشخصات اسمی هاست | ثبت شده؛ جزییات Passenger و DB منتظر خروجی diagnostics |
 | بهینه‌سازی کد اجرایی | دو پاس Backend در PR #17 پیاده‌سازی و در CI تست شده‌اند: query consolidation، time tracking اتمیک و grouped aggregation |
 | تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۵۶ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
 | ابزار load test با ۶۰۰ VU | آماده: دو profile مجزای ramp و burst؛ هنوز اجرا نشده |
