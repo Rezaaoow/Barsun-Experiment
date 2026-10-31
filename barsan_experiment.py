@@ -603,6 +603,23 @@ def _seed_registry(connection: Any) -> None:
                 "INSERT OR IGNORE INTO instruments(instrument_code,instrument_name,created_at) VALUES(?,?,?)",
                 (instrument_code, instrument_name, now()),
             )
+    # These version rows are fixed by the deployed protocol. Seed them at process
+    # initialization so participant stage-start requests need only one indexed SELECT.
+    for stage_code, (instrument_code, version, _instrument_name) in STAGE_TO_INSTRUMENT.items():
+        settings = {"module": stage_code, "schema_version": 1}
+        if DATABASE_URL:
+            connection.execute(
+                "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
+                (str(uuid.uuid4()), instrument_code, version, Jsonb(settings), now()),
+            )
+        else:
+            connection.execute(
+                "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (str(uuid.uuid4()), instrument_code, version, json.dumps(settings, ensure_ascii=False), now()),
+            )
+
     if DATABASE_URL:
         connection.execute(
             "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
@@ -1269,6 +1286,53 @@ def _get_stage_rows(connection: Any, participation_id: str) -> dict[str, dict[st
         (participation_id,),
     ).fetchall()
     return {row["stage_code"]: dict(row) for row in rows}
+
+
+def _lookup_questionnaire_assignment_state(
+    connection: Any,
+    invitation_token: str,
+    participant_code: str,
+    step_id: str | None = None,
+) -> dict[str, Any]:
+    """Resolve invitation, consent and questionnaire progress in one indexed read."""
+    token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+    query = (
+        "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
+        "sp.participation_id,p.participant_code,"
+        "EXISTS(SELECT 1 FROM experiment_consents ec "
+        "WHERE ec.assignment_id=a.assignment_id AND ec.consent_version=" + marker
+        + ") AS consent_accepted,"
+        "progress.status AS questionnaire_status,"
+        "progress.current_run_id AS questionnaire_run_id,"
+        "progress.draft_payload AS questionnaire_draft_payload,"
+        "workflow.status AS workflow_status,"
+        "workflow.current_run_id AS workflow_run_id "
+        "FROM experiment_assignments a "
+        "JOIN participants p ON p.participant_id=a.participant_id "
+        "JOIN study_participations sp ON sp.participant_id=a.participant_id "
+        "AND sp.study_code=a.study_code "
+        "LEFT JOIN experiment_stage_progress progress "
+        "ON progress.participation_id=sp.participation_id AND progress.stage_code='questionnaire' "
+        "LEFT JOIN experiment_workflow_progress workflow "
+        "ON workflow.assignment_id=a.assignment_id AND workflow.step_instance_id=" + marker
+        + " WHERE p.participant_code=" + marker
+        + " AND a.invitation_token_hash=" + marker + " AND a.active=1"
+    )
+    row = connection.execute(
+        query,
+        (
+            CONSENT_VERSION,
+            step_id,
+            normalize_participant_code(participant_code),
+            token_hash,
+        ),
+    ).fetchone()
+    if not row:
+        raise HTTPException(403, "کد شرکت‌کننده یا لینک اختصاصی معتبر نیست.")
+    if not bool(row["consent_accepted"]):
+        raise HTTPException(403, "رضایت برای مشارکت ثبت نشده است.")
+    return dict(row)
 
 
 def _public_stage_state(stage_code: str, row: dict[str, Any] | None) -> dict[str, Any]:
@@ -2019,7 +2083,9 @@ def start_experiment_stage(data: StageStartIn):
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
         )
-        rows = _get_stage_rows(connection, assignment["participation_id"])
+        # Workflow assignments use their own per-step progress rows. Avoid loading
+        # legacy stage snapshots on the event path when a step_id is supplied.
+        rows = _get_stage_rows(connection, assignment["participation_id"]) if not data.step_id else {}
         workflow_step = None
         workflow_step_index = None
         if data.step_id:
@@ -2089,27 +2155,18 @@ def start_experiment_stage(data: StageStartIn):
                 (timestamp, old_run_id),
             )
 
-        settings = {"module": data.stage_code, "study_code": assignment["study_code"], "schema_version": 1}
         if DATABASE_URL:
-            connection.execute(
-                "INSERT INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
-                "VALUES(%s,%s,%s,%s,%s) ON CONFLICT(instrument_code,version) DO NOTHING",
-                (str(uuid.uuid4()), instrument_code, version, Jsonb(settings), timestamp),
-            )
             instrument_version = connection.execute(
                 "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=%s AND version=%s",
                 (instrument_code, version),
             ).fetchone()
         else:
-            connection.execute(
-                "INSERT OR IGNORE INTO instrument_versions(instrument_version_id,instrument_code,version,settings,created_at) "
-                "VALUES(?,?,?,?,?)",
-                (str(uuid.uuid4()), instrument_code, version, json.dumps(settings, ensure_ascii=False), timestamp),
-            )
             instrument_version = connection.execute(
                 "SELECT instrument_version_id FROM instrument_versions WHERE instrument_code=? AND version=?",
                 (instrument_code, version),
             ).fetchone()
+        if not instrument_version:
+            raise HTTPException(500, "نسخهٔ ابزار آزمایش در پایگاه داده ثبت نشده است.")
 
         run_id = str(uuid.uuid4())
         stage_draft: dict[str, Any] = {}
@@ -2206,37 +2263,27 @@ def start_experiment_stage(data: StageStartIn):
 def save_questionnaire_draft(data: StageDraftIn):
     """Persist questionnaire answers continuously so a refresh restores the same draft."""
     with conn() as connection:
-        assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
         )
         marker = "%s" if DATABASE_URL else "?"
-        state = connection.execute(
-            "SELECT status,current_run_id FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], data.stage_code),
-        ).fetchone()
-        if data.step_id:
-            workflow_state = connection.execute(
-                "SELECT status,current_run_id FROM experiment_workflow_progress "
-                "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
-                (assignment["assignment_id"], data.step_id),
-            ).fetchone()
-            if not workflow_state or workflow_state["current_run_id"] != data.run_id:
-                raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if not state or state["current_run_id"] != data.run_id:
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if state["status"] == "completed":
+        if assignment["questionnaire_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_status"] == "completed":
             raise HTTPException(409, "پرسشنامه قبلاً تکمیل شده است.")
+        timestamp = now()
         connection.execute(
             "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
             + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(data.draft_payload), now(), assignment["participation_id"], data.stage_code),
+            (_json_param(data.draft_payload), timestamp, assignment["participation_id"], data.stage_code),
         )
         if data.step_id:
             connection.execute(
                 "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
                 + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
-                (_json_param(data.draft_payload), now(), assignment["assignment_id"], data.step_id, data.run_id),
+                (_json_param(data.draft_payload), timestamp, assignment["assignment_id"], data.step_id, data.run_id),
             )
     return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id, "step_id": data.step_id}
 
@@ -2247,18 +2294,13 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
     if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
         raise HTTPException(422, "Unknown questionnaire question code")
     with conn() as connection:
-        assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code
         )
         marker = "%s" if DATABASE_URL else "?"
-        state = connection.execute(
-            "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
-            "WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (assignment["participation_id"], "questionnaire"),
-        ).fetchone()
-        if not state or state["current_run_id"] != data.run_id:
+        if assignment["questionnaire_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if state["status"] != "in_progress":
+        if assignment["questionnaire_status"] != "in_progress":
             raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
         timestamp = now()
         if DATABASE_URL:
@@ -2275,7 +2317,7 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
                 "response_value=excluded.response_value,updated_at=excluded.updated_at",
                 (data.run_id, data.question_code, data.response_value, timestamp),
             )
-        draft = _json_value(state["draft_payload"])
+        draft = _json_value(assignment["questionnaire_draft_payload"])
         answers = draft.get("answers")
         if not isinstance(answers, dict):
             answers = {}
@@ -2538,10 +2580,12 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         run_draft = _json_value(stage_state["draft_payload"])
         server_block_order = run_draft.get("block_order")
 
+        # Keep only the small fields needed for workflow validation. The JSONB payload
+        # may contain client metadata and model audit data and is fetched only for a
+        # specific idempotent retry, not for every subsequent round.
         practice_rows = connection.execute(
-            "SELECT * FROM ultimatum_trials "
-            "WHERE run_id=" + marker + " AND phase='practice' "
-            "ORDER BY started_at,round_id",
+            "SELECT round_id,block_code,block_order,trial_in_block,status FROM ultimatum_trials "
+            "WHERE run_id=" + marker + " AND phase='practice'",
             (data.run_id,),
         ).fetchall()
         if data.phase == "practice":
@@ -2576,9 +2620,8 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
             ):
                 raise HTTPException(409, "برای شروع بازی اصلی باید هر دو دور تمرینی تکمیل شوند.")
             main_rows = connection.execute(
-                "SELECT * FROM ultimatum_trials "
-                "WHERE run_id=" + marker + " AND phase='main' "
-                "ORDER BY block_order,trial_sequence",
+                "SELECT round_id,block_code,block_order,trial_in_block,status FROM ultimatum_trials "
+                "WHERE run_id=" + marker + " AND phase='main'",
                 (data.run_id,),
             ).fetchall()
             completed_main_count = sum(1 for row in main_rows if row["status"] == "completed")
@@ -2611,7 +2654,13 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         if existing:
             if existing["status"] != "prepared":
                 raise HTTPException(409, "این دور اولتیماتوم قبلاً تکمیل شده است.")
-            row = dict(existing)
+            full_existing = connection.execute(
+                "SELECT * FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
+                (existing["round_id"], data.run_id),
+            ).fetchone()
+            if not full_existing:
+                raise HTTPException(409, "وضعیت این دور هم‌زمان تغییر کرده است؛ دوباره تلاش کنید.")
+            row = dict(full_existing)
             return {
                 "round_id": row["round_id"],
                 "phase": row["phase"],
