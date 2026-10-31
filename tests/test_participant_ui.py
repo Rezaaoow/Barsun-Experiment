@@ -172,3 +172,12 @@ def test_titles_and_copy_use_centered_vertical_content_groups_in_all_modules():
 def test_participant_copy_and_score_layout_are_centered():
     assert "#screen .panel{text-align:center}" in HTML
     assert ".ut-card,.ut-card .ut-body,.ut-card .ut-header,.ut-card .ut-copy,.ut-card h1,.ut-card h2,.ut-card p" in HTML
+
+
+
+def test_lifetrade_keeps_local_persistence_and_uses_bounded_25_trial_batches():
+    assert "const TRIAL_BATCH_SIZE=25;" in HTML
+    assert "const TRIAL_BATCH_MAX=25;" in HTML
+    saver = function_body(HTML, "async function saveTrial(row){", "window.addEventListener('online'")
+    assert "writePending(pending)" in saver
+    assert "flushPending().catch(()=>{})" in saver
