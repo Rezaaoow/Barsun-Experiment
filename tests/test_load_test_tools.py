@@ -116,3 +116,72 @@ def test_load_generator_accepts_healthy_postgresql_staging(monkeypatch):
         "https://staging.example.org/lifetrade/api/health"
     ) == expected
 
+def test_host_diagnostics_uses_mapping_rows_without_exposing_connection_string(monkeypatch):
+    import sys
+    import types
+
+    diagnostics_path = Path(__file__).parent / "load" / "host_diagnostics.py"
+    diagnostics_spec = importlib.util.spec_from_file_location(
+        "barsan_host_diagnostics_test", diagnostics_path
+    )
+    assert diagnostics_spec and diagnostics_spec.loader
+    diagnostics = importlib.util.module_from_spec(diagnostics_spec)
+    diagnostics_spec.loader.exec_module(diagnostics)
+
+    expected_factory = object()
+
+    class Cursor:
+        def __init__(self, row):
+            self.row = row
+
+        def fetchone(self):
+            return self.row
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, query):
+            if "current_setting('server_version')" in query:
+                return Cursor({
+                    "server_version": "16.0",
+                    "max_connections": 100,
+                    "reserved_connections": 3,
+                    "shared_buffers": "128MB",
+                    "work_mem": "4MB",
+                    "effective_cache_size": "4GB",
+                })
+            return Cursor({
+                "total": 2,
+                "active": 1,
+                "idle": 1,
+                "idle_in_transaction": 0,
+            })
+
+    def fake_connect(database_url, *, connect_timeout, row_factory):
+        assert database_url == "postgresql://secret.invalid/db"
+        assert connect_timeout == 5
+        assert row_factory is expected_factory
+        return FakeConnection()
+
+    psycopg_module = types.ModuleType("psycopg")
+    psycopg_module.connect = fake_connect
+    rows_module = types.ModuleType("psycopg.rows")
+    rows_module.dict_row = expected_factory
+    monkeypatch.setitem(sys.modules, "psycopg", psycopg_module)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", rows_module)
+
+    snapshot = diagnostics._postgres_snapshot("postgresql://secret.invalid/db")
+    assert snapshot["connected"] is True
+    assert snapshot["server_version"] == "16.0"
+    assert snapshot["connections"] == {
+        "total": 2,
+        "active": 1,
+        "idle": 1,
+        "idle_in_transaction": 0,
+    }
+    assert "secret.invalid" not in json.dumps(snapshot)
+
