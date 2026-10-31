@@ -18,6 +18,8 @@
 
 ## آمادگی اجرا با هم‌زمانی بالا
 
+مرحلهٔ تکمیلی query optimization نیز مسیرهای پرتکرار Ultimatum را هدف می‌گیرد: بررسی consent، run فعال و trial در resolve/events در یک read ترکیبی، و ادغام خواندن وضعیت stage/draft با اعتبارسنجی instrument در prepare. رفتار خطا و idempotency باید بدون تغییر باقی بمانند.
+
 بهینه‌سازی مرحلهٔ اول روی شاخهٔ `perf/600-user-event-readiness` متمرکز بر queryهای احراز هویت، نوشتن اتمیک زمان‌سنجی، کاهش queryهای prepare و تجمیع محاسبهٔ امتیاز Ultimatum است. این موارد فقط پس از عبور از تست‌های regression و PostgreSQL CI «تکمیل‌شده» محسوب می‌شوند؛ تا پیش از load test روی staging، ظرفیت ۶۰۰ نفر تأییدشده نیست.
 
 ممیزی ظرفیت، مسیرهای پرتکرار، pool دیتابیس، queryها و آزمون بار ۶۰۰ شرکت‌کننده در [گزارش کارایی و آزمون بار](docs/PERFORMANCE_AND_LOAD_TESTING_FA.md) ثبت می‌شود. این گزارش محدودیت‌های واقعی cPanel/Passenger و PostgreSQL را از بهینه‌سازی‌های کد جدا می‌کند؛ موفقیت تست CI به‌تنهایی اثبات ظرفیت ۶۰۰ اتصال هم‌زمان نیست.
