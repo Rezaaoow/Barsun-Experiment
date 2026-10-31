@@ -148,3 +148,23 @@ Body: `invitation_token`, `participant_code`, `stage_code`, `run_id`; questionna
 - Ensure the opponent-display manipulation and debrief are covered by the approved ethics protocol.
 - Test refresh at every stage, browser close/reopen, dropped network, duplicate submission, wrong code/link combination, fixed condition, all 22 Ultimatum rows, and complete-vs-incomplete stage routing on the hosted PostgreSQL database.
 - Deploy only after automated tests, a pilot on the actual cPanel/PostgreSQL database, and review of data exports.
+
+
+## Performance and 600-participant event readiness
+
+Performance work is constrained to implementation and infrastructure: participant-facing copy, screen layout, stimuli, randomized workflow, timing semantics, response capture, score computation, condition assignment and exports are invariants.
+
+### Current request profile inferred from code
+
+- The time-tracking client sends a heartbeat every 15 seconds while a stage is active. At 600 active users this is approximately 40 HTTP requests/second before questionnaire/task traffic; every heartbeat currently performs authentication, consent validation, a tracking-row read and a write.
+- Questionnaire answers are persisted per item and the cursor/draft is also persisted during navigation. Do not remove either persistence guarantee without replacing it with an equivalent atomic operation.
+- Life-Trade queues locally and batches rows to `POST /api/trials`; current trigger size is 5 rows, with a maximum batch size of 25. A final flush occurs before module completion.
+- Ultimatum has two practice plus twenty main rounds. Its hot path includes prepare, resolve and post-result event persistence. Preserve the unique round constraint, prepared/completed transitions, retry idempotency and server-side scoring.
+
+### Runtime constraints
+
+The observed cPanel deployment uses Passenger and `a2wsgi.ASGIMiddleware`, not the repository's standalone Uvicorn command. Passenger documents a maximum concurrency of one request per Python process; effective concurrency therefore depends on the number of active Passenger processes and request-queue limits. A code-only speedup cannot compensate for a process ceiling that is too low for the event.
+
+### Validation gate
+
+A 600-user capacity claim requires a full journey load test against a staging copy of the actual hosting topology, database plan, pool settings, Python version and reverse proxy. Record latency percentiles (p50/p95/p99), HTTP error/503 rate, connection-pool wait, PostgreSQL active/idle connections, CPU/RAM, Passenger process count and queue depth. Do not use production participant links or main-study data during load tests.
