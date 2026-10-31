@@ -2,7 +2,7 @@
 
 ## وضعیت این گزارش
 
-این سند ممیزی کد و دو پاس بهینه‌سازی Backend در شاخهٔ `perf/600-user-event-readiness` را ثبت می‌کند. تغییرهای اجرایی در CI روی SQLite و PostgreSQL 16 تست شده‌اند؛ آخرین اجرای معتبر شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency test برای ۲۴ شرکت‌کننده بوده است. بااین‌حال benchmark زمان‌دار و load test واقعی ۶۰۰ VU روی staging هنوز اجرا نشده‌اند؛ بنابراین این گزارش ظرفیت ۶۰۰ نفر را تأیید نمی‌کند.
+این سند ممیزی کد و سه پاس بهینه‌سازی Backend در شاخهٔ `perf/600-user-event-readiness` را ثبت می‌کند. تغییرهای اجرایی در CI روی SQLite و PostgreSQL 16 تست شده‌اند؛ آخرین اجرای معتبر روی commit `e6137f6a69c33fc6757018fc4702bdfe2f5f61ed` شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency test برای ۲۴ شرکت‌کننده بوده است ([GitHub Actions run 41237814572](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41237814572)). بااین‌حال benchmark زمان‌دار و load test واقعی ۶۰۰ VU روی staging هنوز اجرا نشده‌اند؛ بنابراین این گزارش ظرفیت ۶۰۰ نفر را تأیید نمی‌کند.
 
 ## مشخصات هاست اعلام‌شده
 
@@ -40,7 +40,7 @@
 
 ### ۳. پرسشنامه
 
-هر یک از ۲۵ پاسخ به‌صورت یک درخواست مجزا ذخیره می‌شود. در مقیاس ۶۰۰ نفر، تکمیل کامل پرسشنامه می‌تواند ۱۵٬۰۰۰ درخواست ذخیره پاسخ بسازد. این مسیر برای هر پاسخ upsert پاسخ و به‌روزرسانی draft را انجام می‌دهد. نباید ذخیرهٔ پایدار پاسخ یا امکان بازیابی پس از refresh حذف شود.
+هر یک از ۲۵ پاسخ به‌صورت یک درخواست مجزا ذخیره می‌شود. در مقیاس ۶۰۰ نفر، تکمیل کامل پرسشنامه می‌تواند ۱۵٬۰۰۰ درخواست ذخیره پاسخ بسازد. این مسیر برای هر پاسخ همچنان upsert پایدار پاسخ و به‌روزرسانی draft را انجام می‌دهد تا بازیابی پس از refresh حفظ شود. در پاس سوم، خواندن جداگانهٔ وضعیت مرحله حذف شد: lookup لینک/کد، رضایت و run/draft پرسشنامه در یک read ترکیبی انجام می‌شود. دو write پاسخ و draft عمداً باقی مانده‌اند تا پاسخ خام و وضعیت ادامهٔ پرسشنامه هر دو ذخیره شوند.
 
 ### ۴. DD / Life-Trade
 
@@ -55,7 +55,7 @@
 
 در صورت تکمیل همهٔ ۲۲ دور توسط ۶۰۰ نفر، این الگو تا حدود ۳۹٬۶۰۰ درخواست HTTP ایجاد می‌کند، جدا از شروع run، پرسشنامه، DD/Life-Trade و heartbeat. مسیرهای prepare/resolve علاوه بر دسترسی به assignment و رضایت، queryهای اعتبارسنجی و queryهای ثبت/بازیابی نتیجه دارند. endpoint رخدادهای پس از نتیجه نیز پیش از رفتن به دور بعد در مرورگر await می‌شود؛ بنابراین latency آن مستقیماً می‌تواند در فاصلهٔ بین دورها دیده شود.
 
-قید یکتای `(run_id, phase, block_code, trial_in_block)` و وضعیت‌های `prepared/completed` برای جلوگیری از ثبت تکراری/دوگانه بخشی از صحت داده‌اند و حفظ شده‌اند. در پاس اول، ردیف‌های run که prepare از قبل خوانده بود برای count/order/existing دوباره استفاده می‌شوند و aggregate امتیاز run/block با یک query گروه‌بندی‌شده انجام می‌شود. در پاس دوم، consent/run/instrument/trial برای resolve/events در یک read و consent/stage/draft/instrument برای prepare در یک read دریافت می‌شوند. محاسبهٔ امتیاز، منطق تصمیم AI، تعداد دورها و خروجی participant تغییر نکرده‌اند.
+قید یکتای `(run_id, phase, block_code, trial_in_block)` و وضعیت‌های `prepared/completed` برای جلوگیری از ثبت تکراری/دوگانه بخشی از صحت داده‌اند و حفظ شده‌اند. در پاس اول، ردیف‌های run که prepare از قبل خوانده بود برای count/order/existing دوباره استفاده می‌شدند و aggregate امتیاز run/block با یک query گروه‌بندی‌شده انجام شد. در پاس دوم، consent/run/instrument/trial برای resolve/events در یک read و consent/stage/draft/instrument برای prepare در یک read دریافت شدند. در پاس سوم، prepare به‌جای دریافت همهٔ ردیف‌ها و payloadهای گذشته، فقط ستون‌های ضروری تمرین را می‌خواند و اعتبارسنجی دورهای اصلی را با یک aggregate SQL انجام می‌دهد؛ payload کامل تنها برای retry همان دور دریافت می‌شود. محاسبهٔ امتیاز، منطق تصمیم AI، تعداد دورها و خروجی participant تغییر نکرده‌اند.
 
 ### ۶. گزارش‌ها و APIهای مدیریت
 
@@ -63,7 +63,7 @@
 
 ## تغییرات اجرایی انجام‌شده
 
-دو پاس Backend در همین شاخه پیاده‌سازی و در CI تأیید شده‌اند:
+سه پاس Backend در همین شاخه پیاده‌سازی شده‌اند؛ دو پاس اولیه و بهینه‌سازی تکمیلی query-shape در CI تأیید شده‌اند:
 
 - token/code و consent در lookup واحد؛
 - اعتبارسنجی active run و instrument در یک join برای مسیرهای مربوط؛
@@ -72,9 +72,13 @@
 - تجمیع مجموع امتیاز run و block در یک query گروه‌بندی‌شده؛
 - ادغام lookup لینک، consent، stage/run فعال، instrument و trial برای resolve/events؛
 - ادغام lookup لینک/رضایت و دریافت stage/draft/instrument برای prepare؛
-- تست‌های رگرسیون برای حفظ خطاهای 403/404/409، رفتار heartbeat، زمان‌سنجی و idempotency.
+- تست‌های رگرسیون برای حفظ خطاهای 403/404/409، رفتار heartbeat، زمان‌سنجی و idempotency؛
+- seed نسخه‌های ثابت instrument هنگام startup برای حذف INSERT+SELECT از مسیر شروع participant؛
+- حذف read غیرضروری legacy stage progress در شروع workflow جدید؛
+- ادغام read احراز هویت/رضایت/وضعیت پرسشنامه در مسیر save answer و save draft؛
+- محدود کردن projection دورهای Ultimatum و تجمیع شمارش/ترتیب/وجود دور در SQL، با خواندن JSON payload فقط برای retry همان دور.
 
-آخرین CI روی SHA فعلی: ۶۱ تست SQLite موفق، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده موفق. این تأیید، correctness و سازگاری دو دیتابیس را نشان می‌دهد؛ benchmark زمان‌دار و ظرفیت واقعی ۶۰۰ VU همچنان تأیید نشده‌اند.
+آخرین CI روی SHA `e6137f6a69c33fc6757018fc4702bdfe2f5f61ed` (run `41237814572`) موفق است: ۶۱ تست SQLite، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده موفق. این تأیید، correctness و سازگاری دو دیتابیس را نشان می‌دهد؛ هیچ benchmark زمان‌دار، query-count measurement یا ظرفیت واقعی ۶۰۰ VU هنوز تأیید نشده است.
 
 ## برآورد بار نسخهٔ فعلی k6
 
@@ -82,10 +86,13 @@
 
 ## مرحلهٔ تکمیلی query optimization
 
-کاهش round-tripهای مسیرهای پرتکرار Ultimatum در کد پیاده‌سازی شده و روی SQLite و PostgreSQL تست شده است:
+بهینه‌سازی تکمیلی query-shape در مسیرهای پرتکرار participant پیاده‌سازی شده و روی SQLite و PostgreSQL تست شده است:
 
 - ترکیب lookup لینک/کد، consent، stage/run فعال، instrument و trial در یک SELECT برای resolve و events؛
 - ترکیب خواندن draft/status مرحله با بررسی instrument/run برای prepare؛
+- ادغام احراز هویت/رضایت/وضعیت questionnaire در یک read برای ذخیرهٔ پاسخ و پیش‌نویس؛
+- حذف read legacy در شروع workflow جدید و seed کردن نسخه‌های ثابت ابزار در startup؛
+- محدود کردن ستون‌های خوانده‌شده در دورهای گذشته و جایگزینی انتقال همهٔ ردیف‌های اصلی Ultimatum با یک aggregate SQL؛ payload کامل فقط برای retry دور مشخص خوانده می‌شود؛
 - حفظ ترتیب خطاهای 403/404/409، بررسی role و payload، unique constraint و idempotency resolve/events.
 
 این تغییرها خواندن‌های تکراری را حذف می‌کنند، نه کنترل‌های دسترسی. CI صحت رفتار و سازگاری SQL را بررسی می‌کند؛ اما تعداد queryها و latency زمان‌دار هنوز با instrumentation یا benchmark مستقل اندازه‌گیری نشده‌اند و load test واقعی نیز اجرا نشده است.
@@ -147,7 +154,7 @@
 | ممیزی ساختار Backend و APIها | بررسی اولیه انجام شده |
 | ممیزی UI و نحوهٔ ارسال درخواست‌ها | بررسی اولیه انجام شده |
 | ثبت مشخصات اسمی هاست | ثبت شده؛ جزییات Passenger و DB منتظر خروجی diagnostics |
-| بهینه‌سازی کد اجرایی | دو پاس Backend در PR #17 پیاده‌سازی و در CI تست شده‌اند: query consolidation، time tracking اتمیک و grouped aggregation |
+| بهینه‌سازی کد اجرایی | سه پاس Backend در PR #17 پیاده‌سازی شده‌اند: query consolidation، time tracking اتمیک، grouped aggregation، و حذف read/row payload غیرضروری در workflow، پرسشنامه و Ultimatum |
 | تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۶۱ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
 | ابزار load test با ۶۰۰ VU | آماده: دو profile مجزای ramp و burst؛ هنوز اجرا نشده |
 | تأیید آمادگی production | انجام نشده |
