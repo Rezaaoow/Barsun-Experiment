@@ -209,6 +209,17 @@ export function participantFlow() {
       response_value: value,
       current_question_index: index
     });
+    post("/api/experiment/stages/draft", {
+      ...identity,
+      stage_code: "questionnaire",
+      run_id: questionnaire.run_id,
+      step_id: "load-questionnaire",
+      draft_payload: {
+        answers: { ...answers },
+        current_question_index: index === questionCodes.length - 1 ? index : index + 1,
+        schema_version: 1
+      }
+    });
   }
   post("/api/experiment/stages/complete", {
     ...identity,
@@ -246,10 +257,11 @@ export function participantFlow() {
       }
     });
   }
-  for (let offset = 0; offset < trialRows.length; offset += 25) {
+  // The participant UI normally flushes the local queue every five responses.
+  for (let offset = 0; offset < trialRows.length; offset += 5) {
     post("/api/trials", {
       session_id: dd.run_id,
-      trials: trialRows.slice(offset, offset + 25)
+      trials: trialRows.slice(offset, offset + 5)
     });
   }
   post("/api/complete", {
