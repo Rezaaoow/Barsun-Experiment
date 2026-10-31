@@ -88,7 +88,7 @@
 - ترکیب خواندن draft/status مرحله با بررسی instrument/run برای prepare؛
 - حفظ ترتیب خطاهای 403/404/409، بررسی role و payload، unique constraint و idempotency resolve/events.
 
-این تغییرها خواندن‌های تکراری را حذف می‌کنند، نه کنترل‌های دسترسی. query-count و latency در محیط CI از نظر کارکردی بررسی شده‌اند، اما هنوز benchmark زمان‌دار و load test واقعی اجرا نشده است.
+این تغییرها خواندن‌های تکراری را حذف می‌کنند، نه کنترل‌های دسترسی. CI صحت رفتار و سازگاری SQL را بررسی می‌کند؛ اما تعداد queryها و latency زمان‌دار هنوز با instrumentation یا benchmark مستقل اندازه‌گیری نشده‌اند و load test واقعی نیز اجرا نشده است.
 
 ## اولویت‌های باقیمانده
 
