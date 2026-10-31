@@ -14,6 +14,27 @@
 - هر بار ۶۰۰ assignment جدید در STUDY_CODE تنظیم‌شده در staging ایجاد می‌شود. generator داده یا لینک‌های قدیمی را پاک نمی‌کند.
 - پاسخ‌های پرسشنامه و trialهای Life-Trade و Ultimatum در دیتابیس staging نوشته می‌شوند؛ این‌ها دادهٔ پژوهشی واقعی نیستند و نباید وارد تحلیل اصلی شوند.
 
+## تشخیص محدودیت‌های cPanel و PostgreSQL
+
+فایل `tests/load/host_diagnostics.py` را در محیط Python برنامه روی staging اجرا کنید. این ابزار فقط اطلاعات را می‌خواند و این موارد را گزارش می‌کند:
+- CPU affinity و quota قابل‌مشاهده، محدودیت RAM در cgroup؛
+- تعداد processهای متعلق به UID جاری و سقف file descriptor/process؛
+- مقادیر DB pool تنظیم‌شده در محیط؛
+- نسخهٔ PostgreSQL، `max_connections`، connectionهای active/idle و چند تنظیم حافظهٔ دیتابیس.
+
+تعداد processهای UID شامل processهای دیگر حساب cPanel و خود Terminal نیز می‌شود؛ لزوماً تعداد Passenger worker نیست. در نتیجه مقدار pool محاسبه‌شده صرفاً upper bound است، نه تعداد اتصال واقعی برنامه.
+
+اگر `DATABASE_URL` در Terminal موجود نیست، آن را از Environment Variables برنامه در cPanel بردارید و در prompt مخفی وارد کنید؛ مقدار در command history قرار نمی‌گیرد و اسکریپت آن را چاپ نمی‌کند:
+
+    set +x
+    read -r -s -p "DATABASE_URL (hidden input): " DATABASE_URL
+    printf '\\n'
+    export DATABASE_URL
+    /home/myexperi/virtualenv/lifetrade/3.12/bin/python tests/load/host_diagnostics.py
+    unset DATABASE_URL
+
+در صورت تنظیم بودن متغیر در محیط shell، فقط دستور Python کافی است. خروجی JSON را می‌توانید برای تحلیل ارسال کنید؛ در هر صورت قبل از ارسال بررسی کنید هیچ دادهٔ محرمانهٔ دیگری در خروجی یا Terminal اضافه نشده باشد.
+
 ## ۱. آماده‌سازی staging
 
 یک کپی مستقل از برنامه و PostgreSQL بسازید. مطمئن شوید متغیرهای cPanel/Passenger روی staging به دیتابیس staging اشاره می‌کنند و STUDY_CODE اختصاصی staging است.
