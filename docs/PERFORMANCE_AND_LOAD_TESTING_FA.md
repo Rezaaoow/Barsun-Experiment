@@ -2,7 +2,7 @@
 
 ## وضعیت این گزارش
 
-این سند ممیزی کد و سه پاس بهینه‌سازی Backend در شاخهٔ `perf/600-user-event-readiness` را ثبت می‌کند. تغییرهای اجرایی در CI روی SQLite و PostgreSQL 16 تست شده‌اند؛ آخرین اجرای معتبر روی commit `e6137f6a69c33fc6757018fc4702bdfe2f5f61ed` شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency test برای ۲۴ شرکت‌کننده بوده است ([GitHub Actions run 41237814572](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41237814572)). بااین‌حال benchmark زمان‌دار و load test واقعی ۶۰۰ VU روی staging هنوز اجرا نشده‌اند؛ بنابراین این گزارش ظرفیت ۶۰۰ نفر را تأیید نمی‌کند.
+این سند ممیزی کد و سه پاس بهینه‌سازی Backend در شاخهٔ `perf/600-user-event-readiness` را ثبت می‌کند. تغییرهای اجرایی در CI روی SQLite و PostgreSQL 16 تست شده‌اند؛ آخرین اجرای معتبر روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency test برای ۲۴ شرکت‌کننده بوده است ([GitHub Actions run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). بااین‌حال benchmark زمان‌دار و load test واقعی ۶۰۰ VU روی staging هنوز اجرا نشده‌اند؛ بنابراین این گزارش ظرفیت ۶۰۰ نفر را تأیید نمی‌کند.
 
 ## مشخصات هاست اعلام‌شده
 
@@ -78,7 +78,7 @@
 - ادغام read احراز هویت/رضایت/وضعیت پرسشنامه در مسیر save answer و save draft؛
 - محدود کردن projection دورهای Ultimatum و تجمیع شمارش/ترتیب/وجود دور در SQL، با خواندن JSON payload فقط برای retry همان دور.
 
-آخرین CI روی SHA `e6137f6a69c33fc6757018fc4702bdfe2f5f61ed` (run `41237814572`) موفق است: ۶۱ تست SQLite، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده موفق. این تأیید، correctness و سازگاری دو دیتابیس را نشان می‌دهد؛ هیچ benchmark زمان‌دار، query-count measurement یا ظرفیت واقعی ۶۰۰ VU هنوز تأیید نشده است.
+آخرین CI روی SHA `c94e6590e17f552983ecbe7feea2f4abdf30be6d` (run `41238007684`) موفق است: ۶۱ تست SQLite، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده موفق. این تأیید، correctness و سازگاری دو دیتابیس را نشان می‌دهد؛ هیچ benchmark زمان‌دار، query-count measurement یا ظرفیت واقعی ۶۰۰ VU هنوز تأیید نشده است.
 
 ## برآورد بار نسخهٔ فعلی k6
 

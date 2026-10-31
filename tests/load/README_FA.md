@@ -16,13 +16,15 @@
 
 ## تشخیص محدودیت‌های cPanel و PostgreSQL
 
-فایل `tests/load/host_diagnostics.py` را در محیط Python برنامه روی staging اجرا کنید. این ابزار فقط اطلاعات را می‌خواند و این موارد را گزارش می‌کند:
+ابتدا وارد ریشهٔ clone فعال برنامه در staging شوید (همان پوشه‌ای که `tests/load/` داخل آن است) و سپس فایل `tests/load/host_diagnostics.py` را با Python همان محیط اجرا کنید. مسیر `Application Root` الزاماً ریشهٔ import برنامه نیست؛ در cPanel فعلی پروژه، کد فعال از زیرپوشهٔ `repo/` بارگذاری می‌شود. برای staging، مسیر واقعی clone و virtualenv همان staging را به‌کار ببرید. این ابزار فقط اطلاعات را می‌خواند و این موارد را گزارش می‌کند:
 - CPU affinity و quota قابل‌مشاهده، محدودیت RAM در cgroup؛
 - تعداد processهای متعلق به UID جاری و سقف file descriptor/process؛
 - مقادیر DB pool تنظیم‌شده در محیط؛
 - نسخهٔ PostgreSQL، `max_connections`، connectionهای active/idle و چند تنظیم حافظهٔ دیتابیس.
 
 تعداد processهای UID شامل processهای دیگر حساب cPanel و خود Terminal نیز می‌شود؛ لزوماً تعداد Passenger worker نیست. در نتیجه مقدار pool محاسبه‌شده صرفاً upper bound است، نه تعداد اتصال واقعی برنامه.
+
+این ابزار snapshot لحظه‌ای از محدودیت‌های قابل‌مشاهدهٔ process جاری می‌گیرد، نه نمودار مصرف CPU/RAM/IO و نه شمارش قطعی Passenger workerها. Terminal ممکن است environment یکسانی با Passenger نداشته باشد؛ مقادیر `DB_POOL_*` و `DB_CONNECT_TIMEOUT` در خروجی فقط وقتی نمایندهٔ تنظیمات برنامه‌اند که همان مقادیر cPanel را به session ترمینال منتقل کرده باشید. اگر این متغیرها در cPanel تعریف نشده‌اند، مقدارهای پیش‌فرض کد گزارش می‌شوند. تعداد processهای UID نیز شامل سایر processهای حساب و Terminal است.
 
 اگر `DATABASE_URL` در Terminal موجود نیست، آن را از Environment Variables برنامه در cPanel بردارید و در prompt مخفی وارد کنید؛ مقدار در command history قرار نمی‌گیرد و اسکریپت آن را چاپ نمی‌کند:
 
@@ -50,12 +52,17 @@ Python 3.12 یا جدیدتر کافی است؛ وابستگی third-party اض�
 
 از ریشهٔ مخزن اجرا کنید:
 
-    BASE_URL="https://staging.example.org/lifetrade" \
-    ADMIN_TOKEN="..." \
-    LOAD_TEST_CONFIRM="I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT" \
-    LOAD_TEST_USERS=600 \
-    PARTICIPANTS_FILE="$PWD/tests/load/participants.json" \
-    python3 tests/load/create_load_test_users.py
+    (
+      set +x
+      read -r -s -p "ADMIN_TOKEN (hidden input): " ADMIN_TOKEN
+      printf '\n'
+      export ADMIN_TOKEN
+      export BASE_URL="https://staging.example.org/lifetrade"
+      export LOAD_TEST_CONFIRM="I CONFIRM THIS IS A DEDICATED STAGING ENVIRONMENT"
+      export LOAD_TEST_USERS=600
+      export PARTICIPANTS_FILE="$PWD/tests/load/participants.json"
+      python3 tests/load/create_load_test_users.py
+    )
 
 توکن مدیریت را در shell history یا اسکرین‌شات منتشر نکنید. بهتر است آن را در environment امن session قرار دهید، نه اینکه در فایل script یا repository بنویسید.
 
