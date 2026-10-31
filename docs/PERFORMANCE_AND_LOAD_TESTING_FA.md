@@ -83,6 +83,16 @@
 
 سناریوی اجرایی حاضر برای هر شرکت‌کننده حدود ۱۱۱ درخواست API ایجاد می‌کند: ۲۵ پاسخ پرسشنامه، ۳۰ trial در دو batch مربوط به Life-Trade، ۲۲ دور Ultimatum با سه درخواست در هر دور، به‌علاوهٔ consent/identify، شروع و تکمیل مراحل و شش درخواست time tracking (سه start، سه heartbeat و سه complete؛ شمارش time tracking در مجموع ۹ درخواست است). بنابراین کل بار هدف برای ۶۰۰ شرکت‌کننده حدود **۶۶٬۶۰۰ درخواست** است. این یک شمارش استاتیک از خود اسکریپت است، نه نتیجهٔ اندازه‌گیری.
 
+## مرحلهٔ تکمیلی query optimization
+
+کاهش round-tripهای مسیرهای پرتکرار Ultimatum در مرحلهٔ بعدی پیاده می‌شود:
+
+- ترکیب lookup لینک/کد، consent، stage/run فعال، instrument و trial در یک SELECT برای resolve و events؛
+- ترکیب خواندن draft/status مرحله با بررسی instrument/run برای prepare؛
+- حفظ ترتیب خطاهای 403/404/409، بررسی role و payload، unique constraint و idempotency resolve/events.
+
+هدف این مرحله حذف خواندن‌های تکراری است، نه حذف هرگونه اعتبارسنجی. تعداد queryهای واقعی باید با instrumentation/benchmark تأیید شود.
+
 ## اولویت‌های فنی
 
 1. اندازه‌گیری baseline قبل از تغییر: latency هر endpoint، تعداد query، pool wait/timeout و منابع process/DB.
