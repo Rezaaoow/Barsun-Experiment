@@ -26,7 +26,7 @@
 
 ## ابزار آزمون بار در staging
 
-برای ساخت ۶۰۰ لینک آزمایشی و اجرای workflow کامل از k6، دستورالعمل `tests/load/README_FA.md` را بخوانید. این ابزار staging-only است، برای دیتابیس مستقل طراحی شده و فایل حاوی invitation tokenها را فقط به‌صورت محلی نگه می‌دارد. اجرای آن روی دامنهٔ production ممنوع است.
+برای دیدن محدودیت‌های cPanel و PostgreSQL، ابزار read-only `tests/load/host_diagnostics.py` را بررسی کنید. برای ساخت ۶۰۰ لینک آزمایشی و اجرای workflow کامل از k6، دستورالعمل `tests/load/README_FA.md` را بخوانید. این ابزار staging-only است، برای دیتابیس مستقل طراحی شده و فایل حاوی invitation tokenها را فقط به‌صورت محلی نگه می‌دارد. اجرای آن روی دامنهٔ production ممنوع است.
 
 ## وضعیت فعلی
 
