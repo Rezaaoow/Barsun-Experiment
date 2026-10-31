@@ -802,6 +802,11 @@ h2 {
  .scale-option .scale-number{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;min-width:36px;border-radius:10px;font-size:1.08rem!important;line-height:1!important}
  .scale-option .scale-label{display:block;-webkit-line-clamp:unset;overflow:visible;overflow-wrap:anywhere;min-width:0;max-height:none;white-space:normal;text-align:center;font-size:clamp(.76rem,2.35vw,.88rem)!important;line-height:1.38!important}
 }
+
+/* Participant-facing screens: centered copy and headings throughout. */
+#screen .panel{text-align:center}
+#screen .panel h1,#screen .panel h2,#screen .panel h3,#screen .panel p,#screen .panel .eyebrow,#screen .panel .hint,#screen .panel .status,#screen .panel .welcome-note,#screen .panel .welcome-step,#screen .panel .instruction-content,#screen .panel .instruction-heading{text-align:center}
+#screen .panel .field label,#screen .panel .consent-row{justify-content:center;text-align:center}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
@@ -2175,7 +2180,7 @@ async function startUltimatumInstructions() {
  try {
   if(!workflow.workflowMode){workflow.currentStage="ultimatum";workflow.currentStepId=legacyStepId("ultimatum");}
   show();
-  setStatus("در حال آماده‌سازی بازی اولتیماتوم…");
+  setStatus("در حال آماده‌سازی بازی…");
   const started=await api("/api/experiment/stages/start",{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
@@ -2213,7 +2218,7 @@ async function startUltimatumInstructions() {
  } catch(error) {
   console.error(error);
   await pauseStepTimer();
-  workflowMessage("بازی اولتیماتوم آماده نشد","شروع این بخش موفق نبود. اتصال را بررسی کنید و دوباره از لینک اختصاصی وارد شوید.","بازگشت");
+  workflowMessage("بازی آماده نشد","شروع بازی موفق نبود. اتصال را بررسی کنید و دوباره از لینک اختصاصی وارد شوید.","بازگشت");
  }
 }
 function utRenderWelcome() {
