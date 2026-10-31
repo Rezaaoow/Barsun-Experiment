@@ -74,6 +74,31 @@ export const options = {
   }
 };
 
+export function setup() {
+  const response = http.get(baseUrl + "/api/health", {
+    headers: { "Accept": "application/json" },
+    timeout: "15s",
+    tags: { api_path: "/api/health-preflight" }
+  });
+  if (response.status !== 200) {
+    throw new Error("Staging health endpoint failed with HTTP " + response.status);
+  }
+  let health;
+  try {
+    health = response.json();
+  } catch (_) {
+    throw new Error("Staging health endpoint returned invalid JSON.");
+  }
+  if (
+    health.ok !== true ||
+    health.database !== "postgresql" ||
+    health.database_connected !== true
+  ) {
+    throw new Error("Load testing requires a connected PostgreSQL staging database.");
+  }
+  return {};
+}
+
 function post(path, payload) {
   const response = http.post(
     baseUrl + path,
