@@ -300,6 +300,18 @@ if DATABASE_URL:
             )
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS invitation_token_encrypted TEXT")
             connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS workflow_json TEXT")
+            connection.execute("ALTER TABLE experiment_assignments ADD COLUMN IF NOT EXISTS group_link_id TEXT")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_links ("
+                "group_link_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "label TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
+                "invitation_token_encrypted TEXT NOT NULL, condition_code TEXT NOT NULL, workflow_json TEXT NOT NULL, "
+                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
+                "ON experiment_assignments(group_link_id)"
+            )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -501,6 +513,19 @@ else:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN invitation_token_encrypted TEXT")
             if "workflow_json" not in assignment_columns:
                 connection.execute("ALTER TABLE experiment_assignments ADD COLUMN workflow_json TEXT")
+            if "group_link_id" not in assignment_columns:
+                connection.execute("ALTER TABLE experiment_assignments ADD COLUMN group_link_id TEXT")
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_links ("
+                "group_link_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
+                "label TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
+                "invitation_token_encrypted TEXT NOT NULL, condition_code TEXT NOT NULL, workflow_json TEXT NOT NULL, "
+                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
+                "ON experiment_assignments(group_link_id)"
+            )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_consents ("
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
@@ -725,6 +750,24 @@ class WorkflowConfigIn(BaseModel):
 class AssignmentBatchIn(BaseModel):
     assignments: list[AssignmentItemIn] = Field(min_length=1, max_length=500)
     steps: list[WorkflowStepIn] | None = Field(default=None, min_length=1)
+
+
+class GroupLinkCreateIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    label: str = Field(default="لینک گروهی", max_length=100)
+    steps: list[WorkflowStepIn] | None = Field(default=None, min_length=1)
+
+
+class GroupLinkStatusBatchIn(BaseModel):
+    scope: Literal["main", "test"] = "main"
+    group_link_ids: list[str] = Field(min_length=1, max_length=5000)
+    active: bool
+
+
+class GroupClaimIn(BaseModel):
+    group_token: str = Field(min_length=20, max_length=200)
+    participant_code: str | None = Field(default=None, max_length=100)
+    assign_random: bool = False
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -1489,6 +1532,146 @@ def create_assignments(
     return {"created_count": len(created), "assignments": created}
 
 
+@app.post("/api/admin/group-links")
+def create_group_link(
+    data: GroupLinkCreateIn,
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+):
+    """Create one shareable invitation that issues an individual assignment on first claim."""
+    authorize(x_admin_token)
+    generation = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3)
+    if data.scope == "test":
+        study_code = f"{TEST_STUDY_PREFIX}group-{generation}"
+        study_name = f"BarSan group invitation test — {generation}"
+    else:
+        study_code = STUDY_CODE
+        study_name = STUDY_NAME
+
+    with conn() as workflow_connection:
+        workflow_steps = (
+            _normalize_workflow_steps(data.steps)
+            if data.steps
+            else _load_study_workflow(workflow_connection, STUDY_CODE)
+        )
+    workflow_json = json.dumps(workflow_steps, ensure_ascii=False, separators=(",", ":"))
+    condition = _workflow_condition_code(workflow_steps)
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    token_encrypted = _encrypt_invitation_token(token)
+    group_link_id = str(uuid.uuid4())
+    label = (data.label or "").strip() or ("لینک گروهی تست" if data.scope == "test" else "لینک گروهی")
+    timestamp = now()
+    marker = "%s" if DATABASE_URL else "?"
+
+    with conn() as connection:
+        if data.scope == "test":
+            if DATABASE_URL:
+                connection.execute(
+                    "INSERT INTO studies(study_code,study_name,created_at) VALUES(%s,%s,%s) "
+                    "ON CONFLICT(study_code) DO NOTHING",
+                    (study_code, study_name, timestamp),
+                )
+            else:
+                connection.execute(
+                    "INSERT OR IGNORE INTO studies(study_code,study_name,created_at) VALUES(?,?,?)",
+                    (study_code, study_name, timestamp),
+                )
+        connection.execute(
+            "INSERT INTO experiment_group_links("
+            "group_link_id,study_code,label,invitation_token_hash,invitation_token_encrypted,"
+            "condition_code,workflow_json,active,created_at) VALUES("
+            + ",".join([marker] * 9) + ")",
+            (
+                group_link_id, study_code, label, token_hash, token_encrypted,
+                condition, workflow_json, 1, timestamp,
+            ),
+        )
+
+    base_url = _invitation_base_url(request, "/api/admin/group-links")
+    joiner = "&" if "?" in base_url else "?"
+    return {
+        "group_link_id": group_link_id,
+        "scope": data.scope,
+        "label": label,
+        "study_code": study_code,
+        "condition_code": condition,
+        "created_at": timestamp,
+        "invitation_url": base_url + joiner + "group=" + token,
+        "note": "این لینک برای اشتراک‌گذاری است؛ هر شرکت‌کننده پس از ورود، کد خودش یا کد تصادفی مستقل دریافت می‌کند.",
+    }
+
+
+@app.get("/api/admin/group-links")
+def list_admin_group_links(
+    request: Request,
+    scope: Literal["main", "test"] = "main",
+    x_admin_token: str | None = Header(default=None),
+):
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    if scope == "main":
+        where = "gl.study_code=" + marker
+        params = (STUDY_CODE,)
+    else:
+        where = "gl.study_code LIKE " + marker
+        params = (TEST_STUDY_PREFIX + "%",)
+
+    with conn() as connection:
+        rows = connection.execute(
+            "SELECT gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,"
+            "gl.active,gl.created_at,COUNT(ea.assignment_id) AS claimed_count "
+            "FROM experiment_group_links gl "
+            "LEFT JOIN experiment_assignments ea ON ea.group_link_id=gl.group_link_id "
+            "WHERE " + where + " "
+            "GROUP BY gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,gl.active,gl.created_at "
+            "ORDER BY gl.created_at DESC",
+            params,
+        ).fetchall()
+
+    base_url = _invitation_base_url(request, "/api/admin/group-links")
+    joiner = "&" if "?" in base_url else "?"
+    items = []
+    for row in rows:
+        token = _decrypt_invitation_token(row["invitation_token_encrypted"])
+        items.append({
+            "group_link_id": row["group_link_id"],
+            "study_code": row["study_code"],
+            "label": row["label"],
+            "active": bool(row["active"]),
+            "created_at": row["created_at"],
+            "claimed_count": int(row["claimed_count"] or 0),
+            "url_available": bool(token),
+            "invitation_url": base_url + joiner + "group=" + token if token else "",
+        })
+    return {"scope": scope, "total": len(items), "items": items}
+
+
+@app.post("/api/admin/group-links/status")
+def set_admin_group_links_status(
+    data: GroupLinkStatusBatchIn,
+    x_admin_token: str | None = Header(default=None),
+):
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    if data.scope == "main":
+        scope_sql = " AND study_code=" + marker
+        scope_value = STUDY_CODE
+    else:
+        scope_sql = " AND study_code LIKE " + marker
+        scope_value = TEST_STUDY_PREFIX + "%"
+    updated_count = 0
+    with conn() as connection:
+        for group_link_id in data.group_link_ids:
+            cursor = connection.execute(
+                "UPDATE experiment_group_links SET active=" + marker
+                + " WHERE group_link_id=" + marker + scope_sql,
+                (int(data.active), group_link_id, scope_value),
+            )
+            updated_count += max(0, int(cursor.rowcount or 0))
+    return {"updated_count": updated_count, "active": data.active}
+
+
 @app.post("/api/admin/test-links")
 def create_test_links(
     request: Request,
@@ -1879,6 +2062,100 @@ def export_admin_active_assignments_csv(
             "Cache-Control": "no-store",
         },
     )
+
+
+@app.post("/api/experiment/group/claim")
+def claim_group_invitation(data: GroupClaimIn):
+    """Exchange a shared group token for one personal participant code and invitation token."""
+    supplied_code = str(data.participant_code or "").strip()
+    if data.assign_random:
+        if supplied_code:
+            raise HTTPException(422, "برای دریافت کد تصادفی، فیلد کد شخصی باید خالی باشد.")
+    elif not supplied_code:
+        raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
+
+    group_token_hash = hashlib.sha256(data.group_token.strip().encode("utf-8")).hexdigest()
+    marker = "%s" if DATABASE_URL else "?"
+
+    try:
+        with conn() as connection:
+            group = connection.execute(
+                "SELECT group_link_id,study_code,label,condition_code,workflow_json,active "
+                "FROM experiment_group_links WHERE invitation_token_hash=" + marker,
+                (group_token_hash,),
+            ).fetchone()
+            if not group or not bool(group["active"]):
+                raise HTTPException(404, "لینک گروهی معتبر نیست یا غیرفعال شده است.")
+
+            if data.assign_random:
+                participant_code = ""
+                for _ in range(8):
+                    candidate = "RND-" + secrets.token_hex(6).upper()
+                    occupied = connection.execute(
+                        "SELECT 1 FROM participants WHERE participant_code=" + marker,
+                        (candidate,),
+                    ).fetchone()
+                    if not occupied:
+                        participant_code = candidate
+                        break
+                if not participant_code:
+                    raise HTTPException(503, "ساخت کد تصادفی ممکن نشد؛ دوباره تلاش کنید.")
+            else:
+                participant_code = normalize_participant_code(supplied_code)
+
+            participant_id, _participation_id = _ensure_participation(
+                connection,
+                participant_code,
+                study_code=group["study_code"],
+                study_name=group["label"],
+            )
+            existing = connection.execute(
+                "SELECT assignment_id,group_link_id,invitation_token_encrypted,active "
+                "FROM experiment_assignments WHERE study_code=" + marker
+                + " AND participant_id=" + marker,
+                (group["study_code"], participant_id),
+            ).fetchone()
+            if existing:
+                if (
+                    existing["group_link_id"] == group["group_link_id"]
+                    and bool(existing["active"])
+                ):
+                    previous_token = _decrypt_invitation_token(existing["invitation_token_encrypted"])
+                    if previous_token:
+                        return {
+                            "participant_code": participant_code,
+                            "invitation_token": previous_token,
+                            "condition_code": group["condition_code"],
+                            "reused": True,
+                            "random_code_assigned": data.assign_random,
+                        }
+                raise HTTPException(409, "برای این کد قبلاً در این مطالعه لینک اختصاصی صادر شده است.")
+
+            invitation_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
+            token_encrypted = _encrypt_invitation_token(invitation_token)
+            connection.execute(
+                "INSERT INTO experiment_assignments("
+                "assignment_id,study_code,participant_id,condition_code,invitation_token_hash,"
+                "invitation_token_encrypted,active,assigned_at,workflow_json,group_link_id) VALUES("
+                + ",".join([marker] * 10) + ")",
+                (
+                    str(uuid.uuid4()), group["study_code"], participant_id, group["condition_code"],
+                    token_hash, token_encrypted, 1, now(), group["workflow_json"], group["group_link_id"],
+                ),
+            )
+    except Exception as exc:
+        if getattr(exc, "sqlstate", None) == "23505" or isinstance(exc, sqlite3.IntegrityError):
+            raise HTTPException(409, "این کد هم‌زمان در حال ثبت است یا قبلاً برای این مطالعه استفاده شده است.") from None
+        raise
+
+    return {
+        "participant_code": participant_code,
+        "invitation_token": invitation_token,
+        "condition_code": group["condition_code"],
+        "reused": False,
+        "random_code_assigned": data.assign_random,
+    }
 
 
 @app.post("/api/experiment/consent")
@@ -3313,6 +3590,7 @@ def maintenance_preview(
 
     queries = {
         "assignments": ("SELECT COUNT(*) AS n FROM experiment_assignments WHERE " + condition, params),
+        "group_links": ("SELECT COUNT(*) AS n FROM experiment_group_links WHERE " + condition, params),
         "participations": ("SELECT COUNT(*) AS n FROM study_participations WHERE " + condition, params),
         "runs": (
             "SELECT COUNT(*) AS n FROM instrument_runs ir JOIN study_participations sp "
@@ -3440,6 +3718,17 @@ def reset_study_data(
         ):
             cursor = connection.execute(query, params)
             deleted[name] = max(0, int(cursor.rowcount or 0))
+        group_link_condition = (
+            "substr(study_code,1,12)='barsan-test-'"
+            if data.scope == "test"
+            else "study_code=" + marker
+        )
+        group_link_params: tuple[Any, ...] = () if data.scope == "test" else (STUDY_CODE,)
+        cursor = connection.execute(
+            "DELETE FROM experiment_group_links WHERE " + group_link_condition,
+            group_link_params,
+        )
+        deleted["group_links"] = max(0, int(cursor.rowcount or 0))
         if data.scope == "test":
             cursor = connection.execute(
                 "DELETE FROM studies WHERE substr(study_code,1,12)='barsan-test-'"
