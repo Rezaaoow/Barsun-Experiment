@@ -85,24 +85,22 @@
 
 ## مرحلهٔ تکمیلی query optimization
 
-کاهش round-tripهای مسیرهای پرتکرار Ultimatum در مرحلهٔ بعدی پیاده می‌شود:
+کاهش round-tripهای مسیرهای پرتکرار Ultimatum در کد پیاده‌سازی شده و روی SQLite و PostgreSQL تست شده است:
 
 - ترکیب lookup لینک/کد، consent، stage/run فعال، instrument و trial در یک SELECT برای resolve و events؛
 - ترکیب خواندن draft/status مرحله با بررسی instrument/run برای prepare؛
 - حفظ ترتیب خطاهای 403/404/409، بررسی role و payload، unique constraint و idempotency resolve/events.
 
-هدف این مرحله حذف خواندن‌های تکراری است، نه حذف هرگونه اعتبارسنجی. تعداد queryهای واقعی باید با instrumentation/benchmark تأیید شود.
+این تغییرها خواندن‌های تکراری را حذف می‌کنند، نه کنترل‌های دسترسی. query-count و latency در محیط CI از نظر کارکردی بررسی شده‌اند، اما هنوز benchmark زمان‌دار و load test واقعی اجرا نشده است.
 
-## اولویت‌های فنی
+## اولویت‌های باقیمانده
 
-1. اندازه‌گیری baseline قبل از تغییر: latency هر endpoint، تعداد query، pool wait/timeout و منابع process/DB.
-2. کاهش queryهای تکراری در احراز هویت/consent/active-run با حفظ تمام کنترل‌ها.
-3. بازطراحی مسیر heartbeat برای یک round-trip اتمیک، با حفظ سقف ۴۵ ثانیهٔ elapsed و semantics فعلی.
-4. بررسی query plan مسیرهای prepare/resolve/events و ایجاد index فقط بر مبنای شواهد.
-5. کاهش latency اضافهٔ رخدادهای پس از resolve بدون از دست دادن timestamps؛ هر صف سمت مرورگر باید retry، idempotency و بازیابی پس از refresh داشته باشد.
-6. افزودن تست رگرسیون برای خطاهای هم‌زمانی: prepare تکراری، resolve دوباره، ارسال هم‌زمان پاسخ، تکمیل stage، و بازیابی صف.
-7. تنظیم pool فقط پس از مشخص شدن processهای Passenger و سقف PostgreSQL؛ افزایش کورکورانهٔ pool ممنوع.
-8. افزودن آزمون بار واقعی روی staging با ۶۰۰ هویت آزمایشی، نه روی دادهٔ main.
+1. اندازه‌گیری baseline روی staging: latency هر endpoint، تعداد query، pool wait/timeout و منابع process/DB.
+2. بررسی query plan مسیرهای پرتکرار با `EXPLAIN (ANALYZE, BUFFERS)` و ایجاد index فقط بر مبنای شواهد.
+3. اندازه‌گیری و کاهش تأخیر رخدادهای پس از resolve، بدون از دست دادن timestamps؛ هر صف احتمالی باید retry، idempotency و بازیابی پس از refresh داشته باشد.
+4. تنظیم pool فقط پس از مشخص شدن processهای Passenger و سقف PostgreSQL؛ افزایش کورکورانهٔ pool ممنوع.
+5. اجرای آزمون بار واقعی ramp و burst با ۶۰۰ هویت آزمایشی روی staging، نه روی دادهٔ اصلی.
+6. بررسی نتایج و تصمیم دربارهٔ نیاز به VPS/سرویس دیتابیس مستقل بر اساس CPU/RAM/IO/connectionهای واقعی.
 
 ## طرح آزمون بار پذیرش
 
@@ -139,7 +137,7 @@
 
 مخزن اکنون ابزار محلی staging-only برای ساخت ۶۰۰ assignment و یک سناریوی k6 برای workflow کامل دارد:
 - `tests/load/create_load_test_users.py` — ساخت لینک‌ها با ADMIN_TOKEN محیطی و خروجی خصوصی؛
-- `tests/load/k6_experiment.js` — ramp تا ۶۰۰ VU و اجرای سه ماژول از طریق API؛
+- `tests/load/k6_experiment.js` — دو profile مستقل ramp و burst تا ۶۰۰ VU، heartbeat و اجرای سه ماژول از طریق API؛
 - `tests/load/README_FA.md` — روش اجرا، ایمنی و تفسیر نتایج.
 
 وجود ابزار به معنی اجرای آزمون یا تأیید ظرفیت نیست. فایل کاربران تولیدی و tokenها نباید commit یا برای محیط اصلی استفاده شوند.
@@ -151,9 +149,9 @@
 | ممیزی ساختار Backend و APIها | بررسی اولیه انجام شده |
 | ممیزی UI و نحوهٔ ارسال درخواست‌ها | بررسی اولیه انجام شده |
 | ثبت مشخصات هاست | ثبت شده؛ جزییات process/DB هنوز نامشخص |
-| بهینه‌سازی کد اجرایی | هنوز شروع نشده |
-| تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۵۵ تست SQLite، smoke test PostgreSQL 16 و اعتبارسنجی ابزار staging روی SHA فعلی PR #17 |
-| ابزار load test با ۶۰۰ VU | به مخزن اضافه می‌شود؛ هنوز اجرا نشده |
+| بهینه‌سازی کد اجرایی | دو پاس Backend در PR #17 پیاده‌سازی و در CI تست شده‌اند: query consolidation، time tracking اتمیک و grouped aggregation |
+| تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۵۶ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
+| ابزار load test با ۶۰۰ VU | آماده: دو profile مجزای ramp و burst؛ هنوز اجرا نشده |
 | تأیید آمادگی production | انجام نشده |
 
 هیچ‌یک از اعداد ظرفیت این سند نباید به‌عنوان benchmark اندازه‌گیری‌شده معرفی شود.
