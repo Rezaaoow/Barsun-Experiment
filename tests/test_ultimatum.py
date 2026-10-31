@@ -336,6 +336,8 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     assert sample["opponent_actual_type"] == "computer"
     payload = json.loads(sample["payload"]) if isinstance(sample["payload"], str) else dict(sample["payload"])
     assert payload["offer_model"]["model"] == "discrete_truncated_normal"
+    assert payload["offer_model"]["mean"] == 5.0
+    assert payload["offer_model"]["sd"] == 4.0
 
     final_payload = {
         "schema_version": 1,
@@ -450,3 +452,26 @@ def test_ultimatum_rejects_wrong_block_order_and_old_attempt(client, monkeypatch
         },
     )
     assert stale_resolve.status_code == 409
+
+
+
+def test_ultimatum_ai_offer_uses_sd_four_and_symmetric_discrete_weights(monkeypatch):
+    captured = {}
+
+    def capture_choices(population, weights, k):
+        captured["population"] = list(population)
+        captured["weights"] = list(weights)
+        captured["k"] = k
+        return [5]
+
+    monkeypatch.setattr(main.random, "choices", capture_choices)
+    participant_share, offer_model = main._sample_ai_offer_to_participant()
+
+    assert participant_share == 5
+    assert offer_model["model"] == "discrete_truncated_normal"
+    assert offer_model["mean"] == 5.0
+    assert offer_model["sd"] == 4.0
+    assert captured["population"] == list(range(11))
+    assert captured["k"] == 1
+    assert captured["weights"] == pytest.approx(list(reversed(captured["weights"])))
+    assert offer_model["weights"] == pytest.approx(captured["weights"])
