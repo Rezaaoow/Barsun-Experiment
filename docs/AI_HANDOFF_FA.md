@@ -193,7 +193,7 @@ Python مجازی cPanel مسیر بالا و Python 3.12 است؛ CI نیز 3.1
 
 ## ممیزی ظرفیت و عملکرد رویداد ۶۰۰نفره
 
-دو پاس بهینه‌سازی Backend در PR #17 و شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation در مسیرهای پرتکرار، زمان‌سنجی اتمیک و ادغام queryهای Ultimatum prepare/resolve/events. CI آخرین SHA این شاخه با ۵۶ تست SQLite، PostgreSQL 16 smoke test، تست هم‌زمانی ۲۴ شرکت‌کننده و validation ابزار load test موفق شده است. ابزار staging-only load test با دو profile مستقل ramp و burst در `tests/load/` قرار دارد؛ قبل از استفاده، README همان پوشه را بخوانید. آزمون واقعی ۶۰۰ VU هنوز اجرا نشده و ظرفیت هاست تأیید نشده است.
+دو پاس بهینه‌سازی Backend در PR #17 و شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation در مسیرهای پرتکرار، زمان‌سنجی اتمیک و ادغام queryهای Ultimatum prepare/resolve/events. CI آخرین SHA این شاخه با ۶۰ تست SQLite، PostgreSQL 16 smoke test، تست هم‌زمانی ۲۴ شرکت‌کننده و validation ابزار load test موفق شده است. ابزار staging-only load test با دو profile مستقل ramp و burst در `tests/load/` قرار دارد؛ قبل از استفاده، README همان پوشه را بخوانید. آزمون واقعی ۶۰۰ VU هنوز اجرا نشده و ظرفیت هاست تأیید نشده است.
 
 قبل از اعلام آمادگی production، گزارش کارایی و آزمون بار را بخوانید: docs/PERFORMANCE_AND_LOAD_TESTING_FA.md. یافته‌های قطعی کد را با محدودیت‌های ناشناختهٔ هاست قاطی نکنید: تعداد processهای Passenger، memory/CPU limit، سقف connection دیتابیس و reverse-proxy concurrency باید از cPanel/provider گرفته و با آزمایش staging سنجیده شوند. تعداد ۶۰۰ کاربر مرورگر با ۶۰۰ request هم‌زمان در هر لحظه یکسان نیست، اما burst اولیه و مرحله‌های ذخیرهٔ پرسشنامه باید عمداً در سناریوی load test پوشش داده شوند.
 
