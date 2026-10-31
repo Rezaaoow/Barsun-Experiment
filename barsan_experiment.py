@@ -2551,6 +2551,25 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         }
 
 
+def _ultimatum_score_totals(connection: Any, run_id: str, block_code: str) -> dict[str, Any]:
+    """Fetch run-wide and current-block scores in one aggregate query."""
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT "
+        "COALESCE(SUM(CASE WHEN phase='main' AND status='completed' "
+        "THEN points_earned ELSE 0 END),0) AS score, "
+        "COALESCE(SUM(CASE WHEN phase='main' AND status='completed' "
+        "THEN potential_points_lost ELSE 0 END),0) AS lost, "
+        "COALESCE(SUM(CASE WHEN phase='main' AND status='completed' AND block_code=" + marker
+        + " THEN points_earned ELSE 0 END),0) AS block_score, "
+        "COALESCE(SUM(CASE WHEN phase='main' AND status='completed' AND block_code=" + marker
+        + " THEN potential_points_lost ELSE 0 END),0) AS block_lost "
+        "FROM ultimatum_trials WHERE run_id=" + marker,
+        (block_code, block_code, run_id),
+    ).fetchone()
+    return dict(row)
+
+
 @app.post("/api/experiment/ultimatum/resolve")
 def resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
@@ -2574,19 +2593,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             existing_result = saved_payload.get("resolve_result")
             if isinstance(existing_result, dict) and existing_result.get("round_id"):
                 return existing_result
-            total = connection.execute(
-                "SELECT COALESCE(SUM(points_earned),0) AS score,"
-                "COALESCE(SUM(potential_points_lost),0) AS lost "
-                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
-                (data.run_id,),
-            ).fetchone()
-            block_total = connection.execute(
-                "SELECT COALESCE(SUM(points_earned),0) AS score,"
-                "COALESCE(SUM(potential_points_lost),0) AS lost "
-                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed' "
-                "AND block_code=" + marker,
-                (data.run_id, completed_record["block_code"]),
-            ).fetchone()
+            totals = _ultimatum_score_totals(connection, data.run_id, completed_record["block_code"])
             recovered = {
                 "round_id": completed_record["round_id"],
                 "phase": completed_record["phase"],
@@ -2602,10 +2609,10 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
                 "accepted": bool(completed_record["accepted"]),
                 "points_earned": int(completed_record["points_earned"] or 0),
                 "potential_points_lost": int(completed_record["potential_points_lost"] or 0),
-                "total_score": int(total["score"] or 0),
-                "total_potential_lost": int(total["lost"] or 0),
-                "block_score": int(block_total["score"] or 0),
-                "block_potential_lost": int(block_total["lost"] or 0),
+                "total_score": int(totals["score"] or 0),
+                "total_potential_lost": int(totals["lost"] or 0),
+                "block_score": int(totals["block_score"] or 0),
+                "block_potential_lost": int(totals["block_lost"] or 0),
                 "resolved_at": completed_record["completed_at"],
             }
             saved_payload["resolve_result"] = recovered
@@ -2694,19 +2701,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "UPDATE instrument_runs SET trial_count=trial_count+1 WHERE run_id=" + marker,
             (data.run_id,),
         )
-        total = connection.execute(
-            "SELECT COALESCE(SUM(points_earned),0) AS score,"
-            "COALESCE(SUM(potential_points_lost),0) AS lost "
-            "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
-            (data.run_id,),
-        ).fetchone()
-        block_total = connection.execute(
-            "SELECT COALESCE(SUM(points_earned),0) AS score,"
-            "COALESCE(SUM(potential_points_lost),0) AS lost "
-            "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main' AND status='completed' "
-            "AND block_code=" + marker,
-            (data.run_id, record["block_code"]),
-        ).fetchone()
+        totals = _ultimatum_score_totals(connection, data.run_id, record["block_code"])
         result = {
             "round_id": data.round_id,
             "phase": record["phase"],
@@ -2722,10 +2717,10 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "accepted": accepted,
             "points_earned": points_earned,
             "potential_points_lost": potential_points_lost,
-            "total_score": int(total["score"] or 0),
-            "total_potential_lost": int(total["lost"] or 0),
-            "block_score": int(block_total["score"] or 0),
-            "block_potential_lost": int(block_total["lost"] or 0),
+            "total_score": int(totals["score"] or 0),
+            "total_potential_lost": int(totals["lost"] or 0),
+            "block_score": int(totals["block_score"] or 0),
+            "block_potential_lost": int(totals["block_lost"] or 0),
             "resolved_at": completed_at,
         }
         payload["resolve_result"] = result
