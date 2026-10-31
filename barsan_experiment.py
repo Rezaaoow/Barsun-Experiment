@@ -1942,54 +1942,81 @@ def track_experiment_time(data: ExperimentTimeIn):
         if step_index is None or _canonical_workflow_stage(steps[step_index]["module_code"]) != data.stage_code:
             raise HTTPException(422, "این ماژول در روند آزمایش این لینک وجود ندارد.")
         marker = "%s" if DATABASE_URL else "?"
-        row = connection.execute(
-            "SELECT active_seconds,is_active,last_seen_at FROM experiment_time_tracking "
-            "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
-            (assignment["assignment_id"], data.step_id),
-        ).fetchone()
         timestamp = now()
-        elapsed = 0.0
-        if row:
-            if int(row["is_active"] or 0):
-                try:
-                    last_seen = datetime.fromisoformat(str(row["last_seen_at"]).replace("Z", "+00:00"))
-                    if last_seen.tzinfo is None:
-                        last_seen = last_seen.replace(tzinfo=timezone.utc)
-                    elapsed = min(45.0, max(0.0, datetime.now(timezone.utc).timestamp() - last_seen.timestamp()))
-                except (TypeError, ValueError):
-                    elapsed = 0.0
-            total = float(row["active_seconds"] or 0) + elapsed
-            active = 0 if data.event in {"pause", "complete"} else 1
-            completed_at = timestamp if data.event == "complete" else None
-            if DATABASE_URL:
-                connection.execute(
-                    "UPDATE experiment_time_tracking SET active_seconds=%s,is_active=%s,last_seen_at=%s,"
-                    "completed_at=COALESCE(%s,completed_at) WHERE assignment_id=%s AND step_instance_id=%s",
-                    (total, active, timestamp, completed_at, assignment["assignment_id"], data.step_id),
-                )
+
+        if DATABASE_URL:
+            if data.event == "start":
+                row = connection.execute(
+                    "INSERT INTO experiment_time_tracking(assignment_id,step_instance_id,step_order,stage_code,"
+                    "active_seconds,is_active,started_at,last_seen_at,completed_at) "
+                    "VALUES(%s,%s,%s,%s,0,1,%s,%s,NULL) "
+                    "ON CONFLICT(assignment_id,step_instance_id) DO UPDATE SET "
+                    "active_seconds=experiment_time_tracking.active_seconds + "
+                    "CASE WHEN experiment_time_tracking.is_active=1 THEN "
+                    "LEAST(45.0,GREATEST(0.0,EXTRACT(EPOCH FROM "
+                    "(statement_timestamp()-experiment_time_tracking.last_seen_at::timestamptz)))) "
+                    "ELSE 0.0 END, "
+                    "is_active=1,last_seen_at=EXCLUDED.last_seen_at "
+                    "RETURNING active_seconds,is_active",
+                    (assignment["assignment_id"], data.step_id, step_index + 1,
+                     data.stage_code, timestamp, timestamp),
+                ).fetchone()
             else:
+                active = 0 if data.event in {"pause", "complete"} else 1
+                completed_at = timestamp if data.event == "complete" else None
+                row = connection.execute(
+                    "UPDATE experiment_time_tracking SET "
+                    "active_seconds=active_seconds + "
+                    "CASE WHEN is_active=1 THEN "
+                    "LEAST(45.0,GREATEST(0.0,EXTRACT(EPOCH FROM "
+                    "(statement_timestamp()-last_seen_at::timestamptz)))) "
+                    "ELSE 0.0 END, "
+                    "is_active=%s,last_seen_at=%s,"
+                    "completed_at=COALESCE(%s,completed_at) "
+                    "WHERE assignment_id=%s AND step_instance_id=%s "
+                    "RETURNING active_seconds,is_active",
+                    (active, timestamp, completed_at, assignment["assignment_id"], data.step_id),
+                ).fetchone()
+                if not row:
+                    raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
+            total = float(row["active_seconds"] or 0)
+            active = int(row["is_active"] or 0)
+        else:
+            row = connection.execute(
+                "SELECT active_seconds,is_active,last_seen_at FROM experiment_time_tracking "
+                "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
+                (assignment["assignment_id"], data.step_id),
+            ).fetchone()
+            elapsed = 0.0
+            if row:
+                if int(row["is_active"] or 0):
+                    try:
+                        last_seen = datetime.fromisoformat(str(row["last_seen_at"]).replace("Z", "+00:00"))
+                        if last_seen.tzinfo is None:
+                            last_seen = last_seen.replace(tzinfo=timezone.utc)
+                        elapsed = min(45.0, max(0.0, datetime.now(timezone.utc).timestamp() - last_seen.timestamp()))
+                    except (TypeError, ValueError):
+                        elapsed = 0.0
+                total = float(row["active_seconds"] or 0) + elapsed
+                active = 0 if data.event in {"pause", "complete"} else 1
+                completed_at = timestamp if data.event == "complete" else None
                 connection.execute(
                     "UPDATE experiment_time_tracking SET active_seconds=?,is_active=?,last_seen_at=?,"
                     "completed_at=COALESCE(?,completed_at) WHERE assignment_id=? AND step_instance_id=?",
                     (total, active, timestamp, completed_at, assignment["assignment_id"], data.step_id),
                 )
-        else:
-            if data.event != "start":
-                raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
-            if DATABASE_URL:
-                connection.execute(
-                    "INSERT INTO experiment_time_tracking(assignment_id,step_instance_id,step_order,stage_code,"
-                    "active_seconds,is_active,started_at,last_seen_at,completed_at) VALUES(%s,%s,%s,%s,0,1,%s,%s,NULL)",
-                    (assignment["assignment_id"], data.step_id, step_index + 1, data.stage_code, timestamp, timestamp),
-                )
             else:
+                if data.event != "start":
+                    raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
                 connection.execute(
                     "INSERT INTO experiment_time_tracking(assignment_id,step_instance_id,step_order,stage_code,"
-                    "active_seconds,is_active,started_at,last_seen_at,completed_at) VALUES(?,?,?,?,0,1,?,?,NULL)",
+                    "active_seconds,is_active,started_at,last_seen_at,completed_at) "
+                    "VALUES(?,?,?,?,0,1,?,?,NULL)",
                     (assignment["assignment_id"], data.step_id, step_index + 1, data.stage_code, timestamp, timestamp),
                 )
-            total = 0.0
-            active = 1
+                total = 0.0
+                active = 1
+
         return {
             "saved": True,
             "step_id": data.step_id,
