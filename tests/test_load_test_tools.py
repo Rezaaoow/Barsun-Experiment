@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import stat
 from pathlib import Path
 
@@ -62,3 +63,56 @@ def test_load_user_fixture_is_written_with_owner_only_permissions(tmp_path):
 
     assert output.exists()
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+@pytest.mark.parametrize(
+    "health",
+    [
+        {"ok": True, "database": "sqlite", "database_connected": True},
+        {"ok": True, "database": "postgresql", "database_connected": False},
+        {"ok": False, "database": "postgresql", "database_connected": True},
+    ],
+)
+def test_load_generator_rejects_unhealthy_or_non_postgresql_staging(
+    monkeypatch, health
+):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(health).encode("utf-8")
+
+    monkeypatch.setattr(
+        load_users,
+        "urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        load_users.require_postgresql_health("https://staging.example.org/lifetrade/api/health")
+
+
+def test_load_generator_accepts_healthy_postgresql_staging(monkeypatch):
+    expected = {"ok": True, "database": "postgresql", "database_connected": True}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(expected).encode("utf-8")
+
+    monkeypatch.setattr(
+        load_users,
+        "urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+    assert load_users.require_postgresql_health(
+        "https://staging.example.org/lifetrade/api/health"
+    ) == expected
+
