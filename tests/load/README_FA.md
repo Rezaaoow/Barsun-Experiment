@@ -28,12 +28,14 @@
 
 اگر `DATABASE_URL` در Terminal موجود نیست، آن را از Environment Variables برنامه در cPanel بردارید و در prompt مخفی وارد کنید؛ مقدار در command history قرار نمی‌گیرد و اسکریپت آن را چاپ نمی‌کند:
 
-    set +x
-    read -r -s -p "DATABASE_URL (hidden input): " DATABASE_URL
-    printf '\n'
-    export DATABASE_URL
-    /home/myexperi/virtualenv/lifetrade/3.12/bin/python tests/load/host_diagnostics.py
-    unset DATABASE_URL
+    (
+      set +x
+      read -r -s -p "DATABASE_URL (hidden input): " DATABASE_URL
+      printf '\n'
+      export DATABASE_URL
+      STAGING_PYTHON="/path/to/staging/virtualenv/bin/python"
+      "$STAGING_PYTHON" tests/load/host_diagnostics.py
+    )
 
 در صورت تنظیم بودن متغیر در محیط shell، فقط دستور Python کافی است. خروجی JSON را می‌توانید برای تحلیل ارسال کنید؛ در هر صورت قبل از ارسال بررسی کنید هیچ دادهٔ محرمانهٔ دیگری در خروجی یا Terminal اضافه نشده باشد.
 
