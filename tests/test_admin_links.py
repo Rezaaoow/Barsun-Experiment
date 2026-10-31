@@ -451,3 +451,156 @@ def test_active_links_csv_identifies_workflow_selected_ultimatum_variant(client)
     rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
     variants = {row["participant_code"]: row["ultimatum_variant"] for row in rows}
     assert variants == {"CSV-FRAME": "Frame", "CSV-CONTROL": "Control"}
+
+
+def create_group_link(client, label="Training group", scope="main"):
+    response = client.post(
+        "/api/admin/group-links",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"scope": scope, "label": label},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_group_link_claims_the_participants_own_code_and_creates_a_normal_invite(client):
+    group = create_group_link(client)
+    claim = client.post(
+        "/api/experiment/group/claim",
+        json={
+            "group_token": parse_qs(urlparse(group["invitation_url"]).query)["group"][0],
+            "participant_code": "BS-GROUP-101",
+            "assign_random": False,
+        },
+    )
+    assert claim.status_code == 200, claim.text
+    payload = claim.json()
+    assert payload["participant_code"] == "BS-GROUP-101"
+    assert payload["invitation_token"]
+    assert payload["reused"] is False
+
+    consent = client.post(
+        "/api/experiment/consent",
+        json={
+            "invitation_token": payload["invitation_token"],
+            "participant_code": payload["participant_code"],
+            "accepted": True,
+        },
+    )
+    assert consent.status_code == 200, consent.text
+    identity = client.post(
+        "/api/experiment/identify",
+        json={
+            "invitation_token": payload["invitation_token"],
+            "participant_code": payload["participant_code"],
+        },
+    )
+    assert identity.status_code == 200, identity.text
+    assert identity.json()["participant_code"] == "BS-GROUP-101"
+
+
+def test_group_link_can_assign_distinct_random_codes_without_personal_codes(client):
+    group = create_group_link(client, label="Anonymous code group")
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+
+    first = client.post(
+        "/api/experiment/group/claim",
+        json={"group_token": group_token, "assign_random": True},
+    )
+    second = client.post(
+        "/api/experiment/group/claim",
+        json={"group_token": group_token, "assign_random": True},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    first_payload, second_payload = first.json(), second.json()
+    assert first_payload["participant_code"].startswith("RND-")
+    assert second_payload["participant_code"].startswith("RND-")
+    assert first_payload["participant_code"] != second_payload["participant_code"]
+    assert first_payload["invitation_token"] != second_payload["invitation_token"]
+
+
+def test_group_link_claim_is_idempotent_for_the_same_participant_and_group(client):
+    group = create_group_link(client)
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+    request_body = {
+        "group_token": group_token,
+        "participant_code": "BS-GROUP-RETRY",
+        "assign_random": False,
+    }
+    first = client.post("/api/experiment/group/claim", json=request_body)
+    second = client.post("/api/experiment/group/claim", json=request_body)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["invitation_token"] == second.json()["invitation_token"]
+    assert first.json()["participant_code"] == second.json()["participant_code"]
+    assert second.json()["reused"] is True
+
+    with main.conn() as connection:
+        rows = connection.execute(
+            "SELECT COUNT(*) AS total FROM experiment_assignments WHERE group_link_id=?",
+            (group["group_link_id"],),
+        ).fetchone()
+    assert rows["total"] == 1
+
+
+def test_group_link_rejects_reuse_of_a_code_already_assigned_individually(client):
+    create_main_assignment(client, code="BS-GROUP-EXISTING")
+    group = create_group_link(client)
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+    response = client.post(
+        "/api/experiment/group/claim",
+        json={
+            "group_token": group_token,
+            "participant_code": "BS-GROUP-EXISTING",
+            "assign_random": False,
+        },
+    )
+    assert response.status_code == 409
+
+
+def test_group_link_can_be_listed_and_deactivated(client):
+    group = create_group_link(client)
+    headers = {"x-admin-token": "test-admin-token"}
+    listed = client.get("/api/admin/group-links?scope=main", headers=headers)
+    assert listed.status_code == 200, listed.text
+    item = next(row for row in listed.json()["items"] if row["group_link_id"] == group["group_link_id"])
+    assert item["active"] is True
+    assert item["url_available"] is True
+
+    disabled = client.post(
+        "/api/admin/group-links/status",
+        headers=headers,
+        json={"scope": "main", "group_link_ids": [group["group_link_id"]], "active": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+    claim = client.post(
+        "/api/experiment/group/claim",
+        json={
+            "group_token": parse_qs(urlparse(group["invitation_url"]).query)["group"][0],
+            "participant_code": "BS-GROUP-DISABLED",
+            "assign_random": False,
+        },
+    )
+    assert claim.status_code == 404
+
+
+def test_group_links_are_removed_by_scoped_data_reset(client):
+    group = create_group_link(client, label="Reset group")
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+    response = client.post(
+        "/api/admin/maintenance/reset",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"scope": "main", "confirm_phrase": "CLEAR MAIN DATA"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["deleted_rows"]["group_links"] == 1
+    claim = client.post(
+        "/api/experiment/group/claim",
+        json={
+            "group_token": group_token,
+            "participant_code": "BS-GROUP-AFTER-RESET",
+            "assign_random": False,
+        },
+    )
+    assert claim.status_code == 404
