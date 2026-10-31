@@ -1210,24 +1210,43 @@ def _workflow_progress_rows(connection: Any, assignment_id: str) -> dict[str, di
     return {row["step_instance_id"]: dict(row) for row in rows}
 
 
-def _lookup_assignment(connection: Any, invitation_token: str, participant_code: str) -> dict[str, Any]:
+def _lookup_assignment(
+    connection: Any,
+    invitation_token: str,
+    participant_code: str,
+    *,
+    require_consent: bool = False,
+) -> dict[str, Any]:
+    """Resolve an invitation and, on participant hot paths, check consent in the same SQL round-trip."""
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
+    consent_projection = (
+        ", EXISTS(SELECT 1 FROM experiment_consents ec "
+        "WHERE ec.assignment_id=a.assignment_id AND ec.consent_version=" + marker + ") AS consent_accepted"
+        if require_consent else ""
+    )
+    params = (
+        ((CONSENT_VERSION,) if require_consent else ())
+        + (normalize_participant_code(participant_code), token_hash)
+    )
     row = connection.execute(
         "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
-        "sp.participation_id,p.participant_code "
+        "sp.participation_id,p.participant_code" + consent_projection + " "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
         "JOIN study_participations sp ON sp.participant_id=a.participant_id "
         "AND sp.study_code=a.study_code "
         "WHERE p.participant_code=" + marker
         + " AND a.invitation_token_hash=" + marker + " AND a.active=1",
-        (normalize_participant_code(participant_code), token_hash),
+        params,
     ).fetchone()
     if not row:
         # A generic error avoids distinguishing a bad code from a bad invitation link.
         raise HTTPException(403, "کد شرکت‌کننده یا لینک اختصاصی معتبر نیست.")
-    return dict(row)
+    resolved = dict(row)
+    if require_consent and not resolved.get("consent_accepted"):
+        raise HTTPException(403, "رضایت برای مشارکت ثبت نشده است.")
+    return resolved
 
 
 def _require_consent(connection: Any, assignment_id: str) -> None:
@@ -1876,8 +1895,9 @@ def get_public_experiment_workflow(invite: str):
 def identify_experiment_participant(data: ExperimentIdentityIn):
     """Resolve the assigned link, workflow instances and legacy stage snapshot."""
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         rows = _get_stage_rows(connection, assignment["participation_id"])
         saved_steps = _workflow_progress_rows(connection, assignment["assignment_id"])
     module_only = _test_module_from_study_code(assignment["study_code"])
@@ -1914,8 +1934,9 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
 @app.post("/api/experiment/time")
 def track_experiment_time(data: ExperimentTimeIn):
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         steps = _workflow_for_assignment(assignment)
         step_index = next((i for i, step in enumerate(steps) if step["step_id"] == data.step_id), None)
         if step_index is None or _canonical_workflow_stage(steps[step_index]["module_code"]) != data.stage_code:
@@ -1982,8 +2003,9 @@ def track_experiment_time(data: ExperimentTimeIn):
 def start_experiment_stage(data: StageStartIn):
     """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         rows = _get_stage_rows(connection, assignment["participation_id"])
         workflow_step = None
         workflow_step_index = None
@@ -2171,8 +2193,9 @@ def start_experiment_stage(data: StageStartIn):
 def save_questionnaire_draft(data: StageDraftIn):
     """Persist questionnaire answers continuously so a refresh restores the same draft."""
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
             "SELECT status,current_run_id FROM experiment_stage_progress "
@@ -2211,8 +2234,9 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
     if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
         raise HTTPException(422, "Unknown questionnaire question code")
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         marker = "%s" if DATABASE_URL else "?"
         state = connection.execute(
             "SELECT status,current_run_id,draft_payload FROM experiment_stage_progress "
@@ -2342,8 +2366,9 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         ):
             raise HTTPException(422, "مشخصات بلوک یا شمارهٔ دور اولتیماتوم معتبر نیست.")
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
         marker = "%s" if DATABASE_URL else "?"
         stage_state = connection.execute(
@@ -2509,8 +2534,9 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
     _validate_event_timestamps(data.client_event_timestamps, ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS)
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
         marker = "%s" if DATABASE_URL else "?"
         row = connection.execute(
@@ -2694,8 +2720,9 @@ def record_ultimatum_events(data: UltimatumEventsIn):
     _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         _active_ultimatum_run(connection, assignment["participation_id"], data.run_id)
         row = connection.execute(
             "SELECT status,payload FROM ultimatum_trials WHERE round_id=" + marker + " AND run_id=" + marker,
@@ -2723,8 +2750,9 @@ def record_ultimatum_events(data: UltimatumEventsIn):
 def complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
     with conn() as connection:
-        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
-        _require_consent(connection, assignment["assignment_id"])
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
+        )
         marker = "%s" if DATABASE_URL else "?"
         if data.step_id:
             state = connection.execute(
