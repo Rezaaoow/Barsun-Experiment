@@ -191,6 +191,12 @@ Python مجازی cPanel مسیر بالا و Python 3.12 است؛ CI نیز 3.1
 - در deploy عادی هیچ `DROP`، `DELETE`، reset، re-seed یا انتقال SQLite اجرا نکن.
 - جدول‌های اصلی شامل `studies`، `participants`، `study_participations`، `experiment_assignments`، `experiment_consents`، `experiment_stage_progress`، `study_workflows`، `experiment_workflow_progress`، `experiment_time_tracking`، `instrument_runs`، `lifetrade_trials`، `questionnaire_responses` و `ultimatum_trials` هستند. جزئیات دقیق در `DATABASE_ARCHITECTURE.md`.
 
+## ممیزی ظرفیت و عملکرد رویداد ۶۰۰نفره
+
+قبل از اعلام آمادگی production، گزارش کارایی و آزمون بار را بخوانید: docs/PERFORMANCE_AND_LOAD_TESTING_FA.md. یافته‌های قطعی کد را با محدودیت‌های ناشناختهٔ هاست قاطی نکنید: تعداد processهای Passenger، memory/CPU limit، سقف connection دیتابیس و reverse-proxy concurrency باید از cPanel/provider گرفته و با آزمایش staging سنجیده شوند. تعداد ۶۰۰ کاربر مرورگر با ۶۰۰ request هم‌زمان در هر لحظه یکسان نیست، اما burst اولیه و مرحله‌های ذخیرهٔ پرسشنامه باید عمداً در سناریوی load test پوشش داده شوند.
+
+تغییرات performance نباید protocol، تعداد trialها، ترتیب ماژول‌ها، randomization، scoring، RT semantics یا ظاهر participant UI را تغییر دهند. خروجی موفق CI نیز به‌تنهایی اثبات ظرفیت واقعی ۶۰۰ شرکت‌کننده نیست.
+
 ## 8. سابقهٔ خطای deploy — حتماً قبل از deploy بخوان
 
 در تلاش قبلی، اسکریپت runtime files را در `/home/myexperi/lifetrade/` کپی کرد. این اشتباه بود، چون `passenger_wsgi.py` از `/home/myexperi/lifetrade/repo/` import می‌کند.
