@@ -20,7 +20,7 @@
 
 مرحلهٔ تکمیلی query optimization پیاده‌سازی شده است: بررسی consent، run فعال و trial در resolve/events در یک read ترکیبی انجام می‌شود و prepare نیز lookup لینک/رضایت و دریافت وضعیت stage/draft/instrument را در یک query انجام می‌دهد. تست‌ها حفظ رفتار خطا و idempotency را پوشش می‌دهند.
 
-بهینه‌سازی مرحلهٔ اول روی شاخهٔ `perf/600-user-event-readiness` متمرکز بر queryهای احراز هویت، نوشتن اتمیک زمان‌سنجی، کاهش queryهای prepare و تجمیع محاسبهٔ امتیاز Ultimatum است. این موارد فقط پس از عبور از تست‌های regression و PostgreSQL CI «تکمیل‌شده» محسوب می‌شوند؛ تا پیش از load test روی staging، ظرفیت ۶۰۰ نفر تأییدشده نیست.
+دو پاس بهینه‌سازی Backend روی شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation برای consent/run/trial در Ultimatum، نوشتن اتمیک time tracking، کاهش queryهای prepare، و grouped scoring. ابزارهای staging-only برای load test با دو profile ramp/burst و تشخیص read-only منابع cPanel/PostgreSQL نیز اضافه شده‌اند. CI آخرین نسخه با ۶۱ تست SQLite و PostgreSQL smoke test موفق شده است؛ تا پیش از اجرای ۶۰۰ VU روی staging، ظرفیت ۶۰۰ نفر تأییدشده نیست.
 
 ممیزی ظرفیت، مسیرهای پرتکرار، pool دیتابیس، queryها و آزمون بار ۶۰۰ شرکت‌کننده در [گزارش کارایی و آزمون بار](docs/PERFORMANCE_AND_LOAD_TESTING_FA.md) ثبت می‌شود. این گزارش محدودیت‌های واقعی cPanel/Passenger و PostgreSQL را از بهینه‌سازی‌های کد جدا می‌کند؛ موفقیت تست CI به‌تنهایی اثبات ظرفیت ۶۰۰ اتصال هم‌زمان نیست.
 
