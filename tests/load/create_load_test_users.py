@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,7 +109,7 @@ def main() -> int:
         return 2
 
     endpoint = base_url + "/api/admin/assignments"
-    run_code = datetime.now(timezone.utc).strftime("%y%m%d%H%M%S")
+    run_code = datetime.now(timezone.utc).strftime("%y%m%d%H%M%S") + "-" + secrets.token_hex(3)
     participants: list[dict[str, str]] = []
     saved = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
