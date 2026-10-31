@@ -6,6 +6,16 @@
 2. تسک DD در برابر Life-Trade (کد فعلی)
 3. بازی اولتیماتوم
 
+## راهنمای ضروری برای توسعه و کار با هوش مصنوعی
+
+این مخزن برای عامل‌های هوش مصنوعی یک راهنمای اجرایی مستقل دارد. پیش از هر تغییر یا عملیات استقرار، اسناد زیر را به ترتیب بخوانید:
+
+1. [`AGENTS.md`](AGENTS.md): دستورالعمل اجباری توسعه، تست، امنیت و استقرار برای تمام عامل‌ها.
+2. [راهنمای جامع انتقال دانش و عملیات](docs/AI_HANDOFF_FA.md): معماری واقعی پروژه، مسیر فعال Passenger، محیط اجرا، دیتابیس، CI، استقرار، خطاهای قبلی و چک‌لیست تحویل.
+3. [معماری جریان آزمایش](EXPERIMENT_ARCHITECTURE.md) و [معماری دیتابیس](DATABASE_ARCHITECTURE.md): مرجع منطق پژوهش و ساختار داده.
+
+**نکتهٔ حیاتی cPanel:** Application Root برابر `/home/myexperi/lifetrade` است، اما فایل `passenger_wsgi.py` کد فعال را از `/home/myexperi/lifetrade/repo` import می‌کند. بنابراین فایل‌های runtime باید در `/home/myexperi/lifetrade/repo/` منتشر شوند، نه در ریشهٔ Application Root. جزئیات و شواهد در راهنمای انتقال دانش ثبت شده‌اند.
+
 ## وضعیت فعلی
 
 - زیرساخت بک‌اند برای تخصیص ثابت هر شرکت‌کننده به شرط آزمایشی، لینک اختصاصی، مشاهدهٔ پیشرفت مراحل، ذخیرهٔ پیش‌نویس پرسشنامه و شروع مجدد تلاش ناقص دو تسک پیاده‌سازی شده است.
@@ -150,7 +160,7 @@ RT با `performance.now()` از زمان بلافاصله پس از ساخت ع
 | Prefix برنامه | `/lifetrade` |
 | Application root | `/home/myexperi/lifetrade` |
 | کلون Git | `/home/myexperi/lifetrade/repo` |
-| فایل HTML منتشرشده | `/home/myexperi/lifetrade/app/index.html` |
+| فایل HTML منتشرشده | `/home/myexperi/lifetrade/repo/app/index.html` |
 | درخواست Restart Passenger | `/home/myexperi/lifetrade/tmp/restart.txt` |
 | فایل کلید SSH برای Deploy | `/home/myexperi/.ssh/lifetrade_deploy` |
 | نام دیتابیس PostgreSQL | `myexperi_lifetrade_study` |
@@ -206,7 +216,7 @@ curl -i --max-time 20 https://my-experiment.ir/lifetrade/api/health
 2. remote مخزن را روی `git@github.com:Rezaaoow/barsan-experiment.git` تنظیم کنید.
 3. ref مربوط به PR یا شاخه را fetch کنید.
 4. SHA commit را با SHA دقیق همان نسخهٔ تأییدشده در CI مقایسه کنید.
-5. فقط `app/index.html` را از commit تأییدشده استخراج کنید و به `/home/myexperi/lifetrade/app/index.html` منتقل کنید.
+5. فقط `app/index.html` را از commit تأییدشده استخراج کنید و به `/home/myexperi/lifetrade/repo/app/index.html` منتقل کنید. این مسیر در کلون فعال Passenger است؛ مسیر هم‌نام زیر `/home/myexperi/lifetrade/app/` غیرفعال است.
 6. `touch /home/myexperi/lifetrade/tmp/restart.txt` را اجرا کنید.
 7. HTML زنده را با query string یکتا دریافت و نشانگر نسخه را بررسی کنید. در صورت شکست verify، فایل قبلی را از backup برگردانید و Passenger را دوباره restart کنید.
 
@@ -214,7 +224,7 @@ curl -i --max-time 20 https://my-experiment.ir/lifetrade/api/health
 
 ### انتشار Backend
 
-اگر کد Backend تغییر کند، فقط در صورت نیاز فایل‌های `barsan_experiment.py`، `main.py`، `app.py` و `requirements.txt` را نیز طبق ساختار واقعی در ریشهٔ اپلیکیشن منتشر کنید. اگر وابستگی‌ها تغییر کردند، virtualenv متصل به همان Python App را به‌روزرسانی کنید. قبل از هر تغییر Backend، تنظیم Startup/Entry point و متغیرهای محیطی زنده را در cPanel بررسی کنید. تغییر Backend نباید موجب تغییر یا reset دیتابیس شود مگر migration جداگانه، پشتیبان مستقل و تأیید صریح وجود داشته باشد.
+اگر کد Backend تغییر کند، فقط در صورت نیاز فایل‌های `barsan_experiment.py`، `main.py`، `app.py` و `requirements.txt` را نیز در کلون فعال Passenger یعنی `/home/myexperi/lifetrade/repo/` منتشر کنید؛ این bootstrap کد را از همان مسیر import می‌کند. اگر وابستگی‌ها تغییر کردند، virtualenv متصل به همان Python App را به‌روزرسانی کنید. قبل از هر تغییر Backend، تنظیم Startup/Entry point و متغیرهای محیطی زنده را در cPanel بررسی کنید. تغییر Backend نباید موجب تغییر یا reset دیتابیس شود مگر migration جداگانه، پشتیبان مستقل و تأیید صریح وجود داشته باشد.
 
 ---
 
