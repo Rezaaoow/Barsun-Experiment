@@ -18,7 +18,7 @@
 
 ## آمادگی اجرا با هم‌زمانی بالا
 
-مرحلهٔ تکمیلی query optimization نیز مسیرهای پرتکرار Ultimatum را هدف می‌گیرد: بررسی consent، run فعال و trial در resolve/events در یک read ترکیبی، و ادغام خواندن وضعیت stage/draft با اعتبارسنجی instrument در prepare. رفتار خطا و idempotency باید بدون تغییر باقی بمانند.
+مرحلهٔ تکمیلی query optimization پیاده‌سازی شده است: بررسی consent، run فعال و trial در resolve/events در یک read ترکیبی انجام می‌شود و prepare نیز lookup لینک/رضایت و دریافت وضعیت stage/draft/instrument را در یک query انجام می‌دهد. تست‌ها حفظ رفتار خطا و idempotency را پوشش می‌دهند.
 
 بهینه‌سازی مرحلهٔ اول روی شاخهٔ `perf/600-user-event-readiness` متمرکز بر queryهای احراز هویت، نوشتن اتمیک زمان‌سنجی، کاهش queryهای prepare و تجمیع محاسبهٔ امتیاز Ultimatum است. این موارد فقط پس از عبور از تست‌های regression و PostgreSQL CI «تکمیل‌شده» محسوب می‌شوند؛ تا پیش از load test روی staging، ظرفیت ۶۰۰ نفر تأییدشده نیست.
 
