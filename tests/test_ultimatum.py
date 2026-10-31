@@ -475,3 +475,77 @@ def test_ultimatum_ai_offer_uses_sd_four_and_symmetric_discrete_weights(monkeypa
     assert captured["k"] == 1
     assert captured["weights"] == pytest.approx(list(reversed(captured["weights"])))
     assert offer_model["weights"] == pytest.approx(captured["weights"])
+
+
+def test_combined_ultimatum_round_lookup_preserves_consent_and_not_found_errors(
+    client, monkeypatch
+):
+    identity, run_id = create_active_ultimatum(
+        client, monkeypatch, participant_code="UT-COMBINED-LOOKUP"
+    )
+    prepared = prepare_round(
+        client, identity, run_id, phase="practice",
+        block_code="practice_proposer_agent", block_order=0, trial=1, sequence=0,
+    )
+
+    token_hash = main.hashlib.sha256(identity["invitation_token"].encode("utf-8")).hexdigest()
+    with main.conn() as connection:
+        assignment = connection.execute(
+            "SELECT assignment_id FROM experiment_assignments WHERE invitation_token_hash=?",
+            (token_hash,),
+        ).fetchone()
+        assert assignment is not None
+        connection.execute(
+            "DELETE FROM experiment_consents WHERE assignment_id=? AND consent_version=?",
+            (assignment["assignment_id"], main.CONSENT_VERSION),
+        )
+
+    resolve_payload = {
+        **identity,
+        "run_id": run_id,
+        "round_id": prepared["round_id"],
+        "participant_offer_to_opponent": 5,
+    }
+    denied_resolve = client.post(
+        "/api/experiment/ultimatum/resolve",
+        json=resolve_payload,
+    )
+    assert denied_resolve.status_code == 403
+    assert denied_resolve.json()["detail"] == "رضایت برای مشارکت ثبت نشده است."
+
+    denied_events = client.post(
+        "/api/experiment/ultimatum/events",
+        json={
+            **identity,
+            "run_id": run_id,
+            "round_id": prepared["round_id"],
+            "event_timestamps": {"result_screen_shown_at": main.now()},
+        },
+    )
+    assert denied_events.status_code == 403
+    assert denied_events.json()["detail"] == "رضایت برای مشارکت ثبت نشده است."
+
+    with main.conn() as connection:
+        connection.execute(
+            "INSERT INTO experiment_consents(assignment_id,consent_version,accepted_at) VALUES(?,?,?)",
+            (assignment["assignment_id"], main.CONSENT_VERSION, main.now()),
+        )
+
+    missing_round_id = str(uuid.uuid4())
+    missing_resolve = client.post(
+        "/api/experiment/ultimatum/resolve",
+        json={**resolve_payload, "round_id": missing_round_id},
+    )
+    assert missing_resolve.status_code == 404
+
+    missing_events = client.post(
+        "/api/experiment/ultimatum/events",
+        json={
+            **identity,
+            "run_id": run_id,
+            "round_id": missing_round_id,
+            "event_timestamps": {"result_screen_shown_at": main.now()},
+        },
+    )
+    assert missing_events.status_code == 404
+
