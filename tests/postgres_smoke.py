@@ -62,6 +62,60 @@ def main_test():
         assert "PG-SMOKE-0001" in exported.text
         assert session_id in exported.text
 
+
+        # Exercise the high-frequency experiment timer endpoint on PostgreSQL.
+        timer_headers = {"x-admin-token": "ci-admin-token"}
+        timer_assignment = client.post(
+            "/api/admin/assignments",
+            headers=timer_headers,
+            json={"assignments": [{"participant_code": "PG-TIME-0001", "condition_code": "A"}]},
+        )
+        assert timer_assignment.status_code == 200, timer_assignment.text
+        timer_url = timer_assignment.json()["assignments"][0]["invitation_url"]
+        from urllib.parse import parse_qs, urlparse
+        timer_identity = {
+            "invitation_token": parse_qs(urlparse(timer_url).query)["invite"][0],
+            "participant_code": "PG-TIME-0001",
+        }
+        accepted_consent = client.post(
+            "/api/experiment/consent",
+            json={**timer_identity, "accepted": True},
+        )
+        assert accepted_consent.status_code == 200, accepted_consent.text
+        timer_payload = {
+            **timer_identity,
+            "step_id": "default-questionnaire",
+            "stage_code": "questionnaire",
+        }
+        timer_started = client.post(
+            "/api/experiment/time",
+            json={**timer_payload, "event": "start"},
+        )
+        assert timer_started.status_code == 200, timer_started.text
+        import time
+        time.sleep(0.05)
+
+        def concurrent_heartbeat(_index):
+            with TestClient(main.app) as heartbeat_client:
+                response = heartbeat_client.post(
+                    "/api/experiment/time",
+                    json={**timer_payload, "event": "heartbeat"},
+                )
+                assert response.status_code == 200, response.text
+                return response.json()["active_seconds"]
+
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            heartbeat_totals = list(executor.map(concurrent_heartbeat, range(24)))
+        time.sleep(0.05)
+        timer_paused = client.post(
+            "/api/experiment/time",
+            json={**timer_payload, "event": "pause"},
+        )
+        assert timer_paused.status_code == 200, timer_paused.text
+        assert timer_paused.json()["is_active"] is False
+        assert timer_paused.json()["active_seconds"] >= 0.05
+        assert all(total >= 0 for total in heartbeat_totals)
+
         # Exercise the isolated test scope on PostgreSQL. Passing an empty parameter
         # tuple alongside a literal LIKE pattern containing '%' previously raised a
         # psycopg formatting error, so all scope-specific admin queries are checked here.
