@@ -164,6 +164,8 @@ def main() -> int:
     }
 
     database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url[len("postgres://"):]
     database = (
         _postgres_snapshot(database_url)
         if database_url
@@ -183,14 +185,14 @@ def main() -> int:
         "application": {
             "python_version": __import__("platform").python_version(),
             "db_pool": pool,
-            "estimated_total_pool_connections": None,
+            "pool_connections_upper_bound_if_all_uid_processes_use_pool": None,
             "note": "Total pool connections equal max_size_per_process multiplied by Passenger app process count, plus other clients. The process count below includes all processes for this cPanel UID, not Passenger-only processes.",
         },
         "postgresql": database,
     }
     process_count = result["host"]["processes_for_current_uid"]
     if process_count is not None:
-        result["application"]["estimated_total_pool_connections"] = (
+        result["application"]["pool_connections_upper_bound_if_all_uid_processes_use_pool"] = (
             pool["max_size_per_process"] * process_count
         )
     print(json.dumps(result, ensure_ascii=False, indent=2))
