@@ -1954,9 +1954,10 @@ def track_experiment_time(data: ExperimentTimeIn):
                     "active_seconds=experiment_time_tracking.active_seconds + "
                     "CASE WHEN experiment_time_tracking.is_active=1 THEN "
                     "LEAST(45.0,GREATEST(0.0,EXTRACT(EPOCH FROM "
-                    "(statement_timestamp()-experiment_time_tracking.last_seen_at::timestamptz)))) "
+                    "(EXCLUDED.last_seen_at::timestamptz-experiment_time_tracking.last_seen_at::timestamptz)))) "
                     "ELSE 0.0 END, "
-                    "is_active=1,last_seen_at=EXCLUDED.last_seen_at "
+                    "is_active=1,last_seen_at=GREATEST("
+                    "experiment_time_tracking.last_seen_at::timestamptz,EXCLUDED.last_seen_at::timestamptz)::text "
                     "RETURNING active_seconds,is_active",
                     (assignment["assignment_id"], data.step_id, step_index + 1,
                      data.stage_code, timestamp, timestamp),
@@ -1969,13 +1970,13 @@ def track_experiment_time(data: ExperimentTimeIn):
                     "active_seconds=active_seconds + "
                     "CASE WHEN is_active=1 THEN "
                     "LEAST(45.0,GREATEST(0.0,EXTRACT(EPOCH FROM "
-                    "(statement_timestamp()-last_seen_at::timestamptz)))) "
+                    "(%s::timestamptz-last_seen_at::timestamptz)))) "
                     "ELSE 0.0 END, "
-                    "is_active=%s,last_seen_at=%s,"
+                    "is_active=%s,last_seen_at=GREATEST(last_seen_at::timestamptz,%s::timestamptz)::text,"
                     "completed_at=COALESCE(%s,completed_at) "
                     "WHERE assignment_id=%s AND step_instance_id=%s "
                     "RETURNING active_seconds,is_active",
-                    (active, timestamp, completed_at, assignment["assignment_id"], data.step_id),
+                    (timestamp, active, timestamp, completed_at, assignment["assignment_id"], data.step_id),
                 ).fetchone()
                 if not row:
                     raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
