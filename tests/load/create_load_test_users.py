@@ -47,6 +47,31 @@ def write_private_json(path: Path, payload: dict) -> None:
             pass
 
 
+def require_postgresql_health(endpoint: str) -> dict:
+    """Refuse load-test fixture creation unless the staging API uses healthy PostgreSQL."""
+    request = Request(
+        endpoint,
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            health = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        raise RuntimeError("staging health check failed or returned invalid JSON") from None
+
+    if (
+        not isinstance(health, dict)
+        or health.get("ok") is not True
+        or health.get("database") != "postgresql"
+        or health.get("database_connected") is not True
+    ):
+        raise RuntimeError(
+            "staging API must report ok=true and a connected PostgreSQL database"
+        )
+    return health
+
+
 def post_assignments(endpoint: str, admin_token: str, assignments: list[dict]) -> dict:
     payload = json.dumps(
         {"assignments": assignments, "steps": WORKFLOW_STEPS},
@@ -107,6 +132,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+
+    try:
+        require_postgresql_health(base_url + "/api/health")
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
     endpoint = base_url + "/api/admin/assignments"
     run_code = datetime.now(timezone.utc).strftime("%y%m%d%H%M%S") + "-" + secrets.token_hex(3)
