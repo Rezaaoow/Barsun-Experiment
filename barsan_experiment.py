@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Any, Iterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -96,6 +97,8 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
+# Compress the large shared participant HTML and JSON responses to reduce event bandwidth.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def _invitation_fernet() -> Fernet:
