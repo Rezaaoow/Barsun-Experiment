@@ -2632,8 +2632,11 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
                 + " THEN status END) AS existing_status "
                 "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main'",
                 (
-                    data.block_order, data.block_order, data.block_code, data.block_code,
-                    data.block_code, data.trial_in_block, data.run_id,
+                    data.block_order, data.block_order,
+                    data.block_code, data.block_code,
+                    data.block_code, data.trial_in_block,
+                    data.block_code, data.trial_in_block,
+                    data.run_id,
                 ),
             ).fetchone()
             completed_main_count = int(main_summary["completed_count"] or 0)
