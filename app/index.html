@@ -1222,7 +1222,8 @@ async function utApiWithRetry(path,payload,attempts=4){
  }
  throw lastError||new Error('درخواست ثبت نشد.');
 }
-const TRIAL_BATCH_SIZE=5;
+// Persist each trial locally immediately; send one bounded batch per 25 trials.
+const TRIAL_BATCH_SIZE=25;
 const TRIAL_BATCH_MAX=25;
 let pendingFlushPromise=null;
 function pendingStorageKey(){return 'lifetrade_pending_'+sessionId;}
