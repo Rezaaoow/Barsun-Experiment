@@ -803,14 +803,36 @@ h2 {
  .scale-option .scale-label{display:block;-webkit-line-clamp:unset;overflow:visible;overflow-wrap:anywhere;min-width:0;max-height:none;white-space:normal;text-align:center;font-size:clamp(.76rem,2.35vw,.88rem)!important;line-height:1.38!important}
 }
 
-/* Participant-facing screens: centered copy and headings throughout. */
+/* Participant-facing screens: center the main title/copy group in the available viewport. */
 #screen .panel{text-align:center}
 #screen .panel h1,#screen .panel h2,#screen .panel h3,#screen .panel p,#screen .panel .eyebrow,#screen .panel .hint,#screen .panel .status,#screen .panel .welcome-note,#screen .panel .welcome-step,#screen .panel .instruction-content,#screen .panel .instruction-heading{text-align:center}
 #screen .panel .field label,#screen .panel .consent-row{justify-content:center;text-align:center}
+.welcome-step{justify-content:center;text-align:center}
+.welcome-step strong{text-align:center}
+.instruction-main{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:clamp(8px,1.8vh,18px);overflow-y:auto;text-align:center}
+.instruction-main .instruction-heading{width:100%;text-align:center}
+.instruction-main .instruction-content{flex:0 1 auto;min-height:0;width:100%;justify-content:center;align-items:center;overflow-y:auto;text-align:center}
+.instruction-main .instruction-content>p,.instruction-main .instruction-content .instruction-explanation{text-align:center}
+.instruction-main .instruction-content .example-box{margin-inline:auto}
+.page-actions{margin-top:clamp(12px,2vh,22px)}
+.questionnaire-main{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:center;gap:clamp(10px,2vh,18px);overflow-y:auto;text-align:center}
+.questionnaire-main>h2{text-align:center;margin:0}
+.questionnaire-main .questionnaire-question{flex:0 1 auto;min-height:0;overflow:visible;justify-content:center}
+.questionnaire-main .questionnaire-statement{text-align:center}
+.questionnaire-actions{flex:none;margin-top:clamp(10px,2vh,18px)}
+@media(max-width:680px){
+ .screen,.screen.trial-screen{align-items:center!important;justify-content:center!important}
+}
+@media (orientation:landscape) and (max-width:900px){
+ .screen,.screen.trial-screen{align-items:center!important;justify-content:center!important}
+}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
-  <h1>بازی باشگاه رانندگان بارسان</h1>
+  <p class="eyebrow">پژوهش میدانی بارسان</p>
+  <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
+  <ol class="welcome-steps" id="welcome-steps" aria-label="ترتیب مراحل برنامه"></ol>
+  <p class="welcome-note hidden" id="welcome-plan-status" role="status" aria-live="polite"></p>
   <button class="btn" id="welcome-continue" type="button">ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
@@ -942,11 +964,14 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
     box.appendChild(progress);
   }
 
+  const main=document.createElement('div');
+  main.className='instruction-main';
+
   if(title){
     const h=document.createElement('h2');
     h.className='instruction-heading';
     h.textContent=title;
-    box.appendChild(h);
+    main.appendChild(h);
   }
 
   const content=document.createElement('div');
@@ -966,7 +991,8 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
     n.textContent=note;
     content.appendChild(n);
   }
-  box.appendChild(content);
+  main.appendChild(content);
+  box.appendChild(main);
 
   const actions=document.createElement('div');
   actions.className='page-actions';
@@ -984,7 +1010,7 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 }
 
 function showInstructionPage(taskKey, pageIndex){
-  const title=taskKey==='KT'?'به تکلیف «5-Trial DD Task» خوش آمدید!':'به تکلیف «Life-Trade Reward» خوش آمدید!';
+  const title='بازی انتخاب';
 
   if(pageIndex===0){
     showInfo(title, [], '', pageIndex);
@@ -1477,10 +1503,13 @@ function showQuestionnaireIntro(pageIndex=0){
  count.textContent='راهنمای '+(pageIndex+1)+' از ۲';
  progress.append(label,count);box.appendChild(progress);
 
+ const main=document.createElement('div');
+ main.className='instruction-main';
+
  const heading=document.createElement('h2');
  heading.className='instruction-heading';
  heading.textContent=pageIndex===0?'معرفی پرسشنامه':'راهنمای پاسخ‌گویی';
- box.appendChild(heading);
+ main.appendChild(heading);
 
  const content=document.createElement('div');
  content.className='instruction-content';
@@ -1513,7 +1542,8 @@ function showQuestionnaireIntro(pageIndex=0){
    content.appendChild(saved);
   }
  }
- box.appendChild(content);
+ main.appendChild(content);
+ box.appendChild(main);
 
  const actions=document.createElement('div');actions.className='page-actions';
  const back=document.createElement('button');back.type='button';back.className='btn btn-secondary next-page';
@@ -1706,8 +1736,9 @@ function showQuestionnaireQuestion(index){
  const count=document.createElement('div');count.textContent='سؤال '+(workflow.questionIndex+1)+' از '+QUESTIONNAIRE_ITEMS.length;
  meta.append(metaLeft,count);box.appendChild(meta);
 
+ const main=document.createElement('div');main.className='questionnaire-main';
  const heading=document.createElement('h2');heading.textContent='لطفاً عبارت زیر را با توجه به تجربهٔ خود ارزیابی کنید.';
- box.appendChild(heading);
+ main.appendChild(heading);
  const question=document.createElement('div');question.className='questionnaire-question';
  const statement=document.createElement('p');statement.className='questionnaire-statement';statement.textContent=item.text;
  const scale=document.createElement('div');scale.className='questionnaire-scale';
@@ -1723,7 +1754,7 @@ function showQuestionnaireQuestion(index){
  naButton.dataset.scaleValue=na.value;naButton.setAttribute('aria-pressed',workflow.questionnaireAnswers[item.code]===na.value?'true':'false');
  naButton.textContent=na.label;naButton.addEventListener('click',()=>chooseQuestionnaireAnswer(item,workflow.questionIndex,na.value));
  const status=document.createElement('div');status.className='questionnaire-save-status';status.setAttribute('aria-live','polite');status.textContent=workflow.questionnaireSavedAnswers[item.code]===workflow.questionnaireAnswers[item.code]&&workflow.questionnaireAnswers[item.code]?'پاسخ ذخیره شده است':'برای ادامه، یک گزینه را انتخاب کنید.';
- question.append(statement,scale,naButton,status);box.appendChild(question);
+ question.append(statement,scale,naButton,status);main.appendChild(question);box.appendChild(main);
 
  const actions=document.createElement('div');actions.className='questionnaire-actions';
  const prev=document.createElement('button');prev.type='button';prev.className='btn btn-secondary';prev.dataset.qPrev='1';prev.textContent='سؤال قبل';
@@ -1925,10 +1956,64 @@ async function startAssignedDDStage(){
 }
 
 
+function participantWorkflowTitle(moduleCode){
+ const titles={
+  questionnaire:'پرسشنامه',
+  dd_lifetrade:'بازی انتخاب',
+  ultimatum:'بازی باشگاه رانندگان بارسان',
+  ultimatum_frame:'بازی باشگاه رانندگان بارسان',
+  ultimatum_control:'بازی باشگاه رانندگان بارسان'
+ };
+ return titles[String(moduleCode||'')]||null;
+}
+
 async function loadWelcomeWorkflow(){
  const list=$('welcome-steps'),status=$('welcome-plan-status');
- if(list)list.replaceChildren();
- if(status)status.textContent='';
+ if(!list)return;
+ list.replaceChildren();
+ if(status){status.textContent='';status.classList.add('hidden');}
+ if(!workflow.invitationToken)return;
+
+ try{
+  const url=APP_BASE_PATH+'/api/experiment/workflow?invite='+encodeURIComponent(workflow.invitationToken);
+  const response=await fetch(url,{method:'GET',cache:'no-store',headers:{'Accept':'application/json'}});
+  let payload={};
+  try{payload=await response.json();}catch(_){}
+  if(!response.ok)throw new Error(payload.detail||'Workflow unavailable');
+
+  const steps=Array.isArray(payload.steps)?payload.steps.slice():[];
+  const includesUltimatum=steps.some(step=>
+   ['ultimatum','ultimatum_frame','ultimatum_control'].includes(String(step&&step.module_code||''))
+  );
+  // The legacy route starts Ultimatum automatically after DD/Life-Trade,
+  // although the public legacy workflow outline contains only two persisted steps.
+  if(payload.legacy_default&&!includesUltimatum){
+   steps.push({module_code:'ultimatum'});
+  }
+
+  steps.forEach((step,index)=>{
+   const title=participantWorkflowTitle(step&&step.module_code);
+   if(!title)return;
+   const item=document.createElement('li');
+   item.className='welcome-step';
+   const number=document.createElement('span');
+   number.textContent=String(index+1).toLocaleString('fa-IR');
+   const label=document.createElement('strong');
+   label.textContent=title;
+   item.append(number,label);
+   list.appendChild(item);
+  });
+  if(!list.children.length&&status){
+   status.textContent='مراحل برنامه در دسترس نیستند.';
+   status.classList.remove('hidden');
+  }
+ }catch(error){
+  console.warn('Could not load the participant workflow outline',error);
+  if(status){
+   status.textContent='مراحل برنامه در دسترس نیستند.';
+   status.classList.remove('hidden');
+  }
+ }
 }
 
 loadWelcomeWorkflow();
@@ -2056,6 +2141,14 @@ const utCss = [
 ".ut-card .ut-final-score-box .ut-metric-label:empty{display:none}",
 ".ut-card .ut-final-score-box .ut-metric-value{display:flex;align-items:center;justify-content:center;width:100%;min-height:clamp(130px,22vh,190px);font-size:clamp(4.2rem,12vw,7rem)!important;line-height:1.1!important;font-weight:950!important;text-align:center}",
 "@media(max-width:640px){.ut-card .ut-final-score-box{min-height:220px;padding:22px 14px}.ut-card .ut-final-score-box .ut-metric-card{min-height:190px}.ut-card .ut-final-score-box .ut-metric-value{min-height:130px;font-size:clamp(3.8rem,16vw,5.4rem)!important}.ut-card .ut-summary-metric-value{font-size:clamp(1.9rem,8vw,2.7rem)!important}}"
+].join("\n") + "\n" + [
+".ut-main{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:center;align-items:stretch;overflow-y:auto;text-align:center}",
+".ut-main>.ut-title{flex:0 0 auto;width:100%;margin:0 0 clamp(10px,2vh,18px);text-align:center}",
+".ut-main>.ut-body{flex:0 0 auto!important;min-height:0;overflow:visible!important;padding-block:clamp(4px,1.5vh,16px)}",
+".ut-card:not(.ut-scrollable) .ut-main{overflow-y:auto}",
+".ut-card:not(.ut-scrollable) .ut-main>.ut-body{flex:0 0 auto!important;overflow:visible!important}",
+".ut-card.ut-scrollable .ut-main{flex:1 0 auto;min-height:0;overflow:visible}",
+"@media(max-width:680px){.ut-main>.ut-title{margin-bottom:8px}.ut-main>.ut-body{padding-block:6px}}"
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
@@ -2149,11 +2242,13 @@ function utMakeScreen(options) {
   }
   card.appendChild(top);
  }
- if(options.title)utAddText(card,"h1","ut-title",options.title);
+ const main=utNode("div","ut-main");
+ if(options.title)utAddText(main,"h1","ut-title",options.title);
  const body=utNode("div","ut-body"+(options.bodyClass?" "+options.bodyClass:""));
- card.appendChild(body);
+ main.appendChild(body);
+ card.appendChild(main);
  stimulus.replaceChildren(card);
- return {card:card,body:body};
+ return {card:card,main:main,body:body};
 }
 function utAddRoleBox(body,role,condition) {
  const box=utNode("div","ut-rolebox");
