@@ -2619,38 +2619,57 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
                 or any(row["status"] != "completed" for row in practice_rows)
             ):
                 raise HTTPException(409, "برای شروع بازی اصلی باید هر دو دور تمرینی تکمیل شوند.")
-            main_rows = connection.execute(
-                "SELECT round_id,block_code,block_order,trial_in_block,status FROM ultimatum_trials "
-                "WHERE run_id=" + marker + " AND phase='main'",
-                (data.run_id,),
-            ).fetchall()
-            completed_main_count = sum(1 for row in main_rows if row["status"] == "completed")
+            main_summary = connection.execute(
+                "SELECT "
+                "SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_count,"
+                "MIN(CASE WHEN block_order=" + marker + " THEN block_code END) AS order_min_code,"
+                "MAX(CASE WHEN block_order=" + marker + " THEN block_code END) AS order_max_code,"
+                "MIN(CASE WHEN block_code=" + marker + " THEN block_order END) AS block_min_order,"
+                "MAX(CASE WHEN block_code=" + marker + " THEN block_order END) AS block_max_order,"
+                "MAX(CASE WHEN block_code=" + marker + " AND trial_in_block=" + marker
+                + " THEN round_id END) AS existing_round_id,"
+                "MAX(CASE WHEN block_code=" + marker + " AND trial_in_block=" + marker
+                + " THEN status END) AS existing_status "
+                "FROM ultimatum_trials WHERE run_id=" + marker + " AND phase='main'",
+                (
+                    data.block_order, data.block_order, data.block_code, data.block_code,
+                    data.block_code, data.trial_in_block, data.run_id,
+                ),
+            ).fetchone()
+            completed_main_count = int(main_summary["completed_count"] or 0)
             if data.trial_sequence != completed_main_count + 1:
                 raise HTTPException(409, "دورهای اصلی باید به‌ترتیب و بدون پرش اجرا شوند.")
 
         if data.phase == "main":
-            same_order_blocks = {
-                str(row["block_code"]) for row in main_rows
-                if int(row["block_order"]) == data.block_order
-            }
-            if any(code != data.block_code for code in same_order_blocks):
+            order_min_code = main_summary["order_min_code"]
+            order_max_code = main_summary["order_max_code"]
+            if order_min_code is not None and (
+                order_min_code != data.block_code or order_max_code != data.block_code
+            ):
                 raise HTTPException(409, "ترتیب بلوک‌ها در این اجرای اولتیماتوم تغییر کرده است.")
-            other_order_positions = {
-                int(row["block_order"]) for row in main_rows
-                if row["block_code"] == data.block_code
-            }
-            if any(position != data.block_order for position in other_order_positions):
+            block_min_order = main_summary["block_min_order"]
+            block_max_order = main_summary["block_max_order"]
+            if block_min_order is not None and (
+                int(block_min_order) != data.block_order or int(block_max_order) != data.block_order
+            ):
                 raise HTTPException(409, "هر بلوک اولتیماتوم باید فقط یک‌بار اجرا شود.")
+
         marker = "%s" if DATABASE_URL else "?"
-        candidate_rows = practice_rows if data.phase == "practice" else main_rows
-        existing = next(
-            (
-                row for row in candidate_rows
-                if row["block_code"] == data.block_code
-                and int(row["trial_in_block"]) == data.trial_in_block
-            ),
-            None,
-        )
+        if data.phase == "main":
+            existing_round_id = main_summary["existing_round_id"]
+            existing = (
+                {"round_id": existing_round_id, "status": main_summary["existing_status"]}
+                if existing_round_id else None
+            )
+        else:
+            existing = next(
+                (
+                    row for row in practice_rows
+                    if row["block_code"] == data.block_code
+                    and int(row["trial_in_block"]) == data.trial_in_block
+                ),
+                None,
+            )
         if existing:
             if existing["status"] != "prepared":
                 raise HTTPException(409, "این دور اولتیماتوم قبلاً تکمیل شده است.")
