@@ -1,4 +1,4 @@
-participants.json
+participants*.json
 participants.json.tmp-*
 __pycache__/
 *.py[cod]
