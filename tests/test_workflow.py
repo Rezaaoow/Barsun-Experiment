@@ -494,3 +494,103 @@ def test_previous_paired_builtin_default_is_migrated_to_neutral_workflow(client)
     assert [step["module_code"] for step in response.json()["steps"]] == [
         "questionnaire", "dd_lifetrade"
     ]
+
+def test_time_tracking_uses_atomic_updates_and_preserves_elapsed_cap(client):
+    steps = [{"step_id": "atomic-time", "module_code": "questionnaire"}]
+    _, identity = create_workflow_assignment(client, steps, code="ATOMIC-TIME-001")
+
+    # Heartbeats cannot create a tracking row implicitly.
+    before_start = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "heartbeat"},
+    )
+    assert before_start.status_code == 409
+
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time"},
+    )
+    assert started.status_code == 200, started.text
+
+    started_time = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "start"},
+    )
+    assert started_time.status_code == 200, started_time.text
+    assert started_time.json()["active_seconds"] == 0
+    assert started_time.json()["is_active"] is True
+
+    # A long gap is capped at 45 seconds, matching the previous Python implementation.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 minutes') "
+            "WHERE step_instance_id=?",
+            ("atomic-time",),
+        )
+    heartbeat = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "heartbeat"},
+    )
+    assert heartbeat.status_code == 200, heartbeat.text
+    assert heartbeat.json()["active_seconds"] == 45
+    assert heartbeat.json()["is_active"] is True
+
+    paused = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "pause"},
+    )
+    assert paused.status_code == 200, paused.text
+    paused_seconds = paused.json()["active_seconds"]
+    assert paused.json()["is_active"] is False
+
+    # Even if last_seen_at is old, an inactive heartbeat must not add paused time.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 hours') "
+            "WHERE step_instance_id=?",
+            ("atomic-time",),
+        )
+    inactive_heartbeat = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "heartbeat"},
+    )
+    assert inactive_heartbeat.status_code == 200, inactive_heartbeat.text
+    assert inactive_heartbeat.json()["active_seconds"] == paused_seconds
+    assert inactive_heartbeat.json()["is_active"] is False
+
+    resumed = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "start"},
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["active_seconds"] == paused_seconds
+    assert resumed.json()["is_active"] is True
+
+    completed = client.post(
+        "/api/experiment/time",
+        json={**identity, "stage_code": "questionnaire", "step_id": "atomic-time", "event": "complete"},
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["is_active"] is False
+
+
+def test_identify_checks_consent_as_part_of_invitation_lookup(client):
+    response = client.post(
+        "/api/admin/assignments",
+        headers={"x-admin-token": "test-admin-token"},
+        json={
+            "assignments": [{"participant_code": "NO-CONSENT-001"}],
+            "steps": [{"step_id": "consent-check", "module_code": "questionnaire"}],
+        },
+    )
+    assert response.status_code == 200, response.text
+    link = response.json()["assignments"][0]
+    identity = {
+        "invitation_token": token_from_link(link),
+        "participant_code": "NO-CONSENT-001",
+    }
+
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 403
+    assert identified.json()["detail"] == "رضایت برای مشارکت ثبت نشده است."
+
