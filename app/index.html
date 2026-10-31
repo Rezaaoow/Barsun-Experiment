@@ -2047,7 +2047,15 @@ const utCss = [
 ".ut-card .ut-summary-box:has(.ut-metric-card){padding:clamp(26px,5vw,44px)}",
 ".ut-card .ut-summary-box .ut-metric-card{min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px}",
 ".ut-card .ut-summary-box .ut-metric-card .ut-metric-value{font-size:clamp(3rem,9vw,5rem)!important;min-width:150px;min-height:100px}",
-".ut-card .ut-summary-box .ut-metric-card .ut-metric-label{font-size:1.15rem!important;text-align:center}"
+".ut-card .ut-summary-box .ut-metric-card .ut-metric-label{font-size:1.15rem!important;text-align:center}",
+".ut-card,.ut-card *{text-align:center!important}",
+".ut-card .ut-summary-metric-value{font-size:clamp(2.3rem,7vw,4rem)!important;font-weight:950!important;line-height:1.15!important}",
+".ut-card .ut-proposer-total strong{font-size:clamp(1.8rem,4vw,2.8rem)!important;font-weight:950!important}",
+".ut-card .ut-final-score-box{width:min(760px,100%);min-height:clamp(230px,36vh,330px);display:flex;align-items:center;justify-content:center;margin:clamp(20px,4vh,36px) auto;padding:clamp(28px,6vw,54px);border-width:2px}",
+".ut-card .ut-final-score-box .ut-metric-card{width:100%;min-height:clamp(190px,30vh,260px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}",
+".ut-card .ut-final-score-box .ut-metric-label:empty{display:none}",
+".ut-card .ut-final-score-box .ut-metric-value{display:flex;align-items:center;justify-content:center;width:100%;min-height:clamp(130px,22vh,190px);font-size:clamp(4.2rem,12vw,7rem)!important;line-height:1.1!important;font-weight:950!important;text-align:center}",
+"@media(max-width:640px){.ut-card .ut-final-score-box{min-height:220px;padding:22px 14px}.ut-card .ut-final-score-box .ut-metric-card{min-height:190px}.ut-card .ut-final-score-box .ut-metric-value{min-height:130px;font-size:clamp(3.8rem,16vw,5.4rem)!important}.ut-card .ut-summary-metric-value{font-size:clamp(1.9rem,8vw,2.7rem)!important}}"
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
@@ -2101,7 +2109,7 @@ function utAddText(parent,tag,className,value) {
 }
 function utMetricCard(parent,label,value,kind) {
  const card=utNode("div","ut-metric-card"+(kind?" "+kind:""));
- utAddText(card,"span","ut-metric-label",label);
+ if(label)utAddText(card,"span","ut-metric-label",label);
  const number=utAddText(card,"strong","ut-metric-value",value);
  parent.appendChild(card);
  return number;
@@ -2499,7 +2507,7 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
 
 function utRenderPracticeComplete() {
  const s=utMakeScreen({header:false,title:"عالی!"});
- utAddText(s.body,"p","ut-copy","دورهای تمرینی به پایان رسید. الان بازی اصلی شروع می‌شود.");
+ utAddText(s.body,"p","ut-copy","دور‌های تمرینی به پایان رسید. الان بازی اصلی شروع می‌شود.");
 
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع بازی",function(){
@@ -2557,7 +2565,7 @@ function utRenderBlockSummary() {
  const earned=Number(result.block_score||0);
  const lost=Number(result.block_potential_lost||0);
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
- const s=utMakeScreen({header:true});
+ const s=utMakeScreen({header:false});
  utAddText(s.body,"p","ut-copy ut-block-summary-intro","در ۵ دور قبلی شما:");
  const box=utNode("div","ut-summary-box");
  const showLoss=true;
@@ -2607,7 +2615,7 @@ async function utFinishUltimatum() {
   ultimatumState.completed=true;
   const end=utMakeScreen({header:false});
   utAddText(end.body,"div","ut-summary-label","امتیاز نهایی");
-  const scoreBox=utNode("div","ut-summary-box");
+  const scoreBox=utNode("div","ut-summary-box ut-final-score-box");
   utMetricCard(scoreBox,"",utFa(ultimatumState.score),"earned");
   end.body.appendChild(scoreBox);
   const hasNext=workflow.workflowMode&&workflow.workflowStepIndex<workflow.workflowSteps.length-1;
