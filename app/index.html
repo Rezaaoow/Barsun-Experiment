@@ -805,14 +805,8 @@ h2 {
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
-  <p class="eyebrow">پژوهش میدانی بارسان</p>
-  <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <p>بخش‌های برنامهٔ شما در ادامه، دقیقاً به همان ترتیبی که نمایش داده شده‌اند اجرا می‌شوند.</p>
-  <ol class="welcome-steps" id="welcome-steps" aria-label="ترتیب ماژول‌های آزمایش">
-    <li class="welcome-step welcome-loading">در حال دریافت ترتیب ماژول‌های اختصاصی شما…</li>
-  </ol>
-  <p class="welcome-note" id="welcome-plan-status" role="status" aria-live="polite">ترتیب ماژول‌ها در حال بارگذاری است.</p>
-  <button class="btn" id="welcome-continue" type="button">مطالعهٔ توضیحات و ادامه</button>
+  <h1>بازی باشگاه رانندگان بارسان</h1>
+  <button class="btn" id="welcome-continue" type="button">ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
   <p class="eyebrow">پیش از شروع</p>
@@ -820,7 +814,6 @@ h2 {
   <p>این برنامه در چارچوب یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری، شرایط کاری و تصمیم‌گیری انجام می‌شود.</p>
   <p>داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد.</p>
   <p>اطلاعات فردی نباید بدون مجوز و حفاظت مناسب در اختیار افراد غیرمرتبط قرار گیرد.</p>
-  <p>برای حفظ حریم خصوصی، لطفاً نام، نام خانوادگی، شمارهٔ ملی، شمارهٔ تلفن یا اطلاعات هویتی دیگری را در پاسخ‌های خود وارد نکنید. فقط از کد پژوهشی اختصاص‌یافته به خودتان استفاده کنید.</p>
   <p>شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
   <div class="field participant-code-field">
     <label for="participant-code-input">کد شرکت‌کننده</label>
@@ -1929,35 +1922,10 @@ async function startAssignedDDStage(){
 
 async function loadWelcomeWorkflow(){
  const list=$('welcome-steps'),status=$('welcome-plan-status');
- if(!workflow.invitationToken){
-  list.replaceChildren();status.textContent='برای مشاهدهٔ برنامهٔ اختصاصی، از لینک دعوتی که برای شما ارسال شده وارد شوید.';return;
- }
- try{
-  const url=APP_BASE_PATH+'/api/experiment/workflow?invite='+encodeURIComponent(workflow.invitationToken);
-  const response=await fetch(url,{method:'GET',cache:'no-store',headers:{'Accept':'application/json'}});
-  let payload={};try{payload=await response.json();}catch(_){}
-  if(!response.ok)throw new Error(payload.detail||'دریافت برنامهٔ اختصاصی ناموفق بود.');
-  const steps=Array.isArray(payload.steps)?payload.steps:[];
-  if(!steps.length)throw new Error('برای این لینک هنوز ماژولی تعریف نشده است. با مسئول پژوهش تماس بگیرید.');
-  list.replaceChildren();
-  steps.forEach((step,index)=>{
-   const item=document.createElement('li');item.className='welcome-step';
-   const number=document.createElement('span');number.textContent=String(index+1).toLocaleString('fa-IR');
-   const content=document.createElement('div');content.className='welcome-step-content';
-   const title=document.createElement('strong');
-   const repeated=Number(step.repeat_total)>1;
-   title.textContent=String(step.title||step.module_code||'ماژول')+(repeated?' · نوبت '+String(step.repeat_number).toLocaleString('fa-IR')+' از '+String(step.repeat_total).toLocaleString('fa-IR'):'');
-   const description=document.createElement('small');description.textContent=step.description||'';
-   content.append(title,description);item.append(number,content);list.appendChild(item);
-  });
-  status.textContent=String(payload.total_steps||steps.length).toLocaleString('fa-IR')+' مرحله برای شما در نظر گرفته شده است. مراحل به همین ترتیب اجرا می‌شوند.';
- }catch(error){
-  list.replaceChildren();
-  const item=document.createElement('li');item.className='welcome-step welcome-plan-error';
-  item.textContent='برنامهٔ این لینک بارگذاری نشد. لطفاً اتصال را بررسی کنید یا لینک را از مسئول پژوهش دوباره دریافت کنید.';
-  list.appendChild(item);status.textContent=error.message||'خطا در دریافت برنامهٔ آزمایش.';
- }
+ if(list)list.replaceChildren();
+ if(status)status.textContent='';
 }
+
 loadWelcomeWorkflow();
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
@@ -2065,6 +2033,16 @@ const utCss = [
 ".ut-block-intro-copy,.ut-block-summary-intro{width:100%;max-width:640px;margin-inline:auto;text-align:center;line-height:1.9}",
 "@media(max-width:680px){.ut-proposer-body{gap:8px;padding-block:2px}.ut-proposer-body .ut-rolebox{padding:8px 10px}.ut-proposer-body .ut-rolebox strong{font-size:1.08rem}.ut-proposer-body .ut-rolebox span{font-size:.88rem;line-height:1.5}.ut-proposer-control{gap:7px;padding:9px 10px;border-radius:15px}.ut-proposer-total{font-size:.9rem}.ut-proposer-total strong{font-size:1.35rem}.ut-proposer-control .ut-question{font-size:1.03rem;line-height:1.4}.ut-proposer-control .ut-slider-wrap{padding-top:37px;padding-inline:9px}.ut-proposer-body .ut-shares{gap:7px}.ut-proposer-body .ut-metric-card{padding:8px 5px;gap:4px}.ut-proposer-body .ut-metric-label{font-size:.82rem;line-height:1.4}.ut-proposer-body .ut-metric-value{min-width:52px;min-height:37px;font-size:1.3rem}.ut-proposer-body .ut-actions{padding-top:1px}.ut-proposer-body .ut-btn{min-height:49px;font-size:1rem}}",
 "@media(max-height:620px) and (max-width:680px){.ut-proposer-body{gap:5px;padding-block:0}.ut-proposer-body .ut-rolebox{padding:5px 8px}.ut-proposer-body .ut-rolebox strong{font-size:1rem}.ut-proposer-body .ut-rolebox span{font-size:.82rem;line-height:1.35}.ut-proposer-control{gap:4px;padding:6px 9px}.ut-proposer-total{font-size:.82rem}.ut-proposer-total strong{font-size:1.15rem}.ut-proposer-control .ut-question{font-size:.94rem}.ut-proposer-control .ut-slider-wrap{padding-top:31px;padding-inline:7px}.ut-proposer-body .ut-slider{height:47px}.ut-proposer-body .ut-bubble{min-width:42px;height:32px;font-size:1rem}.ut-proposer-body .ut-metric-card{padding:5px 4px;gap:3px}.ut-proposer-body .ut-metric-label{font-size:.74rem}.ut-proposer-body .ut-metric-value{min-width:45px;min-height:32px;font-size:1.1rem}.ut-proposer-body .ut-actions{padding-top:0}.ut-proposer-body .ut-btn{min-height:42px;font-size:.92rem}}",
+".ut-card,.ut-card .ut-body,.ut-card .ut-header,.ut-card .ut-copy,.ut-card h1,.ut-card h2,.ut-card p,.ut-card .ut-rolebox,.ut-card .ut-question,.ut-card .ut-result-main,.ut-card .ut-result-detail,.ut-card .ut-summary-label,.ut-card .ut-summary-metric-label{text-align:center}",
+".ut-card .ut-metric-value,.ut-card .ut-score,.ut-card .ut-total,.ut-card .ut-summary-metric-value{font-size:clamp(2rem,5.2vw,3.2rem)!important;font-weight:950!important;line-height:1.2!important}",
+".ut-card .ut-summary-box{width:100%;max-width:680px;margin:16px auto;padding:clamp(20px,4vw,34px);border-radius:24px}",
+".ut-card .ut-summary-metrics{gap:clamp(14px,3vw,24px)}",
+".ut-card .ut-summary-metric{padding:clamp(16px,3vw,26px);min-height:130px}",
+".ut-card .ut-summary-metric-value{font-size:clamp(2.2rem,6vw,3.6rem)!important}",
+".ut-card .ut-summary-box:has(.ut-metric-card){padding:clamp(26px,5vw,44px)}",
+".ut-card .ut-summary-box .ut-metric-card{min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px}",
+".ut-card .ut-summary-box .ut-metric-card .ut-metric-value{font-size:clamp(3rem,9vw,5rem)!important;min-width:150px;min-height:100px}",
+".ut-card .ut-summary-box .ut-metric-card .ut-metric-label{font-size:1.15rem!important;text-align:center}"
 ].join("\n");
 if (!document.getElementById("ut-styles")) {
  const style=document.createElement("style");
@@ -2166,7 +2144,7 @@ function utMakeScreen(options) {
 }
 function utAddRoleBox(body,role,condition) {
  const box=utNode("div","ut-rolebox");
- utAddText(box,"strong","",role==="proposer"?"شما پیشنهاددهنده هستید":"شما پاسخ‌دهنده هستید");
+ utAddText(box,"strong","",role==="proposer"?"شما پیشنهاد دهنده هستید":"شما پاسخ دهنده هستید");
  utAddText(box,"span","",utOpponentText(condition));
  body.appendChild(box);
 }
@@ -2241,10 +2219,10 @@ async function startUltimatumInstructions() {
 function utRenderWelcome() {
  const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
-  "شما در این بازی برای امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید. در حین بازی بازیکن مقابل شما ممکن است هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در همین سالن باشد که به شما اطلاع داده خواهد شد.",
-  "در هر دور ۱۰ امتیاز وجود دارد که باید بین شما و بازیکن مقابل تقسیم شود. دو نقش در بازی وجود دارد: پیشنهاددهنده و پاسخ‌دهنده.",
-  "اگر شما در نقش پیشنهاددهنده باشید، باید به بازیکن مقابل پیشنهاد بدهید که چه مقدار از امتیاز را به او بدهید و چه مقدار را برای خود نگه دارید. بازیکن مقابل می‌تواند پیشنهاد شما را قبول یا رد کند. اگر پیشنهاد قبول شود، امتیاز طبق پیشنهاد تقسیم می‌شود؛ اگر رد شود، هیچ‌کس امتیازی دریافت نمی‌کند.",
-  "اگر در نقش پاسخ‌دهنده باشید، باید منتظر پیشنهاد بازیکن مقابل بمانید. پس از دریافت پیشنهاد، می‌توانید آن را قبول یا رد کنید. در صورت قبول، امتیاز طبق پیشنهاد تقسیم می‌شود و در صورت رد، هیچ‌کس امتیازی دریافت نمی‌کند."
+  "شما در این بازی برای کسب امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید. در حین بازی بازیکن مقابل شما ممکن است هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در همین سالن باشد که به شما اطلاع داده خواهد شد.",
+  "در هر دور ۱۰ امتیاز وجود دارد که باید بین شما و بازیکن مقابل تقسیم شود. دو نقش در بازی وجود دارد: پیشنهاد دهنده و پاسخ دهنده.",
+  "اگر شما در نقش پیشنهاد دهنده باشید، باید به بازیکن مقابل پیشنهاد بدهید که چه مقدار از امتیاز را به او بدهید و چه مقدار را برای خود نگه دارید. بازیکن مقابل می‌تواند پیشنهاد شما را قبول یا رد کند. اگر پیشنهاد قبول شود، امتیاز طبق پیشنهاد تقسیم می‌شود؛ اگر رد شود، هیچ‌کس امتیازی دریافت نمی‌کند.",
+  "اگر در نقش پاسخ دهنده باشید، باید منتظر پیشنهاد بازیکن مقابل بمانید. پس از دریافت پیشنهاد، می‌توانید آن را قبول یا رد کنید. در صورت قبول، امتیاز طبق پیشنهاد تقسیم می‌شود و در صورت رد، هیچ‌کس امتیازی دریافت نمی‌کند."
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
  const note=utAddText(s.body,"p","ut-copy small","در رابط بازی، قبول با رنگ سبز و رد با رنگ قرمز نمایش داده می‌شود.");
@@ -2253,7 +2231,7 @@ function utRenderWelcome() {
 }
 function utRenderPracticeIntro() {
  const s=utMakeScreen({header:false,scrollable:true});
- utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود تا قوانین بازی را کامل متوجه شوید. امتیازها و داده‌های این دو دور در امتیاز نهایی لحاظ نمی‌شوند.");
+ utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود اما امتیازها و داده‌های این دو دور در امتیاز نهایی و برنامه پژوهشی لحاظ نمی‌شوند.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",function(){utStartPracticeProposer();},"");
 }
@@ -2484,14 +2462,14 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  utAddText(center,"p","ut-result-main",mainText);
  if(result.accepted)utMetricCard(center,"امتیاز دریافتی",utFa(result.points_earned),"earned");
  else utAddText(center,"p","ut-result-detail",detailText);
- if(isPractice)utAddText(center,"p","ut-result-note","این دور تمرینی است و امتیاز آن در نتیجهٔ نهایی حساب نمی‌شود.");
+ if(isPractice)utAddText(center,"p","ut-result-note","این دور تمرینی است و امتیاز آن در نتیجهٔ نهایی و برنامهٔ پژوهشی حساب نمی‌شود.");
  s.body.appendChild(center);
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  let label="دور بعدی",advance;
  if(isPractice&&blockCode==="practice_proposer_agent") {label="دور تمرینی بعدی";advance=utStartPracticeResponder;}
  else if(isPractice&&blockCode==="practice_responder_coworker") {label="ادامه";advance=utRenderPracticeComplete;}
  else if(trial<5) {label="دور بعدی";advance=function(){utStartMainTrial(trial+1);};}
- else {label="پایان این بلوک";advance=utRenderBlockSummary;}
+ else {label="دور بعدی";advance=utRenderBlockSummary;}
  let advanceInFlight=false;
  async function continueAfterRecordingEvents() {
   if(advanceInFlight)return;
@@ -2516,7 +2494,7 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
 
 function utRenderPracticeComplete() {
  const s=utMakeScreen({header:false,title:"عالی!"});
- utAddText(s.body,"p","ut-copy","بازی اصلی شروع می‌شود.");
+ utAddText(s.body,"p","ut-copy","دورهای تمرینی به پایان رسید. الان بازی اصلی شروع می‌شود.");
 
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع بازی",function(){
@@ -2524,7 +2502,7 @@ function utRenderPracticeComplete() {
      ||ultimatumState.blockOrder.length!==4
      ||new Set(ultimatumState.blockOrder).size!==4
      ||ultimatumState.blockOrder.some(function(code){return UT_BLOCKS.indexOf(code)<0;})){
-   utShowError("ترتیب بلوک‌ها از سرور دریافت نشد. لطفاً دوباره تلاش کنید.",utRenderPracticeComplete);
+   utShowError("ترتیب مراحل بازی دریافت نشد. لطفاً دوباره تلاش کنید.",utRenderPracticeComplete);
    return;
   }
   ultimatumState.currentPhase="main";
@@ -2540,9 +2518,9 @@ function utRenderBlockIntro() {
  ultimatumState.currentBlockCode=blockCode;
  ultimatumState.trialInBlock=1;
  const role=utRole(blockCode),condition=utCondition(blockCode);
- const roleLabel=role==="proposer"?"پیشنهاددهنده":"پاسخ‌دهنده";
+ const roleLabel=role==="proposer"?"پیشنهاد دهنده":"پاسخ دهنده";
  const opponentLabel=condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان است":"بازیکن مقابل شما یکی از همکاران حاضر در سالن است";
- const s=utMakeScreen({condition:condition,scrollable:true,title:"شروع بخش بازی"});
+ const s=utMakeScreen({condition:condition,scrollable:true});
  utAddText(s.body,"p","ut-copy ut-block-intro-copy","در ۵ دور بعدی، شما در نقش "+roleLabel+" بازی می‌کنید. "+opponentLabel+".");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع",function(){utStartMainTrial(1);},"");
@@ -2574,26 +2552,26 @@ function utRenderBlockSummary() {
  const earned=Number(result.block_score||0);
  const lost=Number(result.block_potential_lost||0);
  ultimatumState.blockSummaries[blockCode]={block_order:blockOrder,points_earned:earned,potential_points_lost:lost};
- const s=utMakeScreen({header:true,title:"پایان این بخش"});
- utAddText(s.body,"p","ut-copy ut-block-summary-intro","خلاصهٔ عملکرد شما در ۵ دور قبلی:");
+ const s=utMakeScreen({header:true});
+ utAddText(s.body,"p","ut-copy ut-block-summary-intro","در ۵ دور قبلی شما:");
  const box=utNode("div","ut-summary-box");
- const showLoss=utIsFrameGroup();
+ const showLoss=true;
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
  const earnedMetric=utNode("div","ut-summary-metric earned");
- utAddText(earnedMetric,"div","ut-summary-metric-label","امتیاز به‌دست‌آمده");
+ utAddText(earnedMetric,"div","ut-summary-metric-label","امتیاز به دست آوردید");
  utAddText(earnedMetric,"div","ut-summary-metric-value",utFa(earned));
  metrics.appendChild(earnedMetric);
  if(showLoss) {
   const lostMetric=utNode("div","ut-summary-metric lost");
-  utAddText(lostMetric,"div","ut-summary-metric-label","امتیاز ازدست‌رفته");
+  utAddText(lostMetric,"div","ut-summary-metric-label","امتیاز از دست دادید");
   utAddText(lostMetric,"div","ut-summary-metric-value",utFa(lost));
   metrics.appendChild(lostMetric);
  }
  box.appendChild(metrics);
  s.body.appendChild(box);
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
- const isLast=ultimatumState.blockIndex===3;
- utButton(actions,isLast?"پایان بازی":"ادامه",function(){
+ const isLast=ultimatumState.blockIndex===ultimatumState.blockOrder.length-1;
+ utButton(actions,isLast?"ادامه":"دور بعدی",function(){
   if(isLast)utFinishUltimatum();
   else {ultimatumState.blockIndex+=1;utRenderBlockIntro();}
  },"");
@@ -2623,18 +2601,18 @@ async function utFinishUltimatum() {
   await finishStepTimer();
   ultimatumState.completed=true;
   const end=utMakeScreen({header:false});
-  utAddText(end.body,"div","ut-summary-label","امتیاز نهایی شما");
+  utAddText(end.body,"div","ut-summary-label","امتیاز نهایی");
   const scoreBox=utNode("div","ut-summary-box");
-  utMetricCard(scoreBox,"امتیاز نهایی",utFa(ultimatumState.score),"earned");
+  utMetricCard(scoreBox,"",utFa(ultimatumState.score),"earned");
   end.body.appendChild(scoreBox);
   const hasNext=workflow.workflowMode&&workflow.workflowStepIndex<workflow.workflowSteps.length-1;
   let closingMessage;
   if(workflow.testModuleOnly==="ultimatum"){
    closingMessage="بارسانی عزیز، تست این ماژول به پایان رسید. داده‌ها در محدودهٔ تست ثبت شده‌اند.";
   }else if(hasNext){
-   closingMessage="بارسانی عزیز، این بخش با موفقیت تکمیل شد. برای رفتن به بخش بعدی، دکمهٔ ادامه را بزنید.";
+   closingMessage="بازی این مرحله به پایان رسید. برای ادامه، دکمهٔ ادامه را بزنید.";
   }else{
-   closingMessage="بارسانی عزیز، برنامهٔ پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل می‌شود.";
+   closingMessage="بارسانی عزیز، بازی و برنامه ‌پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل خواهد شد.";
   }
   utAddText(end.body,"p","ut-copy",closingMessage);
   if(hasNext){
