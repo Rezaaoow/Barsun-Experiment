@@ -2408,12 +2408,17 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
         run_draft = _json_value(stage_state["draft_payload"])
         server_block_order = run_draft.get("block_order")
 
-        practice_rows = connection.execute(
-            "SELECT block_code,status FROM ultimatum_trials "
-            "WHERE run_id=" + marker + " AND phase='practice' "
-            "ORDER BY started_at,round_id",
-            (data.run_id,),
-        ).fetchall()
+        # The run contains at most 22 rows. Read them once and validate the
+        # requested transition in memory instead of issuing several serial SELECTs.
+        all_round_rows = [
+            dict(row) for row in connection.execute(
+                "SELECT * FROM ultimatum_trials WHERE run_id=" + marker
+                + " ORDER BY phase,block_order,trial_sequence",
+                (data.run_id,),
+            ).fetchall()
+        ]
+        practice_rows = [row for row in all_round_rows if row["phase"] == "practice"]
+        main_rows = [row for row in all_round_rows if row["phase"] == "main"]
         if data.phase == "practice":
             if data.block_code == "practice_proposer_agent":
                 if any(row["block_code"] != data.block_code for row in practice_rows) or any(
@@ -2445,37 +2450,28 @@ def prepare_ultimatum_round(data: UltimatumPrepareIn):
                 or any(row["status"] != "completed" for row in practice_rows)
             ):
                 raise HTTPException(409, "برای شروع بازی اصلی باید هر دو دور تمرینی تکمیل شوند.")
-            completed_main = connection.execute(
-                "SELECT COUNT(*) AS n FROM ultimatum_trials "
-                "WHERE run_id=" + marker + " AND phase='main' AND status='completed'",
-                (data.run_id,),
-            ).fetchone()
-            if data.trial_sequence != int(completed_main["n"]) + 1:
+            completed_main_count = sum(row["status"] == "completed" for row in main_rows)
+            if data.trial_sequence != completed_main_count + 1:
                 raise HTTPException(409, "دورهای اصلی باید به‌ترتیب و بدون پرش اجرا شوند.")
 
         if data.phase == "main":
-            same_order = connection.execute(
-                "SELECT DISTINCT block_code FROM ultimatum_trials "
-                "WHERE run_id=" + ("%s" if DATABASE_URL else "?") + " AND phase='main' AND block_order="
-                + ("%s" if DATABASE_URL else "?"),
-                (data.run_id, data.block_order),
-            ).fetchall()
-            if any(row["block_code"] != data.block_code for row in same_order):
+            same_order = {
+                row["block_code"] for row in main_rows if row["block_order"] == data.block_order
+            }
+            if any(code != data.block_code for code in same_order):
                 raise HTTPException(409, "ترتیب بلوک‌ها در این اجرای اولتیماتوم تغییر کرده است.")
-            other_order = connection.execute(
-                "SELECT DISTINCT block_order FROM ultimatum_trials "
-                "WHERE run_id=" + ("%s" if DATABASE_URL else "?") + " AND phase='main' AND block_code="
-                + ("%s" if DATABASE_URL else "?"),
-                (data.run_id, data.block_code),
-            ).fetchall()
-            if any(int(row["block_order"]) != data.block_order for row in other_order):
+            other_order = {
+                int(row["block_order"]) for row in main_rows if row["block_code"] == data.block_code
+            }
+            if any(order != data.block_order for order in other_order):
                 raise HTTPException(409, "هر بلوک اولتیماتوم باید فقط یک‌بار اجرا شود.")
-        marker = "%s" if DATABASE_URL else "?"
-        existing = connection.execute(
-            "SELECT * FROM ultimatum_trials WHERE run_id=" + marker
-            + " AND phase=" + marker + " AND block_code=" + marker + " AND trial_in_block=" + marker,
-            (data.run_id, data.phase, data.block_code, data.trial_in_block),
-        ).fetchone()
+
+        existing = next((
+            row for row in all_round_rows
+            if row["phase"] == data.phase
+            and row["block_code"] == data.block_code
+            and row["trial_in_block"] == data.trial_in_block
+        ), None)
         if existing:
             if existing["status"] != "prepared":
                 raise HTTPException(409, "این دور اولتیماتوم قبلاً تکمیل شده است.")
