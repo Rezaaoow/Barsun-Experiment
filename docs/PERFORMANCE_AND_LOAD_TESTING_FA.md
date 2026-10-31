@@ -66,6 +66,19 @@
 
 گزارش پیشرفت، CSV و ZIP می‌توانند تعداد زیادی ردیف را بخوانند یا در حافظه serialize کنند. این مسیرها معمولاً توسط تیم پژوهش استفاده می‌شوند و نباید در ساعات اجرای رویداد هم‌زمان با اوج مشارکت‌کننده‌ها، exportهای بزرگ اجرا شوند. این مورد بیشتر مسئلهٔ عملیاتی است تا مسیر پرتکرار participant.
 
+## تغییرات مرحلهٔ اول در دست پیاده‌سازی
+
+تغییرهای زیر هدف پیاده‌سازی این شاخه هستند؛ تا زمانی که تست‌های CI و بررسی diff موفق نشوند، آن‌ها را تغییر قطعی یا benchmarkشده تلقی نکنید:
+
+- افزودن امکان بررسی consent در همان query lookup assignment، به‌جای round-trip جداگانه؛
+- ادغام بررسی stage/run/instrument اولتیماتوم در یک query؛
+- تبدیل read-then-write مسیر time tracking به UPSERT/UPDATE اتمیک با محاسبهٔ elapsed سمت SQL؛
+- خواندن ردیف‌های محدود همان run در prepare و استخراج count/order/existing از همان مجموعه؛
+- جایگزینی دو query SUM در resolve با یک query گروه‌بندی‌شده بر اساس block؛
+- افزودن تست برای حفظ semantics زمان‌سنجی و idempotency.
+
+این تغییرها نباید timestamps، ترتیب بلوک‌ها، تعداد trial، امتیاز یا خروجی participant را تغییر دهند. SQL و رفتار مخصوص SQLite و PostgreSQL باید در تست‌های متناظر پوشش داده شوند.
+
 ## اولویت‌های فنی
 
 1. اندازه‌گیری baseline قبل از تغییر: latency هر endpoint، تعداد query، pool wait/timeout و منابع process/DB.
