@@ -88,6 +88,23 @@ function timestamp() {
   return new Date().toISOString();
 }
 
+function startTimeTracking(identity, stageCode, stepId) {
+  const payload = { ...identity, stage_code: stageCode, step_id: stepId };
+  post("/api/experiment/time", { ...payload, event: "start" });
+  // Exercise the same heartbeat interval used by the participant browser.
+  sleep(15);
+  post("/api/experiment/time", { ...payload, event: "heartbeat" });
+}
+
+function completeTimeTracking(identity, stageCode, stepId) {
+  post("/api/experiment/time", {
+    ...identity,
+    stage_code: stageCode,
+    step_id: stepId,
+    event: "complete"
+  });
+}
+
 function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial, sequence) {
   const prepared = post("/api/experiment/ultimatum/prepare", {
     ...identity,
@@ -163,6 +180,7 @@ export function participantFlow() {
     stage_code: "questionnaire",
     step_id: "load-questionnaire"
   });
+  startTimeTracking(identity, "questionnaire", "load-questionnaire");
   const answers = {};
   for (let index = 0; index < questionCodes.length; index++) {
     const code = questionCodes[index];
@@ -187,6 +205,7 @@ export function participantFlow() {
       question_order: questionCodes
     }
   });
+  completeTimeTracking(identity, "questionnaire", "load-questionnaire");
 
   // Module 2: submit 30 synthetic Life-Trade rows in bounded batches.
   const dd = post("/api/experiment/stages/start", {
@@ -194,6 +213,7 @@ export function participantFlow() {
     stage_code: "dd_lifetrade",
     step_id: "load-dd"
   });
+  startTimeTracking(identity, "dd_lifetrade", "load-dd");
   const trialRows = [];
   for (let index = 0; index < 30; index++) {
     trialRows.push({
@@ -227,6 +247,7 @@ export function participantFlow() {
     step_id: "load-dd",
     run_id: dd.run_id
   });
+  completeTimeTracking(identity, "dd_lifetrade", "load-dd");
 
   // Module 3: complete both practice trials and all 20 main trials.
   const ultimatum = post("/api/experiment/stages/start", {
@@ -234,6 +255,7 @@ export function participantFlow() {
     stage_code: "ultimatum",
     step_id: "load-ultimatum"
   });
+  startTimeTracking(identity, "ultimatum", "load-ultimatum");
   const runId = ultimatum.run_id;
   runUltimatumRound(identity, runId, "practice", "practice_proposer_agent", 0, 1, 0);
   runUltimatumRound(identity, runId, "practice", "practice_responder_coworker", 0, 1, 0);
@@ -280,6 +302,7 @@ export function participantFlow() {
       client_completed_at: timestamp()
     }
   });
+  completeTimeTracking(identity, "ultimatum", "load-ultimatum");
 
   completedParticipants.add(1);
 }
