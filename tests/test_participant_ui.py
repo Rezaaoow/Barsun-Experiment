@@ -7,7 +7,7 @@ HTML = HTML_PATH.read_text(encoding="utf-8")
 
 def section_by_id(source: str, element_id: str) -> str:
     match = re.search(
-        rf'<section\\b[^>]*id="{re.escape(element_id)}"[^>]*>([\\s\\S]*?)</section>',
+        rf'<section\b[^>]*id="{re.escape(element_id)}"[^>]*>([\s\S]*?)</section>',
         source,
         flags=re.IGNORECASE,
     )
