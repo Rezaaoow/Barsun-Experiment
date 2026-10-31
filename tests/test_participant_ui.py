@@ -7,7 +7,7 @@ HTML = HTML_PATH.read_text(encoding="utf-8")
 
 def section_by_id(source: str, element_id: str) -> str:
     match = re.search(
-        rf'<section\\b[^>]*id="{re.escape(element_id)}"[^>]*>([\\s\\S]*?)</section>',
+        rf'<section\b[^>]*id="{re.escape(element_id)}"[^>]*>([\s\S]*?)</section>',
         source,
         flags=re.IGNORECASE,
     )
@@ -74,12 +74,20 @@ def test_five_round_summary_has_only_requested_metrics_and_no_section_header():
         assert forbidden not in summary
 
 
-def test_final_score_is_single_titled_and_prominent():
-    finish = function_body(
+def test_block_transition_has_no_section_heading():
+    intro = function_body(
         HTML,
-        "async function utFinishUltimatum()",
-        "function ut",
+        "function utRenderBlockIntro() {",
+        "async function utStartMainTrial(trial) {",
     )
+    for forbidden in ("شروع بخش بازی", "پایان این بخش", "پایان این بلوک"):
+        assert forbidden not in intro
+
+
+def test_final_score_is_single_titled_and_prominent():
+    start = HTML.find("async function utFinishUltimatum()")
+    assert start >= 0
+    finish = HTML[start:]
     assert finish.count('"امتیاز نهایی"') == 1
     assert '"امتیاز نهایی شما"' not in finish
     assert '"ut-summary-box ut-final-score-box"' in finish
