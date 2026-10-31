@@ -57,6 +57,7 @@ jobs:
           import ast
           from pathlib import Path
           ast.parse(Path("tests/load/create_load_test_users.py").read_text(encoding="utf-8"))
+          ast.parse(Path("tests/load/host_diagnostics.py").read_text(encoding="utf-8"))
           PY
           node --input-type=module --check < tests/load/k6_experiment.js
       - name: Run SQLite API regression tests
