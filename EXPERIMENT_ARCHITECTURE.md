@@ -16,6 +16,13 @@ The repo contains the shared participant, assignment, consent and stage-resume f
 
 The explanation/consent preamble is before the three research modules. Module order is fixed. The two conditions are assigned outside the app in advance; each participant receives their own unique link. The app must not randomize participants between A and B.
 
+## ظرفیت و عملکرد در رویداد پرترافیک
+
+- حفظ ترتیب ماژول‌ها، تعداد trialها، الگوریتم‌های تصمیم‌گیری، زمان‌بندی محرک‌ها، RT و UI الزامی است؛ بهینه‌سازی فقط باید هزینهٔ اجرا و انتقال داده را کاهش دهد.
+- مسیرهای پرتکرار شامل ذخیرهٔ ۲۵ پاسخ پرسشنامه، batchهای DD/Life-Trade، و prepare/resolve/events در ۲۲ دور Ultimatum هستند. heartbeat زمان فعال هر ۱۵ ثانیه از هر شرکت‌کننده نیز بار ثابت ایجاد می‌کند.
+- مقدار کل اتصال‌های PostgreSQL با اندازهٔ pool هر process ضرب‌در تعداد processهای Passenger تعیین می‌شود. افزایش pool بدون دانستن سقف اتصال دیتابیس و processهای Passenger می‌تواند مشکل را بدتر کند.
+- برای پذیرش رویداد ۶۰۰نفره، اجرای سناریوی k6 روی staging مجزا با ۶۰۰ invitation و دادهٔ دورریز الزامی است. معیارها شامل خطای HTTP، p50/p95/p99، throughput، صف pool، CPU/RAM و تعداد اتصال‌های فعال دیتابیس‌اند. هدف اولیه و روش اجرای آزمون در گزارش کارایی آمده است.
+
 ## Refresh, close, interruption and re-entry
 
 Progress is server-side. Local browser storage may be used as a retry queue for unsent events, but must not be the source of truth for completed modules.
