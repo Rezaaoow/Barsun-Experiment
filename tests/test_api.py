@@ -1046,3 +1046,11 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     assert any(row["binomial_n"] == "10" for row in csv_rows if row["role"] == "proposer")
     assert any("offer_model" in row["payload_json"] for row in csv_rows if row["role"] == "responder")
     assert any("decision_model" in row["payload_json"] for row in csv_rows if row["role"] == "proposer")
+
+
+
+def test_large_participant_homepage_is_gzip_compressed(client):
+    response = client.get("/", headers={"accept-encoding": "gzip"})
+    assert response.status_code == 200
+    assert response.headers.get("content-encoding") == "gzip"
+    assert "accept-encoding" in response.headers.get("vary", "").lower()
