@@ -136,8 +136,8 @@
 ## ابزار اجرای آزمون بار
 
 مخزن اکنون ابزار محلی staging-only برای ساخت ۶۰۰ assignment و یک سناریوی k6 برای workflow کامل دارد:
-- `tests/load/create_load_test_users.py` — ساخت لینک‌ها با ADMIN_TOKEN محیطی و خروجی خصوصی؛
-- `tests/load/k6_experiment.js` — دو profile مستقل ramp و burst تا ۶۰۰ VU، heartbeat و اجرای سه ماژول از طریق API؛
+- `tests/load/create_load_test_users.py` — بررسی health/PostgreSQL، سپس ساخت لینک‌ها با ADMIN_TOKEN محیطی و خروجی خصوصی؛
+- `tests/load/k6_experiment.js` — health preflight، دو profile مستقل ramp و burst تا ۶۰۰ VU، heartbeat و اجرای سه ماژول از طریق API؛
 - `tests/load/README_FA.md` — روش اجرا، ایمنی و تفسیر نتایج.
 
 وجود ابزار به معنی اجرای آزمون یا تأیید ظرفیت نیست. فایل کاربران تولیدی و tokenها نباید commit یا برای محیط اصلی استفاده شوند.
