@@ -28,7 +28,7 @@
 
     set +x
     read -r -s -p "DATABASE_URL (hidden input): " DATABASE_URL
-    printf '\\n'
+    printf '\n'
     export DATABASE_URL
     /home/myexperi/virtualenv/lifetrade/3.12/bin/python tests/load/host_diagnostics.py
     unset DATABASE_URL
