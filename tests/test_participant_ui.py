@@ -61,7 +61,9 @@ def test_public_workflow_labels_hide_internal_module_names_and_descriptions():
         "loadWelcomeWorkflow();",
     )
     assert "/api/experiment/workflow?invite=" in loader
+    assert "/api/experiment/workflow?group=" in loader
     assert "encodeURIComponent(workflow.invitationToken)" in loader
+    assert "encodeURIComponent(workflow.groupInvitationToken)" in loader
     assert "step.description" not in loader
     assert "step.title" not in loader
     assert "if(payload.legacy_default&&!includesUltimatum)" in loader
