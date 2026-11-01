@@ -1590,6 +1590,7 @@ def create_group_link(
 
     base_url = _invitation_base_url(request, "/api/admin/group-links")
     joiner = "&" if "?" in base_url else "?"
+    display_steps, workflow_summary = _group_workflow_details(workflow_steps)
     return {
         "group_link_id": group_link_id,
         "scope": data.scope,
@@ -1597,9 +1598,41 @@ def create_group_link(
         "study_code": study_code,
         "condition_code": condition,
         "created_at": timestamp,
+        "workflow_steps": display_steps,
+        "workflow_summary": workflow_summary,
+        "workflow_count": len(display_steps),
         "invitation_url": base_url + joiner + "group=" + token,
         "note": "این لینک برای اشتراک‌گذاری است؛ هر شرکت‌کننده پس از ورود، کد خودش یا کد تصادفی مستقل دریافت می‌کند.",
     }
+
+
+def _group_workflow_details(raw_steps: Any) -> tuple[list[dict[str, Any]], str]:
+    """Return human-readable stage labels for admin display without exposing participant data."""
+    if isinstance(raw_steps, str):
+        try:
+            raw_steps = json.loads(raw_steps)
+        except (TypeError, ValueError):
+            raw_steps = None
+    try:
+        steps = _normalize_workflow_steps(raw_steps)
+    except (TypeError, ValueError, HTTPException):
+        steps = _default_workflow_steps()
+    titles = {
+        "questionnaire": "پرسشنامه",
+        "dd_lifetrade": "بازی انتخاب",
+        "ultimatum": "بازی باشگاه رانندگان بارسان",
+        "ultimatum_frame": "بازی باشگاه رانندگان بارسان · Frame",
+        "ultimatum_control": "بازی باشگاه رانندگان بارسان · Control",
+    }
+    display_steps = [
+        {
+            "step_order": index + 1,
+            "module_code": step["module_code"],
+            "title": titles.get(step["module_code"], step["module_code"]),
+        }
+        for index, step in enumerate(steps)
+    ]
+    return display_steps, " ← ".join(step["title"] for step in display_steps)
 
 
 @app.get("/api/admin/group-links")
@@ -1620,11 +1653,12 @@ def list_admin_group_links(
     with conn() as connection:
         rows = connection.execute(
             "SELECT gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,"
-            "gl.active,gl.created_at,COUNT(ea.assignment_id) AS claimed_count "
+            "gl.workflow_json,gl.active,gl.created_at,COUNT(ea.assignment_id) AS claimed_count "
             "FROM experiment_group_links gl "
             "LEFT JOIN experiment_assignments ea ON ea.group_link_id=gl.group_link_id "
             "WHERE " + where + " "
-            "GROUP BY gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,gl.active,gl.created_at "
+            "GROUP BY gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,"
+            "gl.workflow_json,gl.active,gl.created_at "
             "ORDER BY gl.created_at DESC",
             params,
         ).fetchall()
@@ -1634,6 +1668,7 @@ def list_admin_group_links(
     items = []
     for row in rows:
         token = _decrypt_invitation_token(row["invitation_token_encrypted"])
+        workflow_steps, workflow_summary = _group_workflow_details(row["workflow_json"])
         items.append({
             "group_link_id": row["group_link_id"],
             "study_code": row["study_code"],
@@ -1641,6 +1676,9 @@ def list_admin_group_links(
             "active": bool(row["active"]),
             "created_at": row["created_at"],
             "claimed_count": int(row["claimed_count"] or 0),
+            "workflow_steps": workflow_steps,
+            "workflow_summary": workflow_summary,
+            "workflow_count": len(workflow_steps),
             "url_available": bool(token),
             "invitation_url": base_url + joiner + "group=" + token if token else "",
         })
@@ -2192,21 +2230,32 @@ def record_experiment_consent(data: ExperimentConsentIn):
 
 
 @app.get("/api/experiment/workflow")
-def get_public_experiment_workflow(invite: str):
+def get_public_experiment_workflow(invite: str | None = None, group: str | None = None):
     """Return only the ordered, non-sensitive module outline for a valid active invite."""
-    token = str(invite or "").strip()
+    invite_token = str(invite or "").strip()
+    group_token = str(group or "").strip()
+    if bool(invite_token) == bool(group_token):
+        raise HTTPException(404, "لینک دعوت معتبر نیست.")
+    token = invite_token or group_token
     if len(token) < 20 or len(token) > 200:
-        raise HTTPException(404, "لینک اختصاصی معتبر نیست.")
+        raise HTTPException(404, "لینک دعوت معتبر نیست.")
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        assignment = connection.execute(
-            "SELECT study_code,condition_code,workflow_json FROM experiment_assignments "
-            "WHERE invitation_token_hash=" + marker + " AND active=1",
-            (token_hash,),
-        ).fetchone()
+        if invite_token:
+            assignment = connection.execute(
+                "SELECT study_code,condition_code,workflow_json FROM experiment_assignments "
+                "WHERE invitation_token_hash=" + marker + " AND active=1",
+                (token_hash,),
+            ).fetchone()
+        else:
+            assignment = connection.execute(
+                "SELECT study_code,condition_code,workflow_json FROM experiment_group_links "
+                "WHERE invitation_token_hash=" + marker + " AND active=1",
+                (token_hash,),
+            ).fetchone()
     if not assignment:
-        raise HTTPException(404, "لینک اختصاصی معتبر نیست یا غیرفعال شده است.")
+        raise HTTPException(404, "لینک دعوت معتبر نیست یا غیرفعال شده است.")
     module_only = _test_module_from_study_code(str(assignment["study_code"] or ""))
     if assignment["workflow_json"]:
         raw = assignment["workflow_json"]
