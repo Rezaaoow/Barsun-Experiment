@@ -95,8 +95,15 @@ a{color:#245fc0;overflow-wrap:anywhere}
 .group-link-result{padding:13px;border:1px solid #dce6f6;background:#f6f9ff;border-radius:12px;margin:12px 0}
 .group-link-result .code{display:block;overflow-wrap:anywhere;white-space:normal;margin:7px 0 10px}
 .group-link-result p{margin:0;color:#5d6d84;font-size:.86rem}
-.group-link-table table{min-width:800px}
-.group-link-table td{white-space:nowrap}
+.group-link-table table{min-width:980px}
+.group-link-table td{white-space:normal;vertical-align:middle}
+.group-stage-list{display:flex;flex-wrap:wrap;gap:6px;min-width:260px;max-width:470px}
+.group-stage-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #dfe6f2;border-radius:9px;background:#f7f9fd;color:#34445e;font-size:.76rem;font-weight:700;line-height:1.5}
+.group-stage-chip .stage-number{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:6px;background:#e7edfa;color:#3c5a9b;font-size:.68rem;font-weight:900}
+.group-workflow-count{display:block;margin-top:6px;color:#778397;font-size:.72rem;font-weight:600}
+.group-link-table .row-code{direction:ltr;text-align:left;white-space:nowrap}
+.group-link-result .group-stage-list{margin:10px 0}
+.group-link-result .group-stage-chip{background:#fff}
 footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 [hidden]{display:none!important}
 @media(max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.export-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -673,28 +680,46 @@ async function refreshAssignments(){
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{if(button)button.disabled=false;}
 }
+function makeGroupStageList(steps){
+ const list=document.createElement("div");list.className="group-stage-list";
+ (steps||[]).forEach(step=>{
+  const chip=document.createElement("span");chip.className="group-stage-chip";
+  const number=document.createElement("span");number.className="stage-number";
+  number.textContent=Number(step.step_order||0).toLocaleString("fa-IR");
+  const title=document.createElement("span");title.textContent=step.title||step.module_code||"مرحله";
+  chip.append(number,title);list.appendChild(chip);
+ });
+ return list;
+}
 function renderGroupLinkResult(item){
  const root=$("groupLinkOutput");root.replaceChildren();
  const card=document.createElement("div");card.className="group-link-result";
  const title=document.createElement("strong");title.textContent=item.label+" · "+(item.scope==="test"?"فضای تست":"آزمایش اصلی");
+ const stageLabel=document.createElement("p");stageLabel.textContent="مراحل ثبت‌شده برای این لینک:";
+ const stages=makeGroupStageList(item.workflow_steps||[]);
  const link=document.createElement("a");link.className="code";link.href=item.invitation_url;link.target="_blank";link.rel="noopener noreferrer";link.textContent=item.invitation_url;
  const note=document.createElement("p");note.textContent="این نشانی را با همهٔ شرکت‌کنندگان به اشتراک بگذار. هر نفر پس از ورود، هویت مستقل خود را انتخاب می‌کند.";
  const copy=document.createElement("button");copy.type="button";copy.className="secondary";copy.textContent="کپی لینک گروهی";
  copy.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(item.invitation_url);copy.textContent="کپی شد";}catch(_){window.prompt("لینک گروهی را کپی کن:",item.invitation_url);}});
- card.append(title,link,note,copy);root.appendChild(card);
+ card.append(title,stageLabel,stages,link,note,copy);root.appendChild(card);
 }
 function renderGroupLinks(data){
  const root=$("groupLinksTable");root.replaceChildren();
  const items=data.items||[];
  if(!items.length){const empty=document.createElement("p");empty.className="hint";empty.style.padding="12px";empty.textContent="هنوز لینک گروهی در این محدوده ساخته نشده است.";root.className="table-wrap group-link-table";root.appendChild(empty);return;}
  const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
- ["عنوان","کد مطالعه","تعداد افراد","وضعیت","لینک","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ ["عنوان","مراحل آزمایش","کد مطالعه","تعداد افراد","وضعیت","لینک","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
  thead.appendChild(headRow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  items.forEach(item=>{
   const tr=document.createElement("tr");
   const label=document.createElement("td");label.textContent=item.label;tr.appendChild(label);
-  const study=document.createElement("td");study.className="code";study.textContent=item.study_code;tr.appendChild(study);
+  const workflowCell=document.createElement("td");
+  workflowCell.appendChild(makeGroupStageList(item.workflow_steps||[]));
+  const workflowCount=document.createElement("small");workflowCount.className="group-workflow-count";
+  workflowCount.textContent=Number(item.workflow_count||0).toLocaleString("fa-IR")+" مرحله · به همین ترتیب اجرا می‌شود";
+  workflowCell.appendChild(workflowCount);tr.appendChild(workflowCell);
+  const study=document.createElement("td");study.className="row-code";study.textContent=item.study_code;tr.appendChild(study);
   const count=document.createElement("td");count.textContent=Number(item.claimed_count||0).toLocaleString("fa-IR");tr.appendChild(count);
   const state=document.createElement("td"),badge=document.createElement("span");badge.className="badge "+(item.active?"ok":"neutral");badge.textContent=item.active?"فعال":"غیرفعال";state.appendChild(badge);tr.appendChild(state);
   const url=document.createElement("td");

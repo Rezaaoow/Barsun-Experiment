@@ -604,3 +604,53 @@ def test_group_links_are_removed_by_scoped_data_reset(client):
         },
     )
     assert claim.status_code == 404
+
+
+def test_group_link_welcome_preview_and_admin_list_show_the_saved_stage_sequence(client):
+    steps = [
+        {"step_id": "welcome-q", "module_code": "questionnaire"},
+        {"step_id": "welcome-dd", "module_code": "dd_lifetrade"},
+        {"step_id": "welcome-ult", "module_code": "ultimatum_frame"},
+    ]
+    created = client.post(
+        "/api/admin/group-links",
+        headers={"x-admin-token": "test-admin-token"},
+        json={"scope": "main", "label": "Welcome stages group", "steps": steps},
+    )
+    assert created.status_code == 200, created.text
+    group = created.json()
+    assert group["workflow_count"] == 3
+    assert [step["module_code"] for step in group["workflow_steps"]] == [
+        "questionnaire", "dd_lifetrade", "ultimatum_frame"
+    ]
+    token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+
+    preview = client.get("/api/experiment/workflow?group=" + token)
+    assert preview.status_code == 200, preview.text
+    preview_steps = preview.json()["steps"]
+    assert [step["module_code"] for step in preview_steps] == [
+        "questionnaire", "dd_lifetrade", "ultimatum_frame"
+    ]
+    assert [step["title"] for step in preview_steps] == [
+        "پرسشنامه", "تکلیف تصمیم‌گیری", "بازی اولتیماتوم — Frame"
+    ]
+
+    listed = client.get(
+        "/api/admin/group-links?scope=main",
+        headers={"x-admin-token": "test-admin-token"},
+    )
+    assert listed.status_code == 200, listed.text
+    item = next(row for row in listed.json()["items"] if row["group_link_id"] == group["group_link_id"])
+    assert item["workflow_count"] == 3
+    assert [step["module_code"] for step in item["workflow_steps"]] == [
+        "questionnaire", "dd_lifetrade", "ultimatum_frame"
+    ]
+    assert "پرسشنامه" in item["workflow_summary"]
+    assert "Frame" in item["workflow_summary"]
+
+
+def test_group_workflow_preview_rejects_inactive_or_unknown_group_token(client):
+    response = client.get(
+        "/api/experiment/workflow?group=" + "x" * 48,
+    )
+    assert response.status_code == 404
