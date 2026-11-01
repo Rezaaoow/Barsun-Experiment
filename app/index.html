@@ -948,134 +948,13 @@ h2 {
   #welcome .welcome-step-copy small{font-size:.87rem!important;line-height:1.65!important;}
 }
 
-/* Unified participant UI polish — consolidated overrides for all screen sizes. */
-:root{--ui-ink:#17202b;--ui-muted:#687384;--ui-line:#e1e6ed;--ui-soft:#f4f6f8;--ui-radius:22px}
-#screen:not(.trial-screen){background:var(--ui-soft)}
-#screen>.panel{width:min(700px,100%);border:1px solid var(--ui-line);border-radius:24px;box-shadow:0 18px 52px rgba(24,39,58,.075);padding:clamp(24px,4vw,42px)}
-#screen>.panel h1{color:var(--ui-ink);letter-spacing:-.025em}
-#screen>.panel p{color:#354052}
-#screen .eyebrow{color:#768193!important;letter-spacing:.04em}
-#screen .btn{min-height:52px;border-radius:14px;font-weight:800;box-shadow:0 4px 12px rgba(20,30,44,.08)}
-#screen .btn-secondary{box-shadow:none}
-#screen .field input,#screen .field select{min-height:52px;border-color:#d4dbe5;border-radius:12px;background:#fbfcfd}
-#screen .field input:focus,#screen .field select:focus{outline:3px solid rgba(65,99,153,.16);border-color:#667fa8}
-#screen .consent-row{border-color:var(--ui-line);border-radius:14px;background:#f8fafc}
-#screen .welcome-steps{gap:10px}
-#screen .welcome-step{border-color:#e7ebf0;border-radius:15px;background:#fbfcfd}
-#screen .welcome-step>span:first-child{background:#202b3b;color:#fff}
-#screen .welcome-step-copy strong{color:#253246}
-#screen .welcome-step-copy small{color:#697586!important}
-#screen .interstitial-screen{width:min(780px,100%);height:min(690px,calc(100svh - 40px));max-height:calc(100svh - 32px);padding:clamp(24px,3.8vw,42px);border:1px solid var(--ui-line);border-radius:24px;background:#fff;box-shadow:0 18px 52px rgba(24,39,58,.075)}
-#screen .instruction-progress{color:#7a8595;font-weight:700}
-#screen .instruction-progress .step-count{color:#27364a;font-weight:800}
-#screen .progress-track{height:6px;background:#edf0f4;border-radius:99px}
-#screen .progress-fill{background:#334a68;border-radius:99px}
-#screen .instruction-main{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:clamp(12px,2vh,22px);overflow-y:auto}
-#screen .instruction-heading{color:#1d2938;font-weight:850;line-height:1.5}
-#screen .instruction-content{width:100%;max-width:680px;gap:clamp(12px,2vh,20px);overflow-y:auto}
-#screen .instruction-content p{color:#394557;font-weight:550;line-height:1.9}
-#screen .instruction-content .instruction-explanation{border:1px solid #e8edf2;border-radius:14px;background:#f8fafc;color:#374355!important;padding:14px 16px!important}
-#screen .example-box{max-width:680px;border-color:#e6ebf1;border-radius:17px;background:#f8fafc}
-#screen .example-choice{border:1px solid #e0e6ee;background:#fff;color:#263448;border-radius:13px}
-#screen .example-choice span{color:#667285}
-#screen .example-or{color:#657184}
-#screen .page-actions{width:100%;max-width:680px;flex:none;padding-top:16px;border-top:1px solid #edf0f3}
-#screen .page-actions .btn{width:100%;background:#1b2736;border-color:#1b2736}
-#screen .questionnaire-screen{width:min(780px,100%);height:min(700px,calc(100svh - 36px));padding:clamp(20px,3.5vw,38px);border:1px solid var(--ui-line);border-radius:24px;box-shadow:0 18px 52px rgba(24,39,58,.075)}
-#screen .questionnaire-statement{color:#273548;font-weight:700}
-#screen .questionnaire-meta{color:#768193}
-#screen .scale-option{border-color:#dfe5ec;border-radius:14px;background:#fff}
-#screen .scale-option .scale-number{background:#eef2f6;color:#26364a}
-#screen .scale-option[aria-pressed=true]{border-color:#334c6e;background:#f3f6fa;box-shadow:inset 0 0 0 1px #334c6e}
-#screen .scale-option[aria-pressed=true] .scale-number{background:#334c6e;color:#fff}
-#screen .questionnaire-actions{border-color:#e8edf2}
-#screen #finish #participant-code{border-color:#e1e7ef;background:#f7f9fc}
 
-/* Delay-discounting choice screen: balanced, centered, and readable. */
-#screen.trial-screen{width:100%;height:100svh;min-height:100svh;max-height:100svh;overflow:hidden;padding:0;background:#f4f6f8;align-items:stretch;justify-content:stretch}
-#screen.trial-screen #stimulus{position:absolute;inset:0;width:100%;height:100%;min-height:0;overflow:hidden;display:flex;align-items:stretch;justify-content:center;padding:clamp(16px,2.8vw,34px)}
-#screen.trial-screen .trial-stage{width:min(1200px,100%);height:100%;min-height:0;margin:0 auto;padding:clamp(18px,3vh,34px) clamp(8px,2vw,24px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(20px,3.5vh,34px)}
-#screen.trial-screen .trial-question{width:100%;max-width:900px;flex:none;margin:0;color:#1d2938;text-align:center;font-size:clamp(1.55rem,3vw,2.05rem);font-weight:850;line-height:1.5;letter-spacing:-.025em}
-#screen.trial-screen .trial-layout{display:grid;width:min(1100px,100%);max-width:100%;height:auto;min-height:0;grid-template-columns:minmax(0,1fr) 48px minmax(0,1fr);grid-template-rows:clamp(280px,50vh,470px);gap:clamp(10px,1.8vw,22px);align-items:stretch;direction:ltr}
-#screen.trial-screen .choice-card{width:100%;height:100%;min-width:0;min-height:0;padding:clamp(18px,3vw,34px);gap:clamp(12px,2vh,20px);border:1.5px solid #dce3eb;border-radius:22px;background:linear-gradient(155deg,#fff 0%,#fbfcfe 100%);color:#172437;box-shadow:0 12px 32px rgba(30,48,72,.055);text-align:center;overflow:hidden}
-#screen.trial-screen .choice-card:hover{border-color:#aab8c9;box-shadow:0 16px 36px rgba(30,48,72,.09)}
-#screen.trial-screen .choice-card:focus-visible{outline:4px solid rgba(57,87,130,.32);outline-offset:4px}
-#screen.trial-screen .choice-card:active,#screen.trial-screen .choice-card.is-pressed{background:#eef3f9;border-color:#536d91;box-shadow:inset 0 0 0 2px #536d91,0 8px 20px rgba(30,48,72,.08)}
-#screen.trial-screen .choice-label{display:inline-flex!important;align-items:center;justify-content:center;max-width:100%;margin:0;padding:7px 13px;border:1px solid #e6ebf1;border-radius:999px;background:#f5f7fa;color:#5d6b7d;font-size:clamp(.85rem,1.3vw,.98rem)!important;font-weight:750;line-height:1.4;white-space:normal}
-#screen.trial-screen .choice-amount{max-width:100%;color:#1c2d43;font-size:clamp(1.8rem,3.5vw,3rem);font-weight:900;line-height:1.45;letter-spacing:-.02em;overflow-wrap:anywhere}
-#screen.trial-screen .choice-detail{max-width:30ch;color:#68778a;font-size:clamp(1.05rem,1.8vw,1.35rem);font-weight:650;line-height:1.65;overflow-wrap:anywhere}
-#screen.trial-screen .or-divider{width:48px;height:48px;min-width:48px;align-self:center;border:1px solid #e0e6ed;background:#fff;color:#58687c;font-size:1rem;font-weight:850;box-shadow:0 5px 16px rgba(30,48,72,.06)}
-#screen.trial-screen .fixation{color:#24364e;font-size:clamp(2.5rem,5vw,4rem)}
+/* DD vertical alignment fix only: center instructions, fixation, and choice screens. */
 @media(max-width:680px){
- #screen>.panel{padding:23px 17px;border-radius:20px}
- #screen>.panel h1{font-size:1.55rem;line-height:1.55}
- #screen>.panel p{font-size:1rem;line-height:1.85}
- #screen .btn{min-height:54px;font-size:1.02rem}
- #screen .interstitial-screen{width:100%;height:auto;min-height:calc(100svh - 28px);max-height:none;overflow:visible;padding:20px 15px;border-radius:19px}
- #screen .instruction-main{overflow:visible;gap:12px}
- #screen .instruction-heading{font-size:1.38rem;line-height:1.5;margin-bottom:3px}
- #screen .instruction-content{overflow:visible;gap:12px}
- #screen .instruction-content p{font-size:1rem;line-height:1.8}
- #screen .instruction-content .instruction-explanation{font-size:.96rem!important;line-height:1.75!important;padding:12px!important}
- #screen .example-box{padding:12px 9px;border-radius:14px}
- #screen .example-title{font-size:.92rem;margin-bottom:9px}
- #screen .example-choice{min-height:62px;padding:9px 5px;font-size:.82rem}
- #screen .example-choice strong{font-size:.9rem}
- #screen .example-note{font-size:.8rem!important;line-height:1.55!important}
- #screen .page-actions{padding-top:12px}
- #screen .questionnaire-screen{width:100%;height:auto;min-height:calc(100svh - 24px);max-height:none;overflow:visible;padding:18px 12px;border-radius:19px}
- #screen .questionnaire-statement{font-size:1.08rem;line-height:1.8;margin-bottom:14px}
- #screen .questionnaire-scale{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
- #screen .scale-option{height:auto;min-height:clamp(108px,15svh,132px);max-height:none;padding:9px 3px;gap:7px;overflow:visible}
- #screen .scale-option .scale-number{width:30px;height:30px;font-size:.9rem!important}
- #screen .scale-option .scale-label{font-size:clamp(.69rem,2.35vw,.82rem)!important;line-height:1.38!important;overflow-wrap:anywhere}
- #screen.trial-screen{height:100svh;min-height:100svh;max-height:100svh;padding:0;overflow:hidden}
- #screen.trial-screen #stimulus{position:absolute;inset:0;width:100%;height:100%;min-height:0;padding:14px 8px}
- #screen.trial-screen .trial-stage{width:100%;height:100%;min-height:0;justify-content:center;gap:clamp(22px,4vh,34px);padding:20px 3px}
- #screen.trial-screen .trial-question{font-size:clamp(1.28rem,5.1vw,1.62rem);line-height:1.5}
- #screen.trial-screen .trial-layout{width:100%;max-width:100%;height:auto;min-height:0;grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr);grid-template-rows:clamp(190px,29svh,235px);gap:6px}
- #screen.trial-screen .choice-card{height:100%;min-height:0;padding:14px 6px;gap:clamp(10px,1.8vh,15px);border-radius:17px}
- #screen.trial-screen .choice-label{padding:6px 7px;font-size:clamp(.72rem,2.5vw,.86rem)!important;line-height:1.35}
- #screen.trial-screen .choice-amount{font-size:clamp(.98rem,4.2vw,1.23rem);line-height:1.4}
- #screen.trial-screen .choice-detail{font-size:clamp(.8rem,3vw,.94rem);line-height:1.5;max-width:100%}
- #screen.trial-screen .or-divider{grid-column:auto;grid-row:auto;width:34px;height:34px;min-width:34px;font-size:.82rem}
- #screen.trial-screen .fixation{font-size:3rem}
+ .screen.trial-screen{height:100dvh;min-height:100dvh;max-height:100dvh;overflow:hidden;align-items:center!important;justify-content:center!important;padding:8px 7px}
+ .screen.trial-screen #stimulus{position:absolute;inset:0;width:100%;height:100%;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px 2px}
+ .screen.trial-screen .trial-stage{height:100%;min-height:100%;justify-content:center;gap:16px;padding:18px 6px}
 }
-@media(max-width:360px){
- #screen.trial-screen #stimulus{padding-inline:6px}
- #screen.trial-screen .trial-stage{padding-inline:1px}
- #screen.trial-screen .trial-layout{grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:4px}
- #screen.trial-screen .choice-card{padding-inline:4px}
- #screen.trial-screen .choice-label{font-size:.7rem!important}
- #screen.trial-screen .choice-amount{font-size:.92rem}
- #screen.trial-screen .choice-detail{font-size:.76rem}
- #screen.trial-screen .or-divider{width:28px;height:28px;min-width:28px}
-}
-@media(max-height:620px) and (max-width:900px){
- #screen.trial-screen .trial-stage{gap:14px;padding-block:10px}
- #screen.trial-screen .trial-question{font-size:clamp(1.1rem,4.2vh,1.45rem)}
- #screen.trial-screen .trial-layout{grid-template-rows:clamp(150px,39svh,210px)}
- #screen.trial-screen .choice-card{gap:8px;padding-block:9px}
- #screen.trial-screen .choice-amount{font-size:clamp(.9rem,3.4vw,1.15rem)}
-}
-
-/* Instruction content must not shrink its own paragraphs when a page is dense. */
-#screen .instruction-main{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:14px;overflow:hidden}
-#screen .instruction-main .instruction-heading{flex:0 0 auto;margin:0;text-align:center}
-#screen .instruction-main .instruction-content{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:14px;overflow-y:auto}
-#screen .instruction-main .instruction-content>*{flex:0 0 auto;min-width:0}
-#screen .instruction-main .instruction-content>p{margin:0}
-@media(max-width:680px){
- #screen .instruction-main{overflow:visible}
- #screen .instruction-main .instruction-content{flex:0 1 auto;overflow:visible}
-}
-
-#screen .interstitial-screen{height:min(760px,calc(100svh - 40px))}
-#screen .instruction-content{scrollbar-width:thin;scrollbar-color:#c5ced9 transparent;padding:2px 5px 10px}
-#screen .instruction-content::-webkit-scrollbar{width:6px}
-#screen .instruction-content::-webkit-scrollbar-track{background:transparent}
-#screen .instruction-content::-webkit-scrollbar-thumb{background:#c5ced9;border-radius:99px}
-@media(max-width:680px){#screen .interstitial-screen{height:auto}}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <div class="brand-mark" aria-hidden="true">B</div>
