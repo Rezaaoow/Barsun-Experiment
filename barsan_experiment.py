@@ -2733,10 +2733,21 @@ def start_experiment_stage(data: StageStartIn):
 
         if old_run_id:
             marker = "%s" if DATABASE_URL else "?"
+            old_run = connection.execute(
+                "SELECT metadata FROM instrument_runs WHERE run_id=" + marker,
+                (old_run_id,),
+            ).fetchone()
+            old_metadata = _json_value(old_run["metadata"]) if old_run else {}
+            if not isinstance(old_metadata, dict):
+                old_metadata = {}
+            abandoned_draft = _json_value(existing.get("draft_payload")) if existing else {}
+            if abandoned_draft:
+                old_metadata["abandoned_draft_payload"] = abandoned_draft
+            old_metadata["supersede_reason"] = "participant_reentry"
             connection.execute(
                 "UPDATE instrument_runs SET status='superseded',completed_at=COALESCE(completed_at,"
-                + marker + ") WHERE run_id=" + marker,
-                (timestamp, old_run_id),
+                + marker + "),metadata=" + marker + " WHERE run_id=" + marker,
+                (timestamp, _json_param(old_metadata), old_run_id),
             )
 
         if DATABASE_URL:
