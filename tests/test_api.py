@@ -273,7 +273,7 @@ def test_assignment_identity_and_wrong_code_rejected(client, monkeypatch):
     assert wrong_code.status_code == 403
 
 
-def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
+def test_stage_order_questionnaire_restart_and_task_restart(client, monkeypatch):
     invitation_token = _create_assignment(client, monkeypatch, code="BS-0002", condition="A")
     identity = {"invitation_token": invitation_token, "participant_code": "BS-0002"}
 
@@ -306,21 +306,41 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
     assert qstate["current_run_id"] == qrun
     assert qstate["draft_payload"] == draft
 
-    resumed = client.post(
+    restarted_questionnaire = client.post(
         "/api/experiment/stages/start",
         json={**identity, "stage_code": "questionnaire"},
     )
-    assert resumed.status_code == 200
-    assert resumed.json()["resumed"] is True
-    assert resumed.json()["run_id"] == qrun
-    assert resumed.json()["draft_payload"] == draft
+    assert restarted_questionnaire.status_code == 200
+    assert restarted_questionnaire.json()["resumed"] is False
+    fresh_qrun = restarted_questionnaire.json()["run_id"]
+    assert fresh_qrun != qrun
+    assert restarted_questionnaire.json()["attempt_number"] == 2
+    assert restarted_questionnaire.json()["draft_payload"] == {}
 
-    # Save each of the configured 25 questions through the per-code endpoint.
+    refreshed_again = client.post("/api/experiment/identify", json=identity)
+    assert refreshed_again.status_code == 200
+    assert refreshed_again.json()["stages"][0]["current_run_id"] == fresh_qrun
+    with main.conn() as connection:
+        old_questionnaire_status = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?", (qrun,)
+        ).fetchone()["status"]
+        old_questionnaire_draft = connection.execute(
+            "SELECT draft_payload FROM experiment_stage_progress WHERE current_run_id=?",
+            (qrun,),
+        ).fetchone()
+    assert old_questionnaire_status == "superseded"
+    saved_old_draft = old_questionnaire_draft["draft_payload"]
+    if isinstance(saved_old_draft, str):
+        saved_old_draft = main.json.loads(saved_old_draft)
+    assert saved_old_draft == draft
+
+    # Save each of the configured 25 questions through the per-code endpoint
+    # in the fresh attempt; the abandoned run remains separate and auditable.
     final_answers = {}
     for question_code in main.QUESTIONNAIRE_QUESTION_CODES:
         answer = client.post(
             "/api/experiment/questionnaire/answer",
-            json={**identity, "run_id": qrun, "question_code": question_code,
+            json={**identity, "run_id": fresh_qrun, "question_code": question_code,
                   "response_value": "3", "current_question_index": 0},
         )
         assert answer.status_code == 200, answer.text
@@ -328,7 +348,7 @@ def test_stage_order_draft_resume_and_task_restart(client, monkeypatch):
 
     completed_questionnaire = client.post(
         "/api/experiment/stages/complete",
-        json={**identity, "stage_code": "questionnaire", "run_id": qrun,
+        json={**identity, "stage_code": "questionnaire", "run_id": fresh_qrun,
               "final_payload": {"answers": final_answers}},
     )
     assert completed_questionnaire.status_code == 200, completed_questionnaire.text
