@@ -1449,30 +1449,118 @@ const LEGACY_STEP_IDS={
  ultimatum:"default-ultimatum"
 };
 function legacyStepId(moduleCode){return LEGACY_STEP_IDS[moduleCode]||null;}
-function stepTimePayload(event){
+function timePendingStorageKey(){
+ return 'barsan_time_pending_'+encodeURIComponent(workflow.participantCode||'');
+}
+function readTimePending(){
+ try{
+  const raw=localStorage.getItem(timePendingStorageKey());
+  const rows=raw?JSON.parse(raw):[];
+  if(!Array.isArray(rows))return null;
+  return rows.filter(row=>row&&typeof row.event_id==='string'
+   &&typeof row.step_id==='string'&&typeof row.stage_code==='string'
+   &&['start','heartbeat','pause','complete'].includes(row.event));
+ }catch(error){return null;}
+}
+function writeTimePending(rows){
+ try{
+  const key=timePendingStorageKey();
+  if(rows.length)localStorage.setItem(key,JSON.stringify(rows));
+  else localStorage.removeItem(key);
+  return true;
+ }catch(error){return false;}
+}
+function queueTimeEvent(event){
+ const rows=readTimePending();
+ if(rows===null)throw new Error('خواندن صف رخدادهای زمان ممکن نشد.');
+ const row={
+  event_id:crypto.randomUUID(),
+  step_id:workflow.currentStepId,
+  stage_code:workflow.currentStage,
+  event:event,
+  queued_at:nowISO()
+ };
+ rows.push(row);
+ if(!writeTimePending(rows))throw new Error('ذخیرهٔ رخداد زمان روی این دستگاه ممکن نشد.');
+ return row;
+}
+function removeTimeEvent(eventId){
+ const rows=readTimePending();
+ if(rows===null)return false;
+ return writeTimePending(rows.filter(row=>row.event_id!==eventId));
+}
+let timeFlushPromise=null;
+let timeRetryTimer=null;
+let timeRetryAttempt=0;
+function scheduleTimeRetry(){
+ if(timeRetryTimer!==null||!readTimePending()?.length)return;
+ const ceiling=Math.min(60000,1500*Math.pow(2,timeRetryAttempt));
+ const delay=500+Math.floor(Math.random()*Math.max(500,ceiling));
+ timeRetryAttempt=Math.min(7,timeRetryAttempt+1);
+ timeRetryTimer=window.setTimeout(()=>{
+  timeRetryTimer=null;
+  flushTimePending().catch(error=>console.warn('Time-event recovery deferred',error));
+ },delay);
+}
+function resetTimeRetry(){
+ timeRetryAttempt=0;
+ if(timeRetryTimer!==null)window.clearTimeout(timeRetryTimer);
+ timeRetryTimer=null;
+}
+function stepTimePayload(row){
  return {
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
-  step_id:workflow.currentStepId,
-  stage_code:workflow.currentStage,
-  event
+  step_id:row.step_id,
+  stage_code:row.stage_code,
+  event:row.event,
+  event_id:row.event_id
  };
 }
+async function flushTimePending(){
+ if(!workflow.invitationToken||!workflow.participantCode)return 0;
+ if(timeFlushPromise)return timeFlushPromise;
+ timeFlushPromise=(async()=>{
+  while(true){
+   const pending=readTimePending();
+   if(pending===null)throw new Error('خواندن صف رخدادهای زمان ممکن نشد.');
+   if(!pending.length){resetTimeRetry();return 0;}
+   const row=pending[0];
+   try{
+    await apiWithRetry('/api/experiment/time',stepTimePayload(row),{
+     attempts:3,baseDelayMs:400,maxDelayMs:2500,timeoutMs:10000
+    });
+   }catch(error){
+    if(isRetryableApiError(error))scheduleTimeRetry();
+    throw error;
+   }
+   const latest=readTimePending();
+   if(latest===null||!writeTimePending(latest.filter(item=>item.event_id!==row.event_id))){
+    scheduleTimeRetry();
+    return latest===null?-1:latest.length;
+   }
+  }
+ })();
+ try{return await timeFlushPromise;}
+ finally{timeFlushPromise=null;}
+}
 async function postStepTime(event,keepalive=false){
- if(!workflow.timeTrackingEnabled||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return;
- const payload=stepTimePayload(event);
+ if(!workflow.timeTrackingEnabled||!workflow.currentStepId||!workflow.currentStage||!workflow.participantCode)return false;
+ let row;
+ try{row=queueTimeEvent(event);}
+ catch(error){console.warn('Time event could not be persisted locally',error);return false;}
  if(keepalive){
-  try{
-   await fetch(APP_BASE_PATH+'/api/experiment/time',{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(payload),cache:'no-store',keepalive:true
-   });
-  }catch(error){console.warn('Time tracking beacon failed',error);}
-  return;
+  fetch(APP_BASE_PATH+'/api/experiment/time',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify(stepTimePayload(row)),cache:'no-store',keepalive:true
+  }).then(response=>{
+   if(response.ok)removeTimeEvent(row.event_id);
+   else if([408,425,429,500,502,503,504].includes(response.status))scheduleTimeRetry();
+  }).catch(error=>{console.warn('Time tracking beacon failed',error);scheduleTimeRetry();});
+  return true;
  }
- return apiWithRetry('/api/experiment/time',payload,{
-  attempts:3,baseDelayMs:400,maxDelayMs:2500,timeoutMs:10000
- });
+ try{await flushTimePending();return true;}
+ catch(error){console.warn('Time event queued for retry',error);return false;}
 }
 async function startStepTimer(){
  if(!workflow.timeTrackingEnabled||!workflow.currentStepId||workflow.timerActive)return;
@@ -1917,21 +2005,24 @@ function showQuestionnaireIntro(pageIndex=0){
 async function startQuestionnaireRun(button){
  if(button){button.disabled=true;button.textContent='در حال آماده‌سازی…';}
  try{
-  const started=await apiWithRetry('/api/experiment/stages/start',{
+  // Flush the previous attempt's local queue before the server supersedes that attempt.
+  await recoverOrphanedQuestionnaireQueues();
+  const started=await startStageWithRecovery({
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    stage_code:'questionnaire',
    step_id:workflow.workflowMode?workflow.currentStepId:null
-  },{attempts:4,baseDelayMs:700,maxDelayMs:7000,timeoutMs:12000});
+  });
+  if(started.already_completed){
+   workflowMessage('پرسشنامه قبلاً تکمیل شده است','طبق سوابق ثبت‌شده، این بخش از روند آزمایش قبلاً کامل شده است.','بازگشت');
+   return;
+  }
   workflow.stageRunId=started.run_id;
   await startStepTimer();
-  const serverDraft=started.draft_payload||{};
-  if(serverDraft.answers&&typeof serverDraft.answers==='object'){
-   workflow.questionnaireAnswers={...serverDraft.answers};
-   workflow.questionnaireSavedAnswers={...serverDraft.answers};
-  }
-  const savedIndex=Number.isInteger(serverDraft.current_question_index)?serverDraft.current_question_index:0;
-  workflow.questionIndex=Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,savedIndex));
+  // Re-entry starts the questionnaire from question one in a fresh attempt.
+  workflow.questionnaireAnswers={};
+  workflow.questionnaireSavedAnswers={};
+  workflow.questionIndex=0;
   restoreQuestionnairePending();
   flushQuestionnairePending().catch(error=>console.warn('Questionnaire pending sync deferred',error));
   showQuestionnaireQuestion(workflow.questionIndex);
@@ -1947,6 +2038,7 @@ async function startQuestionnaireRun(button){
   console.error(error);
  }
 }
+
 
 
 function questionnairePendingStorageKey(){
@@ -2104,6 +2196,44 @@ async function flushQuestionnairePending(){
  })();
  try{return await questionnaireFlushPromise;}
  finally{questionnaireFlushPromise=null;}
+}
+async function recoverOrphanedQuestionnaireQueues(){
+ if(!workflow.invitationToken||!workflow.participantCode)return 0;
+ const prefix='barsan_questionnaire_pending_'+encodeURIComponent(workflow.participantCode)+'_';
+ let recovered=0;
+ const keys=Object.keys(localStorage).filter(key=>key.startsWith(prefix));
+ for(const key of keys){
+  let rows;
+  try{
+   const parsed=JSON.parse(localStorage.getItem(key)||'[]');
+   if(!Array.isArray(parsed))throw new Error('invalid questionnaire outbox');
+   rows=parsed.filter(row=>row&&typeof row.id==='string'
+    &&typeof row.question_code==='string'&&typeof row.response_value==='string');
+  }catch(error){throw new Error('بازیابی صف پرسشنامه از اجرای قبلی ممکن نشد.');}
+  const runId=decodeURIComponent(key.slice(prefix.length));
+  while(rows.length){
+   const batch=rows.slice(0,QUESTIONNAIRE_BATCH_SIZE);
+   const sentIds=new Set(batch.map(row=>row.id));
+   await apiWithRetry('/api/experiment/questionnaire/answers',{
+    invitation_token:workflow.invitationToken,
+    participant_code:workflow.participantCode,
+    run_id:runId,
+    step_id:batch[0].step_id,
+    answers:batch.map(row=>({
+     question_code:row.question_code,
+     response_value:row.response_value,
+     current_question_index:row.current_question_index
+    }))
+   },{attempts:4,baseDelayMs:600,maxDelayMs:7000,timeoutMs:12000});
+   rows=rows.filter(row=>!sentIds.has(row.id));
+   try{
+    if(rows.length)localStorage.setItem(key,JSON.stringify(rows));
+    else localStorage.removeItem(key);
+   }catch(error){throw new Error('تأیید محلی ارسال پاسخ‌های پرسشنامه ممکن نشد.');}
+   recovered+=sentIds.size;
+  }
+ }
+ return recovered;
 }
 async function drainQuestionnairePending(timeoutMs=90000){
  const deadline=Date.now()+timeoutMs;
