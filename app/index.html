@@ -1996,7 +1996,7 @@ function scheduleQuestionnaireFlush(force=false){
  const delay=urgent?0:12000+Math.floor(Math.random()*3000);
  questionnaireFlushTimer=window.setTimeout(()=>{
   questionnaireFlushTimer=null;
-  scheduleQuestionnaireFlush();
+  flushQuestionnairePending().catch(error=>console.warn('Questionnaire sync deferred',error));
  },delay);
 }
 function scheduleQuestionnaireRetry(){
