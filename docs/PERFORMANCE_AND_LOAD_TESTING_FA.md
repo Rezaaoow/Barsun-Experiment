@@ -2,7 +2,7 @@
 
 ## وضعیت این گزارش
 
-این سند ممیزی کد و سه پاس بهینه‌سازی Backend در شاخهٔ `perf/600-user-event-readiness` را ثبت می‌کند. تغییرهای اجرایی در CI روی SQLite و PostgreSQL 16 تست شده‌اند؛ آخرین اجرای معتبر تاریخی روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency test برای ۲۴ شرکت‌کننده بوده است ([GitHub Actions run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). آزمون واقعی ramp-up با ۶۰۰ VU در staging در ۲ نوامبر ۲۰۲۶ اجرا شد و شکست خورد؛ اشباع هر ۸ پردازش LSAPI، ظرفیت ۶۰۰ نفر را تأییدناپذیر کرد. benchmark زمان‌دار مستقل برای endpointها و منابع هنوز انجام نشده است.
+این سند ممیزی کد، بهینه‌سازی درخواست‌های participant و آزمون بار رویداد ۶۰۰نفره را ثبت می‌کند. اجرای تاریخی CI روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` شامل ۶۱ تست SQLite و PostgreSQL smoke/concurrency برای ۲۴ نفر بود ([run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). پس از ادغام PR #24، آخرین CI روی `main` در commit `0598aca3b6f73cf089f4522fc4416fbb079bf02a` با ۷۲ تست SQLite، بررسی JavaScript و k6، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ نفر موفق شد ([run 41459908685](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41459908685)). آزمون واقعی ramp-up با ۶۰۰ VU در staging در ۲ نوامبر ۲۰۲۶ اجرا شد و شکست خورد؛ اشباع هر ۸ پردازش LSAPI، ظرفیت ۶۰۰ نفر را تأییدناپذیر کرد. benchmark زمان‌دار مستقل endpointها و منابع هنوز انجام نشده است.
 
 ## مشخصات هاست اعلام‌شده
 
@@ -78,7 +78,7 @@
 - ادغام read احراز هویت/رضایت/وضعیت پرسشنامه در مسیر save answer و save draft؛
 - محدود کردن projection دورهای Ultimatum و تجمیع شمارش/ترتیب/وجود دور در SQL، با خواندن JSON payload فقط برای retry همان دور.
 
-آخرین CI روی SHA `c94e6590e17f552983ecbe7feea2f4abdf30be6d` (run `41238007684`) موفق است: ۶۱ تست SQLite، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده موفق. این تأیید، correctness و سازگاری دو دیتابیس را نشان می‌دهد؛ هیچ benchmark زمان‌دار، query-count measurement یا ظرفیت واقعی ۶۰۰ VU هنوز تأیید نشده است.
+آخرین CI روی `main`، commit `0598aca3b6f73cf089f4522fc4416fbb079bf02a` (run `41459908685`) موفق است: ۷۲ تست SQLite، syntax check جاوااسکریپت، validation اسکریپت‌های load test، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده. این تأیید correctness و سازگاری SQL را نشان می‌دهد؛ benchmark زمان‌دار و ظرفیت واقعی ۶۰۰ VU هنوز تأیید نشده است.
 
 ## برآورد بار نسخهٔ فعلی k6
 
@@ -173,7 +173,7 @@
 | ممیزی UI و نحوهٔ ارسال درخواست‌ها | بررسی اولیه انجام شده |
 | ثبت مشخصات اسمی هاست | ثبت شده؛ جزییات Passenger و DB منتظر خروجی diagnostics |
 | بهینه‌سازی کد اجرایی | سه پاس Backend در PR #17 پیاده‌سازی شده‌اند: query consolidation، time tracking اتمیک، grouped aggregation، و حذف read/row payload غیرضروری در workflow، پرسشنامه و Ultimatum |
-| تست رگرسیون روی نسخهٔ بهینه‌شده | موفق: ۶۱ تست SQLite، smoke test PostgreSQL 16 و تست هم‌زمانی ۲۴ شرکت‌کننده روی SHA فعلی PR #17 |
+| تست رگرسیون روی نسخهٔ ادغام‌شده در main | موفق: ۷۲ تست SQLite، JavaScript/k6 syntax checks، PostgreSQL 16 smoke test و تست هم‌زمانی ۲۴ شرکت‌کننده روی commit `0598aca3` |
 | ابزار load test با ۶۰۰ VU | profile ramp در staging اجرا شد و شکست خورد؛ profile burst هنوز اجرا نشده است |
 | تأیید آمادگی production | انجام نشده |
 
