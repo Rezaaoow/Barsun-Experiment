@@ -13,9 +13,10 @@ for raw in (ROOT / 'config/app.env').read_text().splitlines():
         env[key.strip()] = value.strip()
 assert env.get('STUDY_CODE', '').startswith('barsan-staging-')
 assert env.get('PUBLIC_EXPERIMENT_URL', '').rstrip('/') == 'https://staging.my-experiment.ir/lifetrade'
-assert hashlib.sha256((ROOT / 'repo/barsan_experiment.py').read_bytes()).hexdigest() == '03e2c6704e3dd8b21ea19d46eca610a4e1ef14f7612d642b7432cd78e03dbf9e'
-assert hashlib.sha256((ROOT / 'repo/request_metrics.py').read_bytes()).hexdigest() == '3b02fc4dc3633d5d5ef9a3088469a071bf936b3655ba2cd3941d93a955481191'
+assert hashlib.sha256((ROOT / 'repo/barsan_experiment.py').read_bytes()).hexdigest() == '4ff26431424b34556ca19e4fc03cba380d9783166ff01f60ea4b378426da14c1'
+assert hashlib.sha256((ROOT / 'repo/request_metrics.py').read_bytes()).hexdigest() == '53a447b0e1bf299283ef3296748abd22679a72b1291722d0e6c3b19e4dcbf046'
 env['BARSAN_REQUEST_METRICS'] = '1'
+env['BARSAN_SYNC_THREADS'] = '8'
 os.chdir(ROOT / 'repo')
 os.execve(PYTHON, [
     PYTHON, '-m', 'uvicorn', 'barsan_experiment:app',

@@ -80,3 +80,33 @@ def test_database_connection_is_unchanged_without_request_metrics():
     sentinel = object()
     with metrics.observed_connection(raw()) as connection:
         assert connection is sentinel
+
+
+def test_configured_sync_threads_bound_concurrency_without_dropping_work(monkeypatch):
+    import anyio
+    import threading
+    import time
+    import barsan_experiment as main
+
+    monkeypatch.setenv("BARSAN_SYNC_THREADS", "3")
+    state = {"active": 0, "peak": 0, "finished": 0}
+    lock = threading.Lock()
+
+    def work():
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.02)
+        with lock:
+            state["active"] -= 1
+            state["finished"] += 1
+
+    async def run():
+        await main.configure_sync_threads()
+        assert anyio.to_thread.current_default_thread_limiter().total_tokens == 3
+        async with anyio.create_task_group() as group:
+            for _ in range(12):
+                group.start_soon(anyio.to_thread.run_sync, work)
+
+    anyio.run(run)
+    assert state == {"active": 0, "peak": 3, "finished": 12}

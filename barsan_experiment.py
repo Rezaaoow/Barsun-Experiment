@@ -103,6 +103,17 @@ if os.getenv("BARSAN_REQUEST_METRICS", "0") == "1":
     app.add_middleware(RequestMetricsMiddleware)
 
 
+@app.on_event("startup")
+async def configure_sync_threads():
+    """Bound sync handler threads when configured for a constrained host."""
+    limit = int(os.getenv("BARSAN_SYNC_THREADS", "0"))
+    if not 0 <= limit <= 128:
+        raise ValueError("BARSAN_SYNC_THREADS must be between 0 and 128")
+    if limit:
+        from anyio.to_thread import current_default_thread_limiter
+        current_default_thread_limiter().total_tokens = limit
+
+
 def _invitation_fernet() -> Fernet:
     """Load the invite-token encryption key, creating a private per-install key if needed."""
     configured_key = os.getenv("INVITATION_TOKEN_ENCRYPTION_KEY", "").strip()

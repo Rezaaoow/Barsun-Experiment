@@ -111,6 +111,7 @@ class RequestMetricsMiddleware:
             record = {"event": "request_end", "rid": request_id, "at": time.time(),
                       "pid": os.getpid(), "route": getattr(route, "path", "unmatched"),
                       "status": status, "error_type": error_type,
+                      "python_threads": threading.active_count(),
                       "inflight_start": active_at_start, "inflight_end": active_at_end,
                       "app_ms": round((time.perf_counter() - metrics["started"]) * 1000, 3)}
             for key in ("first_db_ms", "pool_wait_ms", "sql_ms", "db_scope_ms", "sql_count"):
