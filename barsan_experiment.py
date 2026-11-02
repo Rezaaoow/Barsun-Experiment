@@ -2855,7 +2855,7 @@ def start_experiment_stage(data: StageStartIn):
 
 @app.post("/api/experiment/stages/draft")
 def save_questionnaire_draft(data: StageDraftIn):
-    """Persist questionnaire answers continuously so a refresh restores the same draft."""
+    """Persist draft state within an attempt; re-entry creates a separate fresh attempt."""
     with conn() as connection:
         assignment = _lookup_questionnaire_assignment_state(
             connection, data.invitation_token, data.participant_code, step_id=data.step_id
