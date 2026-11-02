@@ -2410,7 +2410,7 @@ async function beginParticipantFlow(){
       invitation_token:claim.invitation_token
      }));
      sessionStorage.removeItem(requestStorageKey);
-    }catch(_){}}
+    }catch(_){}
    }
    enteredCode=claim.participant_code;
    workflow.invitationToken=claim.invitation_token;
