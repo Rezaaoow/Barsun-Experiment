@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 import barsan_experiment as main
+from stage_start_checks import check_concurrent_starts
 
 
 @pytest.fixture
@@ -984,3 +985,8 @@ def test_stage_start_request_id_replays_same_attempt_but_new_page_id_restarts(cl
         ).fetchone()
     assert old_run["status"] == "superseded"
     assert current_run["current_run_id"] == refreshed.json()["run_id"]
+
+
+def test_concurrent_stage_starts_replay_and_serialize_new_attempts(client):
+    check_concurrent_starts(main, client, "test-admin-token")
+

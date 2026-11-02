@@ -21,6 +21,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from request_metrics import RequestMetricsMiddleware, observed_connection
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
@@ -98,6 +99,8 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
+if os.getenv("BARSAN_REQUEST_METRICS", "0") == "1":
+    app.add_middleware(RequestMetricsMiddleware)
 
 
 def _invitation_fernet() -> Fernet:
@@ -238,7 +241,7 @@ if DATABASE_URL:
     def conn() -> Iterator[Any]:
         _ensure_db_pool_for_process()
         try:
-            with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
+            with observed_connection(DB_POOL.connection(timeout=DB_POOL_TIMEOUT)) as connection:
                 yield connection
         except (PoolTimeout, TooManyRequests) as exc:
             raise HTTPException(
@@ -453,7 +456,7 @@ else:
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 
     @contextmanager
-    def conn() -> Iterator[sqlite3.Connection]:
+    def _sqlite_conn() -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(
             DB_PATH,
             timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
@@ -471,6 +474,9 @@ else:
             raise
         finally:
             connection.close()
+
+    def conn():
+        return observed_connection(_sqlite_conn())
 
     def init_db() -> None:
         with conn() as connection:
@@ -1366,6 +1372,7 @@ def _lookup_assignment(
     participant_code: str,
     *,
     require_consent: bool = False,
+    lock_for_start: bool = False,
 ) -> dict[str, Any]:
     """Resolve one active invitation; optionally validate consent in the same DB round-trip."""
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
@@ -1392,6 +1399,8 @@ def _lookup_assignment(
         (CONSENT_VERSION, normalized_code, token_hash)
         if require_consent else (normalized_code, token_hash)
     )
+    if lock_for_start and DATABASE_URL:
+        query += " FOR UPDATE OF a"
     row = connection.execute(query, params).fetchone()
     if not row:
         # A generic error avoids distinguishing a bad code from a bad invitation link.
@@ -2615,8 +2624,20 @@ def track_experiment_time(data: ExperimentTimeIn):
 def start_experiment_stage(data: StageStartIn):
     """Start a fresh attempt unless an ambiguous transport retry explicitly requests recovery."""
     with conn() as connection:
+        # Take the write lock before any SQLite read: a deferred read-to-write
+        # upgrade can otherwise fail or let two starts observe missing progress.
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        elif data.start_request_id:
+            # Serialize even conflicting use of the same globally unique ID by
+            # different assignments. The lock is released by commit/rollback.
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("barsan-stage-start:" + data.start_request_id,),
+            )
         assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+            connection, data.invitation_token, data.participant_code,
+            require_consent=True, lock_for_start=True,
         )
         marker = "%s" if DATABASE_URL else "?"
         if data.start_request_id:

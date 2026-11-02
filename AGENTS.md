@@ -1,5 +1,14 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current staging runtime exception — verified 2026-11-03
+
+Staging is now a native ASGI trial: LiteSpeed loopback reverse proxy to Uvicorn, two workers, port 8766, source `/home/myexperi/lifetrade-staging/repo`, fixed PR #25 SHA `e2b725cd0e1924d2dfcbb16f3cbb19d59496bd64`. Production retains the Passenger paths below. Read `docs/NATIVE_ASGI_STAGING_2026-11-03_FA.md` before either environment is changed. Staging restart uses its private Supervisor configuration; touching Passenger restart.txt does not restart Uvicorn. The launcher pins the backend and request_metrics.py hashes: a later code release requires reviewing and updating that guard as well as verifying exact-SHA CI.
+
+The public 100-VU native test passed; 600 VUs did not. Production health was intermittent at the end of the trial, despite unchanged source/configuration. Do not claim production readiness or rerun a large test without fresh health checks.
+
+Remote Desktop Commander plus the user's authorized SSH identity was available during this session. The legacy statement below about unavailable SSH is a historical capability snapshot: re-check current tools and authorization; never request or expose credentials.
+
+
 This repository backs a live behavioral-research application. Participant records, PostgreSQL, invitation URLs, admin credentials, and the cPanel host are production-sensitive.
 
 ## Read first

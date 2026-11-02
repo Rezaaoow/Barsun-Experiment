@@ -1,0 +1,2 @@
+# Operational process manager; application requirements stay unchanged.
+supervisor==4.3.0

@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
 
 import barsan_experiment as main
+from stage_start_checks import check_concurrent_starts
 
 
 def main_test():
@@ -332,8 +333,11 @@ def main_test():
         ).fetchone()["total"]
     assert total == 120, total
 
-    print("PostgreSQL smoke and 24-participant concurrency tests passed")
+    with TestClient(main.app) as client:
+        check_concurrent_starts(main, client, "ci-admin-token")
+    print("PostgreSQL smoke, 24-participant and concurrent stage-start tests passed")
 
 
 if __name__ == "__main__":
     main_test()
+
