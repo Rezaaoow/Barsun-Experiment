@@ -3019,11 +3019,121 @@ function utShowError(message,retry) {
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"تلاش دوباره",retry,"");
 }
+function utOutboxPrefix(){
+ return 'barsan_ultimatum_pending_'+encodeURIComponent(workflow.participantCode||'')+'_';
+}
+function utOutboxKey(runId){
+ return utOutboxPrefix()+encodeURIComponent(runId||'');
+}
+function utReadOutboxKey(key){
+ try{
+  const parsed=JSON.parse(localStorage.getItem(key)||'[]');
+  if(!Array.isArray(parsed))return null;
+  return parsed.filter(row=>row&&['resolve','events'].includes(row.kind)
+   &&typeof row.item_id==='string'&&row.payload&&typeof row.payload==='object');
+ }catch(error){return null;}
+}
+function utWriteOutboxKey(key,rows){
+ try{
+  if(rows.length)localStorage.setItem(key,JSON.stringify(rows));
+  else localStorage.removeItem(key);
+  return true;
+ }catch(error){return false;}
+}
+function utQueueOutboxItem(runId,item){
+ if(!workflow.participantCode||!runId)throw new Error('شناسهٔ اجرای اولتیماتوم برای ذخیرهٔ محلی موجود نیست.');
+ const key=utOutboxKey(runId);
+ const current=utReadOutboxKey(key);
+ if(current===null)throw new Error('خواندن صف محلی اولتیماتوم ممکن نشد.');
+ const payload={...item.payload};
+ delete payload.invitation_token;
+ delete payload.participant_code;
+ const queued={
+  kind:item.kind,
+  item_id:item.item_id,
+  payload:payload,
+  meta:item.meta||{},
+  queued_at:nowISO()
+ };
+ const index=current.findIndex(row=>row.kind===queued.kind&&row.item_id===queued.item_id);
+ if(index>=0){
+  if(queued.kind==='events'){
+   const previous=current[index].payload.event_timestamps||{};
+   queued.payload.event_timestamps={...queued.payload.event_timestamps,...previous};
+  }
+  current[index]=queued;
+ }else current.push(queued);
+ if(!utWriteOutboxKey(key,current))throw new Error('ذخیرهٔ تصمیم روی این دستگاه ممکن نشد.');
+ return queued;
+}
+function utRemoveOutboxItem(runId,item){
+ const key=utOutboxKey(runId);
+ const current=utReadOutboxKey(key);
+ if(current===null)return false;
+ return utWriteOutboxKey(key,current.filter(row=>!(row.kind===item.kind&&row.item_id===item.item_id)));
+}
+async function utSendOutboxItem(runId,item){
+ if(!workflow.invitationToken||!workflow.participantCode)throw new Error('اطلاعات دسترسی برای بازیابی تصمیم موجود نیست.');
+ let result=null;
+ if(item.kind==='resolve'){
+  const payload={...item.payload,invitation_token:workflow.invitationToken,participant_code:workflow.participantCode};
+  result=await utApiWithRetry('/api/experiment/ultimatum/resolve',payload,4);
+ }else{
+  const payload={...item.payload,invitation_token:workflow.invitationToken,participant_code:workflow.participantCode};
+  result=await utApiWithRetry('/api/experiment/ultimatum/events',payload,4);
+ }
+ if(!utRemoveOutboxItem(runId,item)){
+  // Server acknowledgement already exists; leaving the local row is safe because both endpoints are idempotent.
+  console.warn('Ultimatum acknowledgement could not be cleared from local storage');
+ }
+ return result;
+}
+let utOutboxRecoveryPromise=null;
+async function recoverOrphanedUltimatumOutbox(){
+ if(!workflow.invitationToken||!workflow.participantCode)return 0;
+ if(utOutboxRecoveryPromise)return utOutboxRecoveryPromise;
+ utOutboxRecoveryPromise=(async()=>{
+  let recovered=0;
+  const prefix=utOutboxPrefix();
+  const keys=Object.keys(localStorage).filter(key=>key.startsWith(prefix));
+  for(const key of keys){
+   const runId=decodeURIComponent(key.slice(prefix.length));
+   const rows=utReadOutboxKey(key);
+   if(rows===null)throw new Error('بازیابی صف اولتیماتوم از اجرای قبلی ممکن نشد.');
+   for(let item of rows){
+    if(ultimatumState&&ultimatumState.runId===runId&&item.kind==='resolve')continue;
+    if(item.kind==='resolve'){
+     const eventTimes=item.payload.client_event_timestamps||{};
+     const waitingStarted=Date.parse(eventTimes.waiting_started_at||'');
+     if(Number.isFinite(waitingStarted)&&!eventTimes.waiting_ended_at){
+      const planned=Math.max(0,Number(item.payload.wait_duration_ms)||0);
+      item=utQueueOutboxItem(runId,{
+       kind:'resolve',item_id:item.item_id,
+       payload:{
+        ...item.payload,
+        wait_duration_ms:Math.min(planned,Math.max(0,Date.now()-waitingStarted)),
+        client_event_timestamps:{...eventTimes,waiting_ended_at:nowISO()}
+       },
+       meta:item.meta
+      });
+     }
+    }
+    await utSendOutboxItem(runId,item);
+    recovered+=1;
+   }
+  }
+  return recovered;
+ })();
+ try{return await utOutboxRecoveryPromise;}
+ finally{utOutboxRecoveryPromise=null;}
+}
 async function startUltimatumInstructions() {
  try {
   if(!workflow.workflowMode){workflow.currentStage="ultimatum";workflow.currentStepId=legacyStepId("ultimatum");}
   show();
   setStatus("در حال آماده‌سازی بازی…");
+  // Recover any unacknowledged decision from the previous attempt before creating a fresh one.
+  await recoverOrphanedUltimatumOutbox();
   const started=await startStageWithRecovery({
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
@@ -3157,11 +3267,8 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
   const condition=utCondition(blockCode);
   const delay=utWaitMs(condition);
   utRenderWaiting(condition,"لطفاً منتظر پاسخ بازیکن مقابل باشید…");
-  ultimatumState.currentEventTimestamps.waiting_started_at=nowISO();
-  const waitStart=performance.now();
-  await new Promise(function(resolve){setTimeout(resolve,delay);});
-  const waited=Math.max(0,Math.round(performance.now()-waitStart));
-  ultimatumState.currentEventTimestamps.waiting_ended_at=nowISO();
+  const waitingStartedAt=nowISO();
+  ultimatumState.currentEventTimestamps.waiting_started_at=waitingStartedAt;
   const payload={
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
@@ -3171,10 +3278,25 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
    decision_screen_shown_at:ultimatumState.decisionScreenShownAt,
    responded_at:respondedAt,
    reaction_time_ms:Number(responseTime.toFixed(2)),
-   wait_duration_ms:waited,
+   wait_duration_ms:delay,
    client_metadata:utMetadata(),
    client_event_timestamps:Object.assign({},ultimatumState.currentEventTimestamps||{})
   };
+  // Persist the participant's choice before the artificial opponent wait or any network call.
+  utQueueOutboxItem(payload.run_id,{
+   kind:'resolve',item_id:payload.round_id,payload:payload,
+   meta:{isPractice:isPractice,blockCode:blockCode,blockOrder:blockOrder,trial:trial}
+  });
+  const waitStart=performance.now();
+  await new Promise(function(resolve){setTimeout(resolve,delay);});
+  const waited=Math.max(0,Math.round(performance.now()-waitStart));
+  ultimatumState.currentEventTimestamps.waiting_ended_at=nowISO();
+  payload.wait_duration_ms=waited;
+  payload.client_event_timestamps=Object.assign({},ultimatumState.currentEventTimestamps||{});
+  utQueueOutboxItem(payload.run_id,{
+   kind:'resolve',item_id:payload.round_id,payload:payload,
+   meta:{isPractice:isPractice,blockCode:blockCode,blockOrder:blockOrder,trial:trial}
+  });
   await utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
  } finally {
   ultimatumState.proposalSubmitting=false;
@@ -3185,8 +3307,22 @@ async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial) {
  if(ultimatumState.resolveInFlight)return;
  ultimatumState.resolveInFlight=true;
  try {
-  const result=await utApiWithRetry("/api/experiment/ultimatum/resolve",payload,4);
-  const alreadyRecorded=ultimatumState.results.some(function(item){return item.round_id===result.round_id;});
+  utQueueOutboxItem(payload.run_id,{
+   kind:'resolve',item_id:payload.round_id,payload:payload,
+   meta:{isPractice:isPractice,blockCode:blockCode,blockOrder:blockOrder,trial:trial}
+  });
+  const item={
+   kind:'resolve',item_id:payload.round_id,
+   payload:(()=>{
+    const copy={...payload};
+    delete copy.invitation_token;
+    delete copy.participant_code;
+    return copy;
+   })(),
+   meta:{isPractice:isPractice,blockCode:blockCode,blockOrder:blockOrder,trial:trial}
+  };
+  const result=await utSendOutboxItem(payload.run_id,item);
+  const alreadyRecorded=ultimatumState.results.some(function(existing){return existing.round_id===result.round_id;});
   ultimatumState.lastResult=result;
   if(!alreadyRecorded){
    ultimatumState.results.push(result);
@@ -3284,14 +3420,20 @@ function utSubmitResponderDecision(decision,isPractice,blockCode,blockOrder,tria
  utPostResolve(payload,isPractice,blockCode,blockOrder,trial);
 }
 
-function utRecordRoundEvents(roundId,eventTimestamps) {
- return utApiWithRetry("/api/experiment/ultimatum/events",{
+async function utRecordRoundEvents(roundId,eventTimestamps) {
+ const payload={
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   run_id:ultimatumState.runId,
   round_id:roundId,
   event_timestamps:eventTimestamps
+ };
+ const item=utQueueOutboxItem(payload.run_id,{
+  kind:'events',
+  item_id:'events:'+roundId,
+  payload:payload
  });
+ return utSendOutboxItem(payload.run_id,item);
 }
 function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  const resultScreenShownAt=nowISO();
