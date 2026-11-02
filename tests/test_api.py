@@ -321,18 +321,12 @@ def test_stage_order_questionnaire_restart_and_task_restart(client, monkeypatch)
     assert refreshed_again.status_code == 200
     assert refreshed_again.json()["stages"][0]["current_run_id"] == fresh_qrun
     with main.conn() as connection:
-        old_questionnaire_status = connection.execute(
-            "SELECT status FROM instrument_runs WHERE run_id=?", (qrun,)
-        ).fetchone()["status"]
-        old_questionnaire_draft = connection.execute(
-            "SELECT draft_payload FROM experiment_stage_progress WHERE current_run_id=?",
-            (qrun,),
+        old_questionnaire_run = connection.execute(
+            "SELECT status,metadata FROM instrument_runs WHERE run_id=?", (qrun,)
         ).fetchone()
-    assert old_questionnaire_status == "superseded"
-    saved_old_draft = old_questionnaire_draft["draft_payload"]
-    if isinstance(saved_old_draft, str):
-        saved_old_draft = main.json.loads(saved_old_draft)
-    assert saved_old_draft == draft
+    assert old_questionnaire_run["status"] == "superseded"
+    old_metadata = main._json_value(old_questionnaire_run["metadata"])
+    assert old_metadata["abandoned_draft_payload"] == draft
 
     # Save each of the configured 25 questions through the per-code endpoint
     # in the fresh attempt; the abandoned run remains separate and auditable.
