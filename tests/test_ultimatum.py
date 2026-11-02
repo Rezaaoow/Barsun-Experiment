@@ -549,3 +549,34 @@ def test_combined_ultimatum_round_lookup_preserves_consent_and_not_found_errors(
     )
     assert missing_events.status_code == 404
 
+
+
+def test_post_decision_timing_events_can_arrive_after_stage_completion(client, monkeypatch):
+    identity, run_id = create_active_ultimatum(
+        client, monkeypatch, participant_code="UT-LATE-EVENT-ACK"
+    )
+    round_data = prepare_round(
+        client, identity, run_id, phase="practice",
+        block_code="practice_proposer_agent", block_order=0, trial=1, sequence=0,
+    )
+    result = resolve_proposer(client, identity, run_id, round_data["round_id"], 4)
+    assert result["round_id"] == round_data["round_id"]
+
+    # Simulate the participant completing this stage before a delayed auxiliary
+    # timing-event acknowledgement can be delivered.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_stage_progress SET status='completed' WHERE current_run_id=?",
+            (run_id,),
+        )
+        connection.execute(
+            "UPDATE instrument_runs SET status='completed' WHERE run_id=?",
+            (run_id,),
+        )
+
+    saved = record_round_events(
+        client, identity, run_id, round_data["round_id"],
+        {"result_screen_shown_at": main.now(), "advance_clicked_at": main.now()},
+    )
+    assert saved["saved"] is True
+    assert "result_screen_shown_at" in saved["event_timestamps"]
