@@ -1941,7 +1941,7 @@ function writeQuestionnairePending(rows){
   return true;
  }catch(error){return false;}
 }
-function queueQuestionnaireAnswer(item,index,value){
+function queueQuestionnaireAnswer(item,index,value,stepId){
  const current=readQuestionnairePending();
  if(current===null)throw new Error('ذخیرهٔ پایدار پاسخ روی این دستگاه ممکن نشد.');
  const next=current.filter(row=>row.question_code!==item.code);
@@ -1950,7 +1950,7 @@ function queueQuestionnaireAnswer(item,index,value){
   question_code:item.code,
   response_value:String(value),
   current_question_index:index,
-  step_id:workflow.workflowMode?workflow.currentStepId:null
+  step_id:stepId
  });
  if(!writeQuestionnairePending(next))throw new Error('ذخیرهٔ پایدار پاسخ روی این دستگاه ممکن نشد.');
  return next[next.length-1];
@@ -2082,7 +2082,8 @@ async function chooseQuestionnaireAnswer(item,index,value){
  if(status){status.classList.remove('error');status.textContent='در حال ذخیرهٔ امن پاسخ روی این دستگاه…';}
  updateQuestionnaireSelection();
  try{
-  queueQuestionnaireAnswer(item,index,value);
+  const requestMeta={step_id:workflow.workflowMode?workflow.currentStepId:null};
+  queueQuestionnaireAnswer(item,index,value,requestMeta.step_id);
   workflow.questionnaireSavedAnswers[item.code]=value;
   workflow.questionIndex=index;
   if(status){status.classList.remove('error');status.textContent='پاسخ روی دستگاه محفوظ شد؛ همگام‌سازی با سرور در حال انجام است…';}
