@@ -1,0 +1,32 @@
+{
+  "100-fix": {
+    "samples": 81,
+    "max_app_rss_mb": 183.543,
+    "max_app_cpu_cores": 0.2571875149922749,
+    "max_app_threads": 15,
+    "max_visible_account_threads": 60,
+    "max_pg_connections": 12,
+    "max_pg_lock_waiters": 0,
+    "last_new_errors": {}
+  },
+  "600-fix": {
+    "samples": 58,
+    "max_app_rss_mb": 184.328,
+    "max_app_cpu_cores": 0.4165816397340027,
+    "max_app_threads": 16,
+    "max_visible_account_threads": 61,
+    "max_pg_connections": 12,
+    "max_pg_lock_waiters": 0,
+    "last_new_errors": {}
+  },
+  "600-selfhttps": {
+    "samples": 80,
+    "max_app_rss_mb": 191.918,
+    "max_app_cpu_cores": 1.5047375988861662,
+    "max_app_threads": 26,
+    "max_visible_account_threads": 55,
+    "max_pg_connections": 9,
+    "max_pg_lock_waiters": 0,
+    "last_new_errors": {}
+  }
+}

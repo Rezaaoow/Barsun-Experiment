@@ -60,6 +60,8 @@ jobs:
           ast.parse(Path("tests/load/host_diagnostics.py").read_text(encoding="utf-8"))
           PY
           node --input-type=module --check < tests/load/k6_experiment.js
+      - name: Check client outbox failure recovery
+        run: node ops/check_client_recovery.mjs
       - name: Run SQLite API regression tests
         run: pytest -q
       - name: Run PostgreSQL integration smoke test

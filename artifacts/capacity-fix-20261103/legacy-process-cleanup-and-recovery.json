@@ -1,0 +1,67 @@
+{
+  "legacy_staging_passenger_sigterm_pids": [
+    1018176,
+    1018297,
+    1018364,
+    2621191,
+    2621273,
+    2621290,
+    2621497,
+    2621644,
+    2621686,
+    2621832,
+    2622454,
+    2622455,
+    2622713,
+    2622789,
+    3335491,
+    3335624,
+    3335994,
+    3336169,
+    3336229,
+    3336247,
+    3336312
+  ],
+  "still_present": [],
+  "native_health_after": {
+    "ok": true,
+    "seconds": 0.003
+  },
+  "stage_health_after": {
+    "ok": true,
+    "seconds": 0.006
+  },
+  "production_before": {
+    "ok": false,
+    "error": "TimeoutError",
+    "seconds": 8.011
+  },
+  "production_recovery_restart": true,
+  "production_probes": [
+    {
+      "ok": true,
+      "seconds": 1.856
+    },
+    {
+      "ok": true,
+      "seconds": 1.847
+    },
+    {
+      "ok": true,
+      "seconds": 0.062
+    },
+    {
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "ok": true,
+      "seconds": 1.844
+    },
+    {
+      "ok": true,
+      "seconds": 0.008
+    }
+  ],
+  "production_source_and_route_unchanged": true
+}

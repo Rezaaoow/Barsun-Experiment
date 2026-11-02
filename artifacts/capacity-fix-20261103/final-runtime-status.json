@@ -1,0 +1,6 @@
+{
+  "supervisor": "barsan-native                    RUNNING   pid 3725016, uptime 0:52:03",
+  "source_commit": "7af183881410faf5d089efefe44d71d43781d8ce",
+  "all_loads_finished": true,
+  "monitor_stop_set": true
+}
