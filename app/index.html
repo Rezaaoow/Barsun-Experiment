@@ -1583,19 +1583,20 @@ async function saveTrial(row){
  }
  return {saved_locally:readPending().some(item=>item.client_event_id===row.client_event_id)};
 }
-window.addEventListener('online',()=>{
- flushPending().catch(()=>{});
- flushQuestionnairePending().catch(()=>{});
-});
-window.addEventListener('focus',()=>{
- flushPending().catch(()=>{});
- flushQuestionnairePending().catch(()=>{});
-});
+let recoveryFlushTimer=null;
+function scheduleRecoveryFlush(){
+ if(recoveryFlushTimer!==null)return;
+ // Spread reconnecting participants over a randomized window to avoid a thundering herd.
+ recoveryFlushTimer=window.setTimeout(async()=>{
+  recoveryFlushTimer=null;
+  await flushPending().catch(error=>console.warn('Life-Trade recovery sync deferred',error));
+  await flushQuestionnairePending().catch(error=>console.warn('Questionnaire recovery sync deferred',error));
+ },1500+Math.floor(Math.random()*18000));
+}
+window.addEventListener('online',scheduleRecoveryFlush);
+window.addEventListener('focus',scheduleRecoveryFlush);
 document.addEventListener('visibilitychange',()=>{
- if(!document.hidden){
-  flushPending().catch(()=>{});
-  flushQuestionnairePending().catch(()=>{});
- }
+ if(!document.hidden)scheduleRecoveryFlush();
 });
 async function recoverOrphanedPendingQueues(){
  const prefix='lifetrade_pending_';
