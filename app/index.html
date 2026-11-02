@@ -1544,7 +1544,7 @@ async function flushPending(){
     },{attempts:4,baseDelayMs:600,maxDelayMs:7000,timeoutMs:12000});
    }catch(e){
     setStatus('اختلال موقت اتصال: پاسخ‌ها روی این دستگاه محفوظ‌اند و ارسال خودکار ادامه دارد…');
-    schedulePendingRetry();
+    if(isRetryableApiError(e))schedulePendingRetry();
     return readPending().length;
    }
    const sentIds=new Set(batch.map(row=>row.client_event_id));
@@ -1963,7 +1963,7 @@ function restoreQuestionnairePending(){
  const pending=readQuestionnairePending();
  if(pending===null)throw new Error('بازیابی پاسخ‌های ذخیره‌شده روی این دستگاه ممکن نشد.');
  for(const row of pending){
-  if(!QUESTIONNAIRE_QUESTION_CODES.includes(row.question_code))continue;
+  if(!QUESTIONNAIRE_ITEMS.some(item=>item.code===row.question_code))continue;
   workflow.questionnaireAnswers[row.question_code]=row.response_value;
   workflow.questionnaireSavedAnswers[row.question_code]=row.response_value;
   if(Number.isInteger(row.current_question_index)){
@@ -2014,7 +2014,14 @@ async function flushQuestionnairePending(){
      current_question_index:entry.current_question_index
     },{attempts:4,baseDelayMs:600,maxDelayMs:7000,timeoutMs:12000});
    }catch(error){
-    scheduleQuestionnaireRetry();
+    if(isRetryableApiError(error))scheduleQuestionnaireRetry();
+    const status=stimulus.querySelector('.questionnaire-save-status');
+    if(status&&workflow.questionIndex===entry.current_question_index){
+     status.classList.add('error');
+     status.textContent=isRetryableApiError(error)
+      ?'پاسخ روی این دستگاه محفوظ است؛ همگام‌سازی خودکار ادامه دارد.'
+      :'پاسخ روی دستگاه محفوظ است، اما سرور این درخواست را نپذیرفت؛ برای بررسی با مسئول پژوهش تماس بگیرید.';
+    }
     return pending.length;
    }
    const latest=readQuestionnairePending();
@@ -2206,7 +2213,12 @@ function showQuestionnaireQuestion(index){
  const naButton=document.createElement('button');naButton.type='button';naButton.className='scale-na';
  naButton.dataset.scaleValue=na.value;naButton.setAttribute('aria-pressed',workflow.questionnaireAnswers[item.code]===na.value?'true':'false');
  naButton.textContent=na.label;naButton.addEventListener('click',()=>chooseQuestionnaireAnswer(item,workflow.questionIndex,na.value));
- const status=document.createElement('div');status.className='questionnaire-save-status';status.setAttribute('aria-live','polite');status.textContent=workflow.questionnaireSavedAnswers[item.code]===workflow.questionnaireAnswers[item.code]&&workflow.questionnaireAnswers[item.code]?'پاسخ ذخیره شده است':'برای ادامه، یک گزینه را انتخاب کنید.';
+ const status=document.createElement('div');status.className='questionnaire-save-status';status.setAttribute('aria-live','polite');
+ const answerIsSaved=workflow.questionnaireSavedAnswers[item.code]===workflow.questionnaireAnswers[item.code]&&!!workflow.questionnaireAnswers[item.code];
+ status.textContent=!answerIsSaved?'برای ادامه، یک گزینه را انتخاب کنید.':
+  questionnaireAnswerIsPending(item.code,workflow.questionnaireAnswers[item.code])
+   ?'پاسخ روی این دستگاه محفوظ است؛ همگام‌سازی با سرور ادامه دارد.'
+   :'پاسخ در سرور ثبت شده است';
  question.append(statement,scale,naButton,status);main.appendChild(question);box.appendChild(main);
 
  const actions=document.createElement('div');actions.className='questionnaire-actions';
