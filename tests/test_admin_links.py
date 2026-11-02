@@ -654,3 +654,64 @@ def test_group_workflow_preview_rejects_inactive_or_unknown_group_token(client):
         "/api/experiment/workflow?group=" + "x" * 48,
     )
     assert response.status_code == 404
+
+def test_random_group_claim_request_replay_returns_the_same_identity(client):
+    group = create_group_link(client, label="Random claim replay group")
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+    request_id = "b95f35ec-9d70-4f15-866d-3f0efbb48ea1"
+    request_body = {
+        "group_token": group_token,
+        "assign_random": True,
+        "claim_request_id": request_id,
+    }
+
+    first = client.post("/api/experiment/group/claim", json=request_body)
+    replay = client.post("/api/experiment/group/claim", json=request_body)
+    assert first.status_code == 200, first.text
+    assert replay.status_code == 200, replay.text
+    first_payload, replay_payload = first.json(), replay.json()
+    assert first_payload["participant_code"].startswith("RND-")
+    assert replay_payload["participant_code"] == first_payload["participant_code"]
+    assert replay_payload["invitation_token"] == first_payload["invitation_token"]
+    assert replay_payload["reused"] is True
+
+    with main.conn() as connection:
+        assignments = connection.execute(
+            "SELECT COUNT(*) AS total FROM experiment_assignments WHERE group_link_id=?",
+            (group["group_link_id"],),
+        ).fetchone()
+        claim_requests = connection.execute(
+            "SELECT COUNT(*) AS total FROM experiment_group_claim_requests WHERE request_id=?",
+            (request_id,),
+        ).fetchone()
+    assert int(assignments["total"]) == 1
+    assert int(claim_requests["total"]) == 1
+
+    # A request ID is bound to its original group and allocation mode.
+    mismatched = client.post(
+        "/api/experiment/group/claim",
+        json={
+            "group_token": group_token,
+            "assign_random": False,
+            "participant_code": "SOME-OTHER-CODE",
+            "claim_request_id": request_id,
+        },
+    )
+    assert mismatched.status_code == 409, mismatched.text
+
+
+def test_group_claim_without_request_id_keeps_legacy_distinct_random_allocations(client):
+    group = create_group_link(client, label="Legacy random group")
+    group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
+    first = client.post(
+        "/api/experiment/group/claim",
+        json={"group_token": group_token, "assign_random": True},
+    )
+    second = client.post(
+        "/api/experiment/group/claim",
+        json={"group_token": group_token, "assign_random": True},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["participant_code"] != second.json()["participant_code"]
+
