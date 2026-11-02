@@ -3077,18 +3077,46 @@ function utRemoveOutboxItem(runId,item){
 async function utSendOutboxItem(runId,item){
  if(!workflow.invitationToken||!workflow.participantCode)throw new Error('اطلاعات دسترسی برای بازیابی تصمیم موجود نیست.');
  let result=null;
- if(item.kind==='resolve'){
+ try{
   const payload={...item.payload,invitation_token:workflow.invitationToken,participant_code:workflow.participantCode};
-  result=await utApiWithRetry('/api/experiment/ultimatum/resolve',payload,4);
- }else{
-  const payload={...item.payload,invitation_token:workflow.invitationToken,participant_code:workflow.participantCode};
-  result=await utApiWithRetry('/api/experiment/ultimatum/events',payload,4);
+  if(item.kind==='resolve')result=await utApiWithRetry('/api/experiment/ultimatum/resolve',payload,3);
+  else result=await utApiWithRetry('/api/experiment/ultimatum/events',payload,3);
+ }catch(error){
+  if(isRetryableApiError(error))scheduleUtOutboxRetry();
+  throw error;
  }
  if(!utRemoveOutboxItem(runId,item)){
   // Server acknowledgement already exists; leaving the local row is safe because both endpoints are idempotent.
   console.warn('Ultimatum acknowledgement could not be cleared from local storage');
  }
  return result;
+}
+let utOutboxRetryTimer=null;
+let utOutboxRetryAttempt=0;
+function resetUtOutboxRetry(){
+ utOutboxRetryAttempt=0;
+ if(utOutboxRetryTimer!==null)window.clearTimeout(utOutboxRetryTimer);
+ utOutboxRetryTimer=null;
+}
+function scheduleUtOutboxRetry(){
+ if(utOutboxRetryTimer!==null)return;
+ const prefix=utOutboxPrefix();
+ const hasPending=Object.keys(localStorage).some(key=>{
+  if(!key.startsWith(prefix))return false;
+  const rows=utReadOutboxKey(key);
+  return rows===null||rows.length>0;
+ });
+ if(!hasPending)return;
+ const ceiling=Math.min(60000,1000*Math.pow(2,utOutboxRetryAttempt));
+ const delay=500+Math.floor(Math.random()*Math.max(500,ceiling));
+ utOutboxRetryAttempt=Math.min(7,utOutboxRetryAttempt+1);
+ utOutboxRetryTimer=window.setTimeout(()=>{
+  utOutboxRetryTimer=null;
+  recoverOrphanedUltimatumOutbox().catch(error=>{
+   console.warn('Ultimatum outbox retry deferred',error);
+   if(isRetryableApiError(error))scheduleUtOutboxRetry();
+  });
+ },delay);
 }
 let utOutboxRecoveryPromise=null;
 async function recoverOrphanedUltimatumOutbox(){
@@ -3103,7 +3131,16 @@ async function recoverOrphanedUltimatumOutbox(){
    const rows=utReadOutboxKey(key);
    if(rows===null)throw new Error('بازیابی صف اولتیماتوم از اجرای قبلی ممکن نشد.');
    for(let item of rows){
-    if(ultimatumState&&ultimatumState.runId===runId&&item.kind==='resolve')continue;
+    if(ultimatumState&&ultimatumState.runId===runId&&item.kind==='resolve'){
+     // Do not bypass the prescribed opponent-wait interval while it is still running.
+     if(ultimatumState.proposalSubmitting)continue;
+     const meta=item.meta||{};
+     await utPostResolve(
+      item.payload,Boolean(meta.isPractice),meta.blockCode,meta.blockOrder,meta.trial
+     );
+     recovered+=1;
+     continue;
+    }
     if(item.kind==='resolve'){
      const eventTimes=item.payload.client_event_timestamps||{};
      const waitingStarted=Date.parse(eventTimes.waiting_started_at||'');
@@ -3124,6 +3161,12 @@ async function recoverOrphanedUltimatumOutbox(){
     recovered+=1;
    }
   }
+  const stillPending=Object.keys(localStorage).some(key=>{
+   if(!key.startsWith(prefix))return false;
+   const pending=utReadOutboxKey(key);
+   return pending===null||pending.length>0;
+  });
+  if(!stillPending)resetUtOutboxRetry();
   return recovered;
  })();
  try{return await utOutboxRecoveryPromise;}
