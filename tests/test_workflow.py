@@ -935,3 +935,52 @@ def test_time_event_idempotency_prevents_duplicate_active_time(client):
             (step_id,),
         ).fetchone()["n"]
     assert int(event_count) == 2
+
+
+def test_stage_start_request_id_replays_same_attempt_but_new_page_id_restarts(client):
+    step_id = "dd-start-request-idempotency"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "dd_lifetrade"}],
+        code="DD-START-REQUEST-ID",
+    )
+    first_request_id = str(uuid.uuid4())
+    first_payload = {
+        **identity,
+        "stage_code": "dd_lifetrade",
+        "step_id": step_id,
+        "start_request_id": first_request_id,
+    }
+    first = client.post("/api/experiment/stages/start", json=first_payload)
+    assert first.status_code == 200, first.text
+
+    # A retry of the exact same in-memory request must replay the same run.
+    replay = client.post("/api/experiment/stages/start", json=first_payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["run_id"] == first.json()["run_id"]
+    assert replay.json()["attempt_number"] == first.json()["attempt_number"]
+    assert replay.json()["resumed"] is True
+
+    # A page reload creates a new request ID and must start a new attempt from its beginning.
+    refreshed = client.post(
+        "/api/experiment/stages/start",
+        json={**first_payload, "start_request_id": str(uuid.uuid4())},
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["run_id"] != first.json()["run_id"]
+    assert refreshed.json()["attempt_number"] == first.json()["attempt_number"] + 1
+
+    # The old request cannot resurrect a run that has been superseded by the refresh.
+    stale_retry = client.post("/api/experiment/stages/start", json=first_payload)
+    assert stale_retry.status_code == 409
+
+    with main.conn() as connection:
+        old_run = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (first.json()["run_id"],),
+        ).fetchone()
+        current_run = connection.execute(
+            "SELECT current_run_id FROM experiment_workflow_progress WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+    assert old_run["status"] == "superseded"
+    assert current_run["current_run_id"] == refreshed.json()["run_id"]
