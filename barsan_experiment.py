@@ -824,6 +824,7 @@ class StageDraftIn(ExperimentIdentityIn):
 
 class QuestionnaireAnswerIn(ExperimentIdentityIn):
     run_id: str = Field(min_length=1, max_length=100)
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
     question_code: str = Field(min_length=1, max_length=16)
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
     current_question_index: int = Field(default=0, ge=0, le=100)
@@ -2658,9 +2659,11 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
         raise HTTPException(422, "Unknown questionnaire question code")
     with conn() as connection:
         assignment = _lookup_questionnaire_assignment_state(
-            connection, data.invitation_token, data.participant_code
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
         )
         marker = "%s" if DATABASE_URL else "?"
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
         if assignment["questionnaire_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
         if assignment["questionnaire_status"] != "in_progress":
@@ -2692,6 +2695,12 @@ def save_questionnaire_answer(data: QuestionnaireAnswerIn):
             + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
             (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
         )
+        if data.step_id:
+            connection.execute(
+                "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
+                + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
+                (_json_param(draft), timestamp, assignment["assignment_id"], data.step_id, data.run_id),
+            )
     return {
         "saved": True,
         "question_code": data.question_code,

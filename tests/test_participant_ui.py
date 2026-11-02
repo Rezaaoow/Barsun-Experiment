@@ -174,3 +174,27 @@ def test_titles_and_copy_use_centered_vertical_content_groups_in_all_modules():
 def test_participant_copy_and_score_layout_are_centered():
     assert "#screen .panel{text-align:center}" in HTML
     assert ".ut-card,.ut-card .ut-body,.ut-card .ut-header,.ut-card .ut-copy,.ut-card h1,.ut-card h2,.ut-card p" in HTML
+
+def test_questionnaire_answer_persists_custom_workflow_draft_without_forward_draft_request():
+    answer = function_body(
+        HTML,
+        "async function chooseQuestionnaireAnswer(",
+        "async function enterWorkflowStep(",
+    )
+    assert "step_id:workflow.workflowMode?workflow.currentStepId:null" in answer
+
+    navigation = function_body(
+        HTML,
+        "async function moveQuestionnaire(",
+        "function showQuestionnaireQuestion(",
+    )
+    assert "if(direction<0)await saveQuestionnairePosition(target);" in navigation
+    assert "await saveQuestionnairePosition(target);\n  showQuestionnaireQuestion(target);" not in navigation
+
+    completion = function_body(
+        HTML,
+        "async function completeQuestionnaire(){",
+        "async function beginParticipantFlow(){",
+    )
+    assert "saveQuestionnairePosition(" not in completion
+
