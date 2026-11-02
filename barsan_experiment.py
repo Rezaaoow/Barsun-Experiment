@@ -3594,17 +3594,28 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
 
 @app.post("/api/experiment/ultimatum/events")
 def record_ultimatum_events(data: UltimatumEventsIn):
-    """Append post-decision client event times to a completed, active-attempt trial."""
+    """Append idempotent post-decision timestamps even after a task attempt has ended."""
     _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        _assignment, row = _lookup_active_ultimatum_round(
-            connection,
-            data.invitation_token,
-            data.participant_code,
-            data.run_id,
-            data.round_id,
+        assignment = _lookup_assignment(
+            connection, data.invitation_token, data.participant_code, require_consent=True
         )
+        # Auxiliary timestamps may arrive after the participant has moved on or
+        # restarted the task. Validate ownership of the run and round without
+        # requiring that run to remain the current active attempt.
+        row = connection.execute(
+            "SELECT trial.status,trial.payload FROM ultimatum_trials AS trial "
+            "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+            "JOIN instrument_versions AS instrument "
+            "ON instrument.instrument_version_id=run.instrument_version_id "
+            "WHERE trial.round_id=" + marker + " AND trial.run_id=" + marker
+            + " AND run.participation_id=" + marker
+            + " AND instrument.instrument_code='ultimatum'",
+            (data.round_id, data.run_id, assignment["participation_id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "دور اولتیماتوم برای این شرکت‌کننده پیدا نشد.")
         if row["status"] != "completed":
             raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
         payload = _json_value(row["payload"])
