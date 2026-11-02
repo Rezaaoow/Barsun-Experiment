@@ -609,3 +609,50 @@ def test_identify_checks_consent_as_part_of_invitation_lookup(client):
     assert identified.status_code == 403
     assert identified.json()["detail"] == "رضایت برای مشارکت ثبت نشده است."
 
+def test_questionnaire_answer_updates_custom_workflow_draft_without_separate_draft_request(client):
+    step_id = "questionnaire-autosave"
+    steps = [{"step_id": step_id, "module_code": "questionnaire"}]
+    _, identity = create_workflow_assignment(
+        client, steps, code="QUESTIONNAIRE-WORKFLOW-AUTOSAVE"
+    )
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["run_id"]
+
+    saved = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={
+            **identity,
+            "run_id": run_id,
+            "step_id": step_id,
+            "question_code": "B1",
+            "response_value": "4",
+            "current_question_index": 0,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    identified = client.post("/api/experiment/identify", json=identity)
+    assert identified.status_code == 200, identified.text
+    step = identified.json()["workflow_steps"][0]
+    assert step["step_id"] == step_id
+    assert step["current_run_id"] == run_id
+    assert step["draft_payload"]["answers"]["B1"] == "4"
+    assert step["draft_payload"]["current_question_index"] == 0
+
+    wrong_step = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={
+            **identity,
+            "run_id": run_id,
+            "step_id": "not-the-active-questionnaire-step",
+            "question_code": "B2",
+            "response_value": "3",
+            "current_question_index": 1,
+        },
+    )
+    assert wrong_step.status_code == 409
+

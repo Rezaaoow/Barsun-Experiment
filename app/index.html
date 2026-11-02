@@ -1826,6 +1826,7 @@ async function chooseQuestionnaireAnswer(item,index,value){
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    run_id:workflow.stageRunId,
+   step_id:workflow.workflowMode?workflow.currentStepId:null,
    question_code:item.code,
    response_value:value,
    current_question_index:index
@@ -1913,7 +1914,7 @@ async function moveQuestionnaire(direction){
  const status=stimulus.querySelector('.questionnaire-save-status');
  if(status){status.classList.remove('error');status.textContent='در حال ذخیرهٔ پیشرفت…';}
  try{
-  await saveQuestionnairePosition(target);
+  if(direction<0)await saveQuestionnairePosition(target);
   showQuestionnaireQuestion(target);
  }catch(error){
   if(status){status.classList.add('error');status.textContent='ذخیرهٔ پیشرفت موفق نبود. اتصال را بررسی کنید و دوباره تلاش کنید.';}
@@ -1977,7 +1978,6 @@ async function completeQuestionnaire(){
  if(next){next.disabled=true;next.textContent='در حال ثبت…';}
  if(prev)prev.disabled=true;
  try{
-  await saveQuestionnairePosition(QUESTIONNAIRE_ITEMS.length-1);
   await api('/api/experiment/stages/complete',{
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,

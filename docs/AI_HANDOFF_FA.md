@@ -193,11 +193,22 @@ Python مجازی cPanel مسیر بالا و Python 3.12 است؛ CI نیز 3.1
 
 ## ممیزی ظرفیت و عملکرد رویداد ۶۰۰نفره
 
-سه پاس بهینه‌سازی Backend در PR #17 و شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation در مسیرهای پرتکرار، time tracking اتمیک، حذف readهای تکراری در start و questionnaire، و aggregate/projection محدود برای Ultimatum prepare. CI روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` با ۶۱ تست SQLite، PostgreSQL 16 smoke test، تست هم‌زمانی ۲۴ شرکت‌کننده و validation ابزارهای staging موفق شده است ([run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). ابزار read-only تشخیص cPanel/PostgreSQL در `tests/load/host_diagnostics.py` و ابزار staging-only بار با دو profile مستقل ramp و burst در `tests/load/` قرار دارند؛ قبل از استفاده، README همان پوشه را بخوانید. آزمون واقعی ۶۰۰ VU هنوز اجرا نشده و ظرفیت هاست تأیید نشده است.
+سه پاس بهینه‌سازی Backend در PR #17 و شاخهٔ `perf/600-user-event-readiness` انجام شده است: query consolidation در مسیرهای پرتکرار، time tracking اتمیک، حذف readهای تکراری در start و questionnaire، و aggregate/projection محدود برای Ultimatum prepare. CI روی commit `c94e6590e17f552983ecbe7feea2f4abdf30be6d` با ۶۱ تست SQLite، PostgreSQL 16 smoke test، تست هم‌زمانی ۲۴ شرکت‌کننده و validation ابزارهای staging موفق شده است ([run 41238007684](https://github.com/Rezaaoow/barsan-experiment/actions/runs/41238007684)). آزمون ramp-up staging با ۶۰۰ VU در ۲ نوامبر ۲۰۲۶ اجرا شد و با اشباع هشت پردازش LSAPI ناموفق بود؛ بنابراین ظرفیت هاست تأیید نشده است. ابزار read-only تشخیص منابع در `tests/load/host_diagnostics.py` باقی است؛ پیش از تغییر تنظیمات میزبان یا pool، سقف‌های CloudLinux/Passenger و PostgreSQL باید دریافت شوند.
 
 قبل از اعلام آمادگی production، گزارش کارایی و آزمون بار را بخوانید: docs/PERFORMANCE_AND_LOAD_TESTING_FA.md. یافته‌های قطعی کد را با محدودیت‌های ناشناختهٔ هاست قاطی نکنید: تعداد processهای Passenger، memory/CPU limit، سقف connection دیتابیس و reverse-proxy concurrency باید از cPanel/provider گرفته و با آزمایش staging سنجیده شوند. تعداد ۶۰۰ کاربر مرورگر با ۶۰۰ request هم‌زمان در هر لحظه یکسان نیست، اما burst اولیه و مرحله‌های ذخیرهٔ پرسشنامه باید عمداً در سناریوی load test پوشش داده شوند.
 
 تغییرات performance نباید protocol، تعداد trialها، ترتیب ماژول‌ها، randomization، scoring، RT semantics یا ظاهر participant UI را تغییر دهند. خروجی موفق CI نیز به‌تنهایی اثبات ظرفیت واقعی ۶۰۰ شرکت‌کننده نیست.
+
+
+## نتیجهٔ آزمون واقعی ۶۰۰ شرکت‌کننده — ۲ نوامبر ۲۰۲۶
+
+آزمون staging با ۶۰۰ دعوت‌نامه و ramp-up سه‌مرحله‌ای در ۹۰ ثانیه ناموفق بود. لاگ Passenger عبارت `Reached max children process limit: 6, extra: 2, current: 8, busy: 8` را ۱۹۸ بار ثبت کرد؛ در اوج اجرا هر ۸ پردازش LSAPI مشغول بود. حداقل ۵۲ پاسخ 503، تعداد ۱۰۴ پیام شکست درخواست و ۵۱ پیام timeout گزارش شد؛ شمارنده‌ها هم‌پوشانی دارند و نرخ خطای نهایی قابل محاسبه نیست. هیچ‌یک از ۶۰۰ شرکت‌کننده تمام سه ماژول را کامل نکردند. پس از توقف بار، health staging و production در سه بررسی متوالی HTTP 200 بود. هیچ باری روی production اجرا نشد و دعوت‌نامه‌های آزمایشی غیرفعال شدند. این آزمون ظرفیت ۶۰۰ نفر را تأیید نمی‌کند.
+
+گلوگاه مشهود، سقف پردازش‌های وب Passenger/LSAPI است؛ افزایش pool دیتابیس به‌تنهایی آن را حل نمی‌کند. پیش از هر آزمون بعدی، میزبان باید سقف LSAPI children و سهمیه‌های CloudLinux شامل Entry Processes، NPROC، CPU و PMEM را اعلام و دربارهٔ افزایش ظرفیت متناسب با ۲ vCPU و ۴GB RAM تصمیم‌گیری کند. تعداد processها و سقف اتصال PostgreSQL باید قبل از هر تغییر در pool مشخص شود. در صورت غیرقابل‌افزایش بودن این سقف، انتقال به VPS یا محیط application hosting با ظرفیت کنترل‌شده باید ارزیابی شود.
+
+## بهینه‌سازی autosave پرسشنامه
+
+Endpoint ذخیرهٔ هر پاسخ، هم پاسخ نرمال‌شده و هم draft فعلی را ذخیره می‌کند. اکنون این endpoint پارامتر اختیاری `step_id` را می‌پذیرد و draft را در رکورد progress همان workflow نیز همگام می‌کند؛ بنابراین رابط شرکت‌کننده پس از هر پاسخ یا حرکت رو به جلو نیازی به ارسال درخواست draft دوم ندارد. ذخیرهٔ draft جداگانه برای حرکت به سؤال قبلی باقی مانده است. هنگام ورود مجدد ممکن است آخرین سؤال پاسخ‌داده‌شده دوباره نمایش داده شود، اما پاسخ‌های ذخیره‌شده حفظ می‌شوند. در جریان عادی ۲۵سؤالی، این تغییر تا ۲۵ درخواست تکراری برای هر شرکت‌کننده حذف می‌کند، بدون تغییر سؤال‌ها، اعتبارسنجی، ترتیب ماژول‌ها یا شرط تکمیل.
 
 ## 8. سابقهٔ خطای deploy — حتماً قبل از deploy بخوان
 

@@ -246,20 +246,10 @@ export function participantFlow() {
     post("/api/experiment/questionnaire/answer", {
       ...identity,
       run_id: questionnaire.run_id,
+      step_id: "load-questionnaire",
       question_code: code,
       response_value: value,
       current_question_index: index
-    });
-    post("/api/experiment/stages/draft", {
-      ...identity,
-      stage_code: "questionnaire",
-      run_id: questionnaire.run_id,
-      step_id: "load-questionnaire",
-      draft_payload: {
-        answers: { ...answers },
-        current_question_index: index === questionCodes.length - 1 ? index : index + 1,
-        schema_version: 1
-      }
     });
     questionnaireHeartbeat();
   }
