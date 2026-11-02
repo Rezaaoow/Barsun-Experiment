@@ -1706,6 +1706,8 @@ function scheduleRecoveryFlush(){
   recoveryFlushTimer=null;
   await flushPending().catch(error=>console.warn('Life-Trade recovery sync deferred',error));
   await flushQuestionnairePending().catch(error=>console.warn('Questionnaire recovery sync deferred',error));
+  await flushTimePending().catch(error=>console.warn('Time-event recovery sync deferred',error));
+  await recoverOrphanedUltimatumOutbox().catch(error=>console.warn('Ultimatum recovery sync deferred',error));
  },1500+Math.floor(Math.random()*18000));
 }
 window.addEventListener('online',scheduleRecoveryFlush);
