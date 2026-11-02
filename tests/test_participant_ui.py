@@ -189,7 +189,7 @@ def test_questionnaire_answer_persists_custom_workflow_draft_without_forward_dra
         "function showQuestionnaireQuestion(",
     )
     assert "if(direction<0)await saveQuestionnairePosition(target);" in navigation
-    assert "await saveQuestionnairePosition(target);\n  showQuestionnaireQuestion(target);" not in navigation
+    assert navigation.count("saveQuestionnairePosition(target)") == 1
 
     completion = function_body(
         HTML,
