@@ -1570,8 +1570,10 @@ async function drainPending(timeoutMs=90000){
  while(remaining&&Date.now()<deadline){
   remaining=await flushPending().catch(()=>readPending().length);
   if(!remaining)break;
+  // A permanent rejection has no retry timer; stop instead of repeating it every second.
+  if(pendingRetryTimer===null)break;
   // Respect the scheduled exponential backoff. Do not turn a failed drain into a retry storm.
-  const retryWait=pendingRetryTimer!==null?Math.max(250,pendingRetryAt-Date.now()+100):800+Math.floor(Math.random()*700);
+  const retryWait=Math.max(250,pendingRetryAt-Date.now()+100);
   await utDelay(Math.min(retryWait,Math.max(0,deadline-Date.now())));
  }
  return readPending().length;
@@ -2091,10 +2093,10 @@ async function drainQuestionnairePending(timeoutMs=90000){
   pending=readQuestionnairePending();
   if(pending===null)return -1;
   if(!pending.length)return 0;
+  // A permanent rejection has no retry timer; do not retry a rejected payload in a tight loop.
+  if(questionnaireRetryTimer===null)return pending.length;
   // Wait for the scheduled retry instead of hammering a server that is still overloaded.
-  const retryWait=questionnaireRetryTimer!==null
-   ?Math.max(250,questionnaireRetryAt-Date.now()+100)
-   :800+Math.floor(Math.random()*700);
+  const retryWait=Math.max(250,questionnaireRetryAt-Date.now()+100);
   await utDelay(Math.min(retryWait,Math.max(0,deadline-Date.now())));
  }
  return pending===null?-1:pending.length;
