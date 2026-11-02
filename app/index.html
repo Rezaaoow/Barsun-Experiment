@@ -2130,7 +2130,7 @@ async function chooseQuestionnaireAnswer(item,index,value){
   workflow.questionnaireSavedAnswers[item.code]=value;
   workflow.questionIndex=index;
   if(status){status.classList.remove('error');status.textContent='پاسخ روی دستگاه محفوظ شد؛ همگام‌سازی با سرور در حال انجام است…';}
-  flushQuestionnairePending().catch(error=>console.warn('Questionnaire sync deferred',error));
+  scheduleQuestionnaireFlush();
  }catch(error){
   workflow.questionnaireAnswers[item.code]=previousValue;
   if(status){
