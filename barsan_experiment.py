@@ -2138,8 +2138,20 @@ def claim_group_invitation(data: GroupClaimIn):
     if data.assign_random:
         if supplied_code:
             raise HTTPException(422, "برای دریافت کد تصادفی، فیلد کد شخصی باید خالی باشد.")
-    elif not supplied_code:
-        raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
+        normalized_code = ""
+        request_fingerprint = "random"
+    else:
+        if not supplied_code:
+            raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
+        normalized_code = normalize_participant_code(supplied_code)
+        request_fingerprint = "own:" + normalized_code
+
+    claim_request_id = None
+    if data.claim_request_id:
+        try:
+            claim_request_id = str(uuid.UUID(data.claim_request_id.strip()))
+        except (ValueError, AttributeError):
+            raise HTTPException(422, "شناسه درخواست لینک گروهی معتبر نیست.") from None
 
     group_token_hash = hashlib.sha256(data.group_token.strip().encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -2153,6 +2165,57 @@ def claim_group_invitation(data: GroupClaimIn):
             ).fetchone()
             if not group or not bool(group["active"]):
                 raise HTTPException(404, "لینک گروهی معتبر نیست یا غیرفعال شده است.")
+
+            # Reserve the client request ID in the same transaction as the
+            # assignment. Concurrent replays wait for the first transaction,
+            # then receive the exact participant identity and invitation token.
+            if claim_request_id:
+                reservation = connection.execute(
+                    "INSERT INTO experiment_group_claim_requests("
+                    "request_id,group_link_id,request_fingerprint,assignment_id,created_at) "
+                    "VALUES(" + ",".join([marker] * 5) + ") "
+                    "ON CONFLICT(request_id) DO NOTHING",
+                    (claim_request_id, group["group_link_id"], request_fingerprint, None, now()),
+                )
+                if reservation.rowcount != 1:
+                    previous_request = connection.execute(
+                        "SELECT group_link_id,request_fingerprint,assignment_id "
+                        "FROM experiment_group_claim_requests WHERE request_id=" + marker,
+                        (claim_request_id,),
+                    ).fetchone()
+                    if (
+                        not previous_request
+                        or previous_request["group_link_id"] != group["group_link_id"]
+                        or previous_request["request_fingerprint"] != request_fingerprint
+                        or not previous_request["assignment_id"]
+                    ):
+                        raise HTTPException(409, "این شناسه درخواست قبلاً برای عملیات دیگری استفاده شده است.")
+                    previous_assignment = connection.execute(
+                        "SELECT a.assignment_id,a.group_link_id,a.invitation_token_encrypted,"
+                        "a.condition_code,a.active,p.participant_code "
+                        "FROM experiment_assignments AS a "
+                        "JOIN participants AS p ON p.participant_id=a.participant_id "
+                        "WHERE a.assignment_id=" + marker,
+                        (previous_request["assignment_id"],),
+                    ).fetchone()
+                    if (
+                        not previous_assignment
+                        or previous_assignment["group_link_id"] != group["group_link_id"]
+                        or not bool(previous_assignment["active"])
+                    ):
+                        raise HTTPException(409, "تخصیص قبلی این درخواست دیگر فعال نیست.")
+                    previous_token = _decrypt_invitation_token(
+                        previous_assignment["invitation_token_encrypted"]
+                    )
+                    if not previous_token:
+                        raise HTTPException(503, "بازیابی لینک اختصاصی موقتاً ممکن نشد.")
+                    return {
+                        "participant_code": previous_assignment["participant_code"],
+                        "invitation_token": previous_token,
+                        "condition_code": previous_assignment["condition_code"],
+                        "reused": True,
+                        "random_code_assigned": data.assign_random,
+                    }
 
             if data.assign_random:
                 participant_code = ""
@@ -2168,7 +2231,7 @@ def claim_group_invitation(data: GroupClaimIn):
                 if not participant_code:
                     raise HTTPException(503, "ساخت کد تصادفی ممکن نشد؛ دوباره تلاش کنید.")
             else:
-                participant_code = normalize_participant_code(supplied_code)
+                participant_code = normalized_code
 
             participant_id, _participation_id = _ensure_participation(
                 connection,
@@ -2189,6 +2252,12 @@ def claim_group_invitation(data: GroupClaimIn):
                 ):
                     previous_token = _decrypt_invitation_token(existing["invitation_token_encrypted"])
                     if previous_token:
+                        if claim_request_id:
+                            connection.execute(
+                                "UPDATE experiment_group_claim_requests SET assignment_id=" + marker
+                                + " WHERE request_id=" + marker,
+                                (existing["assignment_id"], claim_request_id),
+                            )
                         return {
                             "participant_code": participant_code,
                             "invitation_token": previous_token,
@@ -2198,6 +2267,7 @@ def claim_group_invitation(data: GroupClaimIn):
                         }
                 raise HTTPException(409, "برای این کد قبلاً در این مطالعه لینک اختصاصی صادر شده است.")
 
+            assignment_id = str(uuid.uuid4())
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
@@ -2207,10 +2277,16 @@ def claim_group_invitation(data: GroupClaimIn):
                 "invitation_token_encrypted,active,assigned_at,workflow_json,group_link_id) VALUES("
                 + ",".join([marker] * 10) + ")",
                 (
-                    str(uuid.uuid4()), group["study_code"], participant_id, group["condition_code"],
+                    assignment_id, group["study_code"], participant_id, group["condition_code"],
                     token_hash, token_encrypted, 1, now(), group["workflow_json"], group["group_link_id"],
                 ),
             )
+            if claim_request_id:
+                connection.execute(
+                    "UPDATE experiment_group_claim_requests SET assignment_id=" + marker
+                    + " WHERE request_id=" + marker,
+                    (assignment_id, claim_request_id),
+                )
     except Exception as exc:
         if getattr(exc, "sqlstate", None) == "23505" or isinstance(exc, sqlite3.IntegrityError):
             raise HTTPException(409, "این کد هم‌زمان در حال ثبت است یا قبلاً برای این مطالعه استفاده شده است.") from None
