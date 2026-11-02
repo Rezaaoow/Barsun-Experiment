@@ -2381,23 +2381,36 @@ async function beginParticipantFlow(){
        (randomGroupCode||cached.participant_code===enteredCode.toUpperCase()))claim=cached;
    }catch(_){}
    if(!claim){
+    const requestStorageKey=storageKey+':request';
+    let claimRequestId=null;
+    try{
+     claimRequestId=sessionStorage.getItem(requestStorageKey);
+     if(!claimRequestId){
+      claimRequestId=crypto.randomUUID();
+      sessionStorage.setItem(requestStorageKey,claimRequestId);
+     }
+    }catch(_){claimRequestId=null;}
     const claimPayload={
      group_token:workflow.groupInvitationToken,
      participant_code:randomGroupCode?null:enteredCode,
-     assign_random:randomGroupCode
+     assign_random:randomGroupCode,
+     ...(claimRequestId?{claim_request_id:claimRequestId}:{})
     };
-    // Fixed-code claims are server-idempotent. Random server allocations are
-    // not blindly retried because a lost response could allocate a second identity.
-    claim=randomGroupCode
-     ?await api('/api/experiment/group/claim',claimPayload)
-     :await apiWithRetry('/api/experiment/group/claim',claimPayload,{
-      attempts:4,baseDelayMs:700,maxDelayMs:7000,timeoutMs:12000
-     });
-    try{sessionStorage.setItem(storageKey,JSON.stringify({
-     mode,
-     participant_code:claim.participant_code,
-     invitation_token:claim.invitation_token
-    }))}catch(_){}
+    // Retry only with a stable per-tab request key; the server then replays the
+    // exact same participant allocation instead of allocating a second code.
+    claim=claimRequestId
+     ?await apiWithRetry('/api/experiment/group/claim',claimPayload,{
+      attempts:5,baseDelayMs:700,maxDelayMs:8000,timeoutMs:12000
+     })
+     :await api('/api/experiment/group/claim',claimPayload);
+    try{
+     sessionStorage.setItem(storageKey,JSON.stringify({
+      mode,
+      participant_code:claim.participant_code,
+      invitation_token:claim.invitation_token
+     }));
+     sessionStorage.removeItem(requestStorageKey);
+    }catch(_){}}
    }
    enteredCode=claim.participant_code;
    workflow.invitationToken=claim.invitation_token;
