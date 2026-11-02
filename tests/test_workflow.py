@@ -741,3 +741,57 @@ def test_questionnaire_answer_batch_is_atomic_idempotent_and_updates_draft(clien
     )
     assert wrong_step.status_code == 409
 
+def test_stage_start_resume_if_active_reuses_attempt_after_ambiguous_failure(client):
+    step_id = "dd-resume-after-network-error"
+    steps = [{"step_id": step_id, "module_code": "dd_lifetrade"}]
+    _, identity = create_workflow_assignment(
+        client, steps, code="STAGE-START-RESUME-IDEMPOTENCY"
+    )
+    payload = {
+        **identity,
+        "stage_code": "dd_lifetrade",
+        "step_id": step_id,
+    }
+
+    first = client.post("/api/experiment/stages/start", json=payload)
+    assert first.status_code == 200, first.text
+    original_run_id = first.json()["run_id"]
+    original_attempt = first.json()["attempt_number"]
+
+    recovered = client.post(
+        "/api/experiment/stages/start",
+        json={**payload, "resume_if_active": True},
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["run_id"] == original_run_id
+    assert recovered.json()["attempt_number"] == original_attempt
+    assert recovered.json()["resumed"] is True
+
+    with main.conn() as connection:
+        original = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (original_run_id,),
+        ).fetchone()
+        progress = connection.execute(
+            "SELECT current_run_id,attempt_number,status FROM experiment_workflow_progress "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+    assert original["status"] == "in_progress"
+    assert progress["current_run_id"] == original_run_id
+    assert int(progress["attempt_number"]) == original_attempt
+    assert progress["status"] == "in_progress"
+
+    # An ordinary start (without the recovery flag) still keeps the original
+    # explicit-restart behavior and creates a new attempt.
+    restarted = client.post("/api/experiment/stages/start", json=payload)
+    assert restarted.status_code == 200, restarted.text
+    assert restarted.json()["run_id"] != original_run_id
+    assert restarted.json()["attempt_number"] == original_attempt + 1
+    with main.conn() as connection:
+        superseded = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (original_run_id,),
+        ).fetchone()
+    assert superseded["status"] == "superseded"
+
