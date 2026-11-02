@@ -1402,6 +1402,27 @@ async function apiWithRetry(path,payload,options={}){
  }
  throw lastError||new Error('درخواست ثبت نشد.');
 }
+async function startStageWithRecovery(payload,options={}){
+ try{
+  // First send once. Stage creation is not generally idempotent.
+  return await api('/api/experiment/stages/start',payload,{
+   timeoutMs:options.timeoutMs||15000
+  });
+ }catch(initialError){
+  if(!isRetryableApiError(initialError))throw initialError;
+  // Recover an ambiguous response without superseding a run that may already
+  // have committed. The server resumes an active attempt only when explicitly
+  // asked to do so.
+  const retryAfter=Math.min(4000,Math.max(0,Number(initialError.retryAfterMs)||0));
+  await utDelay(Math.max(650,retryAfter)+Math.floor(Math.random()*350));
+  return apiWithRetry('/api/experiment/stages/start',{
+   ...payload,
+   resume_if_active:true
+  },{
+   attempts:4,baseDelayMs:700,maxDelayMs:8000,timeoutMs:options.timeoutMs||15000
+  });
+ }
+}
 let workflowTimerHeartbeat=null;
 function stopWorkflowHeartbeat(){
  if(workflowTimerHeartbeat!==null){
@@ -2360,11 +2381,18 @@ async function beginParticipantFlow(){
        (randomGroupCode||cached.participant_code===enteredCode.toUpperCase()))claim=cached;
    }catch(_){}
    if(!claim){
-    claim=await api('/api/experiment/group/claim',{
+    const claimPayload={
      group_token:workflow.groupInvitationToken,
      participant_code:randomGroupCode?null:enteredCode,
      assign_random:randomGroupCode
-    });
+    };
+    // Fixed-code claims are server-idempotent. Random server allocations are
+    // not blindly retried because a lost response could allocate a second identity.
+    claim=randomGroupCode
+     ?await api('/api/experiment/group/claim',claimPayload)
+     :await apiWithRetry('/api/experiment/group/claim',claimPayload,{
+      attempts:4,baseDelayMs:700,maxDelayMs:7000,timeoutMs:12000
+     });
     try{sessionStorage.setItem(storageKey,JSON.stringify({
      mode,
      participant_code:claim.participant_code,
@@ -2375,16 +2403,18 @@ async function beginParticipantFlow(){
    workflow.invitationToken=claim.invitation_token;
    codeInput.value=enteredCode;
   }
-  await api('/api/experiment/consent',{
-   invitation_token:workflow.invitationToken,
-   participant_code:enteredCode,
-   accepted:true
-  });
-  const identity=await api('/api/experiment/identify',{
-   invitation_token:workflow.invitationToken,
-   participant_code:enteredCode
-  });
-  workflow.participantCode=identity.participant_code;
+  const participantIdentity={
+    invitation_token:workflow.invitationToken,
+    participant_code:enteredCode
+   };
+   await apiWithRetry('/api/experiment/consent',{
+    ...participantIdentity,
+    accepted:true
+   },{attempts:5,baseDelayMs:600,maxDelayMs:8000,timeoutMs:12000});
+   const identity=await apiWithRetry('/api/experiment/identify',participantIdentity,{
+    attempts:5,baseDelayMs:600,maxDelayMs:8000,timeoutMs:12000
+   });
+   workflow.participantCode=identity.participant_code;
   workflow.conditionCode=identity.condition_code;
   workflow.testModuleOnly=identity.test_module_only||null;
   workflow.currentStage=identity.current_stage;
@@ -2434,7 +2464,7 @@ async function startAssignedDDStage(){
  if(!workflow.workflowMode){workflow.currentStage="dd_lifetrade";workflow.currentStepId=legacyStepId("dd_lifetrade");}
  try{await recoverOrphanedPendingQueues();}
  catch(error){error.pendingRecovery=true;throw error;}
- const started=await api('/api/experiment/stages/start',{
+ const started=await startStageWithRecovery({
   invitation_token:workflow.invitationToken,
   participant_code:workflow.participantCode,
   stage_code:'dd_lifetrade',
@@ -2851,7 +2881,7 @@ async function startUltimatumInstructions() {
   if(!workflow.workflowMode){workflow.currentStage="ultimatum";workflow.currentStepId=legacyStepId("ultimatum");}
   show();
   setStatus("در حال آماده‌سازی بازی…");
-  const started=await api("/api/experiment/stages/start",{
+  const started=await startStageWithRecovery({
    invitation_token:workflow.invitationToken,
    participant_code:workflow.participantCode,
    stage_code:"ultimatum",
