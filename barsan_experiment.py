@@ -813,6 +813,9 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
+    # Used only when recovering an ambiguous network failure. It returns the
+    # already-active attempt instead of superseding it with a new attempt.
+    resume_if_active: bool = False
 
 
 class StageDraftIn(ExperimentIdentityIn):
@@ -2488,6 +2491,27 @@ def start_experiment_stage(data: StageStartIn):
                 "already_completed": True,
                 "run_id": existing["current_run_id"],
                 "attempt_number": existing["attempt_number"],
+            }
+
+        # A retry after an ambiguous transport failure must not supersede a run
+        # that may already have committed. This flag is intentionally opt-in so
+        # an ordinary participant restart retains its established semantics.
+        if (
+            data.resume_if_active
+            and existing
+            and existing["status"] == "in_progress"
+            and existing.get("current_run_id")
+        ):
+            return {
+                "stage_code": data.stage_code,
+                "status": "in_progress",
+                "resumed": True,
+                "already_completed": False,
+                "run_id": existing["current_run_id"],
+                "attempt_number": existing["attempt_number"],
+                "draft_payload": _json_value(existing.get("draft_payload")),
+                "condition_code": assignment["condition_code"],
+                "step_id": data.step_id,
             }
 
         if not data.step_id:
