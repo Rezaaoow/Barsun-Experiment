@@ -52,8 +52,8 @@ const fullWorkflowScenario = loadProfile === "burst"
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "20s", target: 100 },
-        { duration: "30s", target: 300 },
+        { duration: "20s", target: Math.min(100, expectedUsers) },
+        { duration: "30s", target: Math.min(300, expectedUsers) },
         { duration: "40s", target: expectedUsers },
         { duration: "3m", target: expectedUsers },
         { duration: "30s", target: 0 }
@@ -132,14 +132,15 @@ function timestamp() {
 function startTimeTracking(identity, stageCode, stepId) {
   const payload = { ...identity, stage_code: stageCode, step_id: stepId };
   post("/api/experiment/time", { ...payload, event: "start" });
+  let heartbeatIntervalMs = 27000 + Math.floor(Math.random() * 6000);
   let lastHeartbeatAt = Date.now();
 
-  // Called during participant activity; emits a heartbeat at the same 15-second
-  // interval as the browser without using background timers in a k6 VU.
+  // Match the browser's randomized 27–33 second heartbeat without synchronizing VUs.
   return function heartbeatIfDue() {
-    if (Date.now() - lastHeartbeatAt >= 15000) {
+    if (Date.now() - lastHeartbeatAt >= heartbeatIntervalMs) {
       post("/api/experiment/time", { ...payload, event: "heartbeat" });
       lastHeartbeatAt = Date.now();
+      heartbeatIntervalMs = 27000 + Math.floor(Math.random() * 6000);
     }
   };
 }
