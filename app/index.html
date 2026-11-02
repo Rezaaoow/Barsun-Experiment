@@ -2384,10 +2384,10 @@ async function beginParticipantFlow(){
     const requestStorageKey=storageKey+':request';
     let claimRequestId=null;
     try{
-     claimRequestId=sessionStorage.getItem(requestStorageKey);
+     claimRequestId=localStorage.getItem(requestStorageKey);
      if(!claimRequestId){
       claimRequestId=crypto.randomUUID();
-      sessionStorage.setItem(requestStorageKey,claimRequestId);
+      localStorage.setItem(requestStorageKey,claimRequestId);
      }
     }catch(_){claimRequestId=null;}
     const claimPayload={
@@ -2396,7 +2396,7 @@ async function beginParticipantFlow(){
      assign_random:randomGroupCode,
      ...(claimRequestId?{claim_request_id:claimRequestId}:{})
     };
-    // Retry only with a stable per-tab request key; the server then replays the
+    // Retry only with a stable browser-persisted request key; the server then replays the
     // exact same participant allocation instead of allocating a second code.
     claim=claimRequestId
      ?await apiWithRetry('/api/experiment/group/claim',claimPayload,{
@@ -2409,7 +2409,7 @@ async function beginParticipantFlow(){
       participant_code:claim.participant_code,
       invitation_token:claim.invitation_token
      }));
-     sessionStorage.removeItem(requestStorageKey);
+     localStorage.removeItem(requestStorageKey);
     }catch(_){}
    }
    enteredCode=claim.participant_code;
