@@ -1385,7 +1385,9 @@ function isRetryableApiError(error){
  return !status||[408,425,429,500,502,503,504].includes(status);
 }
 async function apiWithRetry(path,payload,options={}){
- const attempts=Math.max(1,Number(options.attempts)||4);
+ const requestedAttempts=Number(options.attempts);
+ // Per-request cap: at most three total attempts in one retry burst.
+ const attempts=Math.min(3,Math.max(1,Number.isFinite(requestedAttempts)?Math.floor(requestedAttempts):3));
  const baseDelayMs=Math.max(100,Number(options.baseDelayMs)||650);
  const maxDelayMs=Math.max(baseDelayMs,Number(options.maxDelayMs)||12000);
  let lastError;
@@ -1417,7 +1419,7 @@ async function startStageWithRecovery(payload,options={}){
   // The backend replays the exact attempt linked to this request ID, rather than
   // returning whichever attempt happens to be active for this participant.
   return apiWithRetry('/api/experiment/stages/start',requestPayload,{
-   attempts:4,baseDelayMs:700,maxDelayMs:8000,timeoutMs:options.timeoutMs||15000
+   attempts:2,baseDelayMs:700,maxDelayMs:8000,timeoutMs:options.timeoutMs||15000
   });
  }
 }
@@ -1590,7 +1592,7 @@ window.addEventListener('pagehide',()=>{
  }
 });
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
-async function utApiWithRetry(path,payload,attempts=6){
+async function utApiWithRetry(path,payload,attempts=3){
  return apiWithRetry(path,payload,{
   attempts:attempts,baseDelayMs:500,maxDelayMs:12000,timeoutMs:15000
  });
