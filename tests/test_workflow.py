@@ -656,3 +656,88 @@ def test_questionnaire_answer_updates_custom_workflow_draft_without_separate_dra
     )
     assert wrong_step.status_code == 409
 
+def test_questionnaire_answer_batch_is_atomic_idempotent_and_updates_draft(client):
+    step_id = "questionnaire-batch"
+    steps = [{"step_id": step_id, "module_code": "questionnaire"}]
+    _, identity = create_workflow_assignment(
+        client, steps, code="QUESTIONNAIRE-BATCH-SAVE"
+    )
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["run_id"]
+
+    batch = {
+        **identity,
+        "run_id": run_id,
+        "step_id": step_id,
+        "answers": [
+            {"question_code": "B1", "response_value": "5", "current_question_index": 0},
+            {"question_code": "B2", "response_value": "NA", "current_question_index": 1},
+            {"question_code": "PJ1", "response_value": "2", "current_question_index": 5},
+        ],
+    }
+
+    first = client.post("/api/experiment/questionnaire/answers", json=batch)
+    assert first.status_code == 200, first.text
+    assert first.json()["saved_count"] == 3
+
+    # Replaying a batch after a lost response must be safe: rows are upserted,
+    # not duplicated, and their values remain unchanged.
+    replay = client.post("/api/experiment/questionnaire/answers", json=batch)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["saved_count"] == 3
+
+    with main.conn() as connection:
+        rows = connection.execute(
+            "SELECT question_code,response_value FROM questionnaire_responses WHERE run_id=?",
+            (run_id,),
+        ).fetchall()
+        progress = connection.execute(
+            "SELECT draft_payload FROM experiment_stage_progress WHERE current_run_id=?",
+            (run_id,),
+        ).fetchone()
+    assert {row["question_code"]: row["response_value"] for row in rows} == {
+        "B1": "5", "B2": "NA", "PJ1": "2"
+    }
+    import json
+    draft = progress["draft_payload"] if isinstance(progress["draft_payload"], dict) else json.loads(progress["draft_payload"])
+    assert draft["answers"]["B1"] == "5"
+    assert draft["answers"]["B2"] == "NA"
+    assert draft["answers"]["PJ1"] == "2"
+    assert draft["current_question_index"] == 5
+
+    # Validate the complete batch before writing anything; no partial batch is allowed.
+    invalid_batch = {
+        **identity,
+        "run_id": run_id,
+        "step_id": step_id,
+        "answers": [
+            {"question_code": "B4", "response_value": "4", "current_question_index": 3},
+            {"question_code": "NOT_A_QUESTION", "response_value": "3", "current_question_index": 4},
+        ],
+    }
+    invalid = client.post("/api/experiment/questionnaire/answers", json=invalid_batch)
+    assert invalid.status_code == 422, invalid.text
+    with main.conn() as connection:
+        not_written = connection.execute(
+            "SELECT COUNT(*) AS n FROM questionnaire_responses WHERE run_id=? AND question_code='B4'",
+            (run_id,),
+        ).fetchone()
+    assert int(not_written["n"]) == 0
+
+    wrong_step = client.post(
+        "/api/experiment/questionnaire/answers",
+        json={
+            **identity,
+            "run_id": run_id,
+            "step_id": "not-the-active-questionnaire-step",
+            "answers": [
+                {"question_code": "B4", "response_value": "4", "current_question_index": 3}
+            ],
+        },
+    )
+    assert wrong_step.status_code == 409
+
