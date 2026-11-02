@@ -1,0 +1,50 @@
+[
+  {
+    "probe": 1,
+    "environment": "staging",
+    "status": 200,
+    "ok": true,
+    "database_connected": true,
+    "runtime_header": "uvicorn-pr25-native",
+    "seconds": 0.034
+  },
+  {
+    "probe": 1,
+    "environment": "production",
+    "error": "TimeoutError",
+    "seconds": 10.078
+  },
+  {
+    "probe": 2,
+    "environment": "staging",
+    "status": 200,
+    "ok": true,
+    "database_connected": true,
+    "runtime_header": "uvicorn-pr25-native",
+    "seconds": 0.006
+  },
+  {
+    "probe": 2,
+    "environment": "production",
+    "error": "TimeoutError",
+    "seconds": 10.013
+  },
+  {
+    "probe": 3,
+    "environment": "staging",
+    "status": 200,
+    "ok": true,
+    "database_connected": true,
+    "runtime_header": "uvicorn-pr25-native",
+    "seconds": 0.006
+  },
+  {
+    "probe": 3,
+    "environment": "production",
+    "status": 200,
+    "ok": true,
+    "database_connected": true,
+    "runtime_header": null,
+    "seconds": 1.798
+  }
+]

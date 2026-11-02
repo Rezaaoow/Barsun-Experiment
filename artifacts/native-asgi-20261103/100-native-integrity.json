@@ -1,0 +1,42 @@
+{
+  "cohort": "100-native",
+  "expected_users": 100,
+  "modules": {
+    "questionnaire": {
+      "runs": 100,
+      "completed_runs": 100,
+      "rows": 2500,
+      "runs_with_exact_row_count": 100
+    },
+    "lifetrade": {
+      "runs": 100,
+      "completed_runs": 100,
+      "rows": 3000,
+      "runs_with_exact_row_count": 100
+    },
+    "ultimatum": {
+      "runs": 100,
+      "completed_runs": 100,
+      "rows": 2200,
+      "runs_with_exact_row_count": 100
+    }
+  },
+  "workflow_steps": [
+    [
+      "dd_lifetrade",
+      "completed",
+      100
+    ],
+    [
+      "questionnaire",
+      "completed",
+      100
+    ],
+    [
+      "ultimatum",
+      "completed",
+      100
+    ]
+  ],
+  "integrity_passed": true
+}
