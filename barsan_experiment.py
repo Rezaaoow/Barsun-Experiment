@@ -309,6 +309,12 @@ if DATABASE_URL:
                 "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
+                "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
+                "request_fingerprint TEXT NOT NULL, assignment_id TEXT REFERENCES experiment_assignments(assignment_id), "
+                "created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
                 "ON experiment_assignments(group_link_id)"
             )
@@ -521,6 +527,12 @@ else:
                 "label TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
                 "invitation_token_encrypted TEXT NOT NULL, condition_code TEXT NOT NULL, workflow_json TEXT NOT NULL, "
                 "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
+                "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
+                "request_fingerprint TEXT NOT NULL, assignment_id TEXT REFERENCES experiment_assignments(assignment_id), "
+                "created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
@@ -768,6 +780,8 @@ class GroupClaimIn(BaseModel):
     group_token: str = Field(min_length=20, max_length=200)
     participant_code: str | None = Field(default=None, max_length=100)
     assign_random: bool = False
+    # Stable UUID lets the server return the same allocation after a lost response.
+    claim_request_id: str | None = Field(default=None, min_length=16, max_length=100)
 
 
 class AssignmentStatusBatchIn(BaseModel):
