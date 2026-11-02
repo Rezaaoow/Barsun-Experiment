@@ -325,6 +325,12 @@ if DATABASE_URL:
                 "PRIMARY KEY(assignment_id, consent_version))"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_start_requests ("
+                "request_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT, stage_code TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "attempt_number INTEGER NOT NULL, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
                 "participation_id TEXT NOT NULL REFERENCES study_participations(participation_id), "
                 "stage_code TEXT NOT NULL CHECK(stage_code IN ('questionnaire','dd_lifetrade','ultimatum')), "
@@ -548,6 +554,12 @@ else:
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_start_requests ("
+                "request_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT, stage_code TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "attempt_number INTEGER NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -837,8 +849,9 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
-    # Used only when recovering an ambiguous network failure. It returns the
-    # already-active attempt instead of superseding it with a new attempt.
+    # Stable only within one in-memory start operation; a page reload creates a new ID.
+    start_request_id: str | None = Field(default=None, min_length=1, max_length=100)
+    # Backward-compatible recovery path for older clients.
     resume_if_active: bool = False
 
 
@@ -2605,6 +2618,53 @@ def start_experiment_stage(data: StageStartIn):
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
         )
+        marker = "%s" if DATABASE_URL else "?"
+        if data.start_request_id:
+            prior_request = connection.execute(
+                "SELECT assignment_id,step_instance_id,stage_code,run_id,attempt_number "
+                "FROM experiment_stage_start_requests WHERE request_id=" + marker,
+                (data.start_request_id,),
+            ).fetchone()
+            if prior_request:
+                if (
+                    prior_request["assignment_id"] != assignment["assignment_id"]
+                    or prior_request["step_instance_id"] != data.step_id
+                    or prior_request["stage_code"] != data.stage_code
+                ):
+                    raise HTTPException(409, "شناسهٔ شروع قبلاً برای درخواست دیگری استفاده شده است.")
+                run = connection.execute(
+                    "SELECT status FROM instrument_runs WHERE run_id=" + marker,
+                    (prior_request["run_id"],),
+                ).fetchone()
+                if not run:
+                    raise HTTPException(409, "اجرای ثبت‌شده برای این درخواست دیگر موجود نیست.")
+                progress = None
+                if data.step_id:
+                    progress = connection.execute(
+                        "SELECT current_run_id,status,draft_payload FROM experiment_workflow_progress "
+                        "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
+                        (assignment["assignment_id"], data.step_id),
+                    ).fetchone()
+                else:
+                    progress = connection.execute(
+                        "SELECT current_run_id,status,draft_payload FROM experiment_stage_progress "
+                        "WHERE participation_id=" + marker + " AND stage_code=" + marker,
+                        (assignment["participation_id"], data.stage_code),
+                    ).fetchone()
+                if not progress or progress["current_run_id"] != prior_request["run_id"]:
+                    raise HTTPException(409, "این اجرای آزمایش با شروع مجدد جایگزین شده است.")
+                return {
+                    "stage_code": data.stage_code,
+                    "status": progress["status"],
+                    "resumed": True,
+                    "already_completed": progress["status"] == "completed",
+                    "run_id": prior_request["run_id"],
+                    "attempt_number": prior_request["attempt_number"],
+                    "draft_payload": _json_value(progress["draft_payload"]),
+                    "condition_code": assignment["condition_code"],
+                    "step_id": data.step_id,
+                }
+
         # Workflow assignments use their own per-step progress rows. Avoid loading
         # legacy stage snapshots on the event path when a step_id is supplied.
         rows = _get_stage_rows(connection, assignment["participation_id"]) if not data.step_id else {}
@@ -2770,6 +2830,16 @@ def start_experiment_stage(data: StageStartIn):
                     (assignment["assignment_id"], assignment["participation_id"], data.step_id, workflow_step_index + 1,
                      data.stage_code, attempt_number, run_id, json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
                 )
+        if data.start_request_id:
+            connection.execute(
+                "INSERT INTO experiment_stage_start_requests("
+                "request_id,assignment_id,step_instance_id,stage_code,run_id,attempt_number,created_at) "
+                "VALUES(" + ",".join([marker] * 7) + ")",
+                (
+                    data.start_request_id, assignment["assignment_id"], data.step_id,
+                    data.stage_code, run_id, attempt_number, timestamp,
+                ),
+            )
     return {
         "stage_code": data.stage_code,
         "status": "in_progress",
