@@ -136,12 +136,19 @@ function post(path, payload, options = {}) {
     sleep(delayMs / 1000);
   }
 
-  const ok = check(response, {
-    "Final HTTP response returns 2xx": (res) => res.status >= 200 && res.status < 300
-  });
+  const ok = options.skipCheck === true
+    ? response.status >= 200 && response.status < 300
+    : check(response, {
+        "Final HTTP response returns 2xx": (res) => res.status >= 200 && res.status < 300
+      });
   if (!ok) {
-    terminalRequestFailures.add(1, { api_path: path });
-    throw new Error(path + " returned HTTP " + response.status);
+    if (options.countTerminalFailure !== false) {
+      terminalRequestFailures.add(1, { api_path: path });
+    }
+    const error = new Error(path + " returned HTTP " + response.status);
+    error.status = response.status;
+    error.retryable = [0, 408, 425, 429, 500, 502, 503, 504].includes(response.status);
+    throw error;
   }
   try {
     return response.json();
@@ -149,6 +156,27 @@ function post(path, payload, options = {}) {
     throw new Error(path + " returned invalid JSON");
   }
 }
+
+function startStageWithRecovery(payload) {
+  try {
+    // Send the non-idempotent start once. If the response is ambiguous, use
+    // the server's explicit resume mode for all subsequent attempts.
+    return post("/api/experiment/stages/start", payload, {
+      countTerminalFailure: false,
+      skipCheck: true
+    });
+  } catch (error) {
+    if (!error.retryable) {
+      terminalRequestFailures.add(1, { api_path: "/api/experiment/stages/start" });
+      throw error;
+    }
+    return post("/api/experiment/stages/start", {
+      ...payload,
+      resume_if_active: true
+    }, { retryable: true });
+  }
+}
+
 
 function timestamp() {
   return new Date().toISOString();
@@ -256,11 +284,11 @@ export function participantFlow() {
   }
 
   // Module 1: persist all 25 questionnaire answers, then complete the stage.
-  const questionnaire = post("/api/experiment/stages/start", {
+  const questionnaire = startStageWithRecovery({
     ...identity,
     stage_code: "questionnaire",
     step_id: "load-questionnaire"
-  }, { retryable: true });
+  });
   const questionnaireHeartbeat = startTimeTracking(identity, "questionnaire", "load-questionnaire");
   const answers = {};
   let answerBatch = [];
@@ -301,7 +329,7 @@ export function participantFlow() {
   completeTimeTracking(identity, "questionnaire", "load-questionnaire");
 
   // Module 2: submit 30 synthetic Life-Trade rows in bounded batches.
-  const dd = post("/api/experiment/stages/start", {
+  const dd = startStageWithRecovery({
     ...identity,
     stage_code: "dd_lifetrade",
     step_id: "load-dd"
@@ -347,7 +375,7 @@ export function participantFlow() {
   completeTimeTracking(identity, "dd_lifetrade", "load-dd");
 
   // Module 3: complete both practice trials and all 20 main trials.
-  const ultimatum = post("/api/experiment/stages/start", {
+  const ultimatum = startStageWithRecovery({
     ...identity,
     stage_code: "ultimatum",
     step_id: "load-ultimatum"
