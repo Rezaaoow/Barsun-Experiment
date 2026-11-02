@@ -1993,7 +1993,7 @@ function scheduleQuestionnaireFlush(force=false){
   window.clearTimeout(questionnaireFlushTimer);
   questionnaireFlushTimer=null;
  }
- const delay=urgent?0:3500+Math.floor(Math.random()*3000);
+ const delay=urgent?0:12000+Math.floor(Math.random()*3000);
  questionnaireFlushTimer=window.setTimeout(()=>{
   questionnaireFlushTimer=null;
   scheduleQuestionnaireFlush();
