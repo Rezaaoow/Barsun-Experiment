@@ -359,6 +359,11 @@ if DATABASE_URL:
                 "PRIMARY KEY(assignment_id,step_instance_id))"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_event_requests ("
+                "event_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, stage_code TEXT NOT NULL, event TEXT NOT NULL, created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
                 "run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
                 "question_code TEXT NOT NULL, response_value TEXT NOT NULL "
@@ -577,6 +582,11 @@ else:
                 "active_seconds REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 0, "
                 "started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, completed_at TEXT, "
                 "PRIMARY KEY(assignment_id,step_instance_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_event_requests ("
+                "event_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, stage_code TEXT NOT NULL, event TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
@@ -869,6 +879,7 @@ class ExperimentTimeIn(ExperimentIdentityIn):
     step_id: str = Field(min_length=1, max_length=80)
     stage_code: StageCode
     event: Literal["start", "heartbeat", "pause", "complete"]
+    event_id: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class UltimatumPrepareIn(ExperimentIdentityIn):
@@ -2466,7 +2477,7 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
 
 @app.post("/api/experiment/time")
 def track_experiment_time(data: ExperimentTimeIn):
-    """Update active time atomically; avoid a SELECT followed by a separate UPDATE."""
+    """Update active time atomically and de-duplicate replayed client events."""
     with conn() as connection:
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
@@ -2477,6 +2488,47 @@ def track_experiment_time(data: ExperimentTimeIn):
             raise HTTPException(422, "این ماژول در روند آزمایش این لینک وجود ندارد.")
 
         marker = "%s" if DATABASE_URL else "?"
+        if data.event_id:
+            inserted = connection.execute(
+                "INSERT INTO experiment_time_event_requests("
+                "event_id,assignment_id,step_instance_id,stage_code,event,created_at) "
+                "VALUES(" + ",".join([marker] * 6) + ") ON CONFLICT(event_id) DO NOTHING",
+                (
+                    data.event_id, assignment["assignment_id"], data.step_id,
+                    data.stage_code, data.event, now(),
+                ),
+            )
+            if inserted.rowcount == 0:
+                previous = connection.execute(
+                    "SELECT assignment_id,step_instance_id,stage_code,event "
+                    "FROM experiment_time_event_requests WHERE event_id=" + marker,
+                    (data.event_id,),
+                ).fetchone()
+                if (
+                    not previous
+                    or previous["assignment_id"] != assignment["assignment_id"]
+                    or previous["step_instance_id"] != data.step_id
+                    or previous["stage_code"] != data.stage_code
+                    or previous["event"] != data.event
+                ):
+                    raise HTTPException(409, "شناسهٔ رخداد زمان قبلاً برای درخواست دیگری استفاده شده است.")
+                snapshot = connection.execute(
+                    "SELECT active_seconds,is_active FROM experiment_time_tracking "
+                    "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
+                    (assignment["assignment_id"], data.step_id),
+                ).fetchone()
+                if not snapshot:
+                    raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
+                return {
+                    "saved": True,
+                    "duplicate": True,
+                    "event_id": data.event_id,
+                    "step_id": data.step_id,
+                    "event": data.event,
+                    "active_seconds": round(float(snapshot["active_seconds"] or 0), 2),
+                    "is_active": bool(snapshot["is_active"]),
+                }
+
         timestamp = now()
         is_active = 0 if data.event in {"pause", "complete"} else 1
         completed_at = timestamp if data.event == "complete" else None
@@ -2537,6 +2589,8 @@ def track_experiment_time(data: ExperimentTimeIn):
             raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
         return {
             "saved": True,
+            "duplicate": False,
+            "event_id": data.event_id,
             "step_id": data.step_id,
             "event": data.event,
             "active_seconds": round(float(row["active_seconds"] or 0), 2),
@@ -2546,7 +2600,7 @@ def track_experiment_time(data: ExperimentTimeIn):
 
 @app.post("/api/experiment/stages/start")
 def start_experiment_stage(data: StageStartIn):
-    """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
+    """Start a fresh attempt unless an ambiguous transport retry explicitly requests recovery."""
     with conn() as connection:
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
@@ -2611,25 +2665,6 @@ def start_experiment_stage(data: StageStartIn):
                 previous_state = rows.get(previous)
                 if not previous_state or previous_state["status"] != "completed":
                     raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
-
-        # For the questionnaire, keep the same run and its saved draft after refresh.
-        if (
-            data.stage_code == "questionnaire"
-            and existing
-            and existing["status"] == "in_progress"
-            and existing["current_run_id"]
-        ):
-            return {
-                "stage_code": data.stage_code,
-                "status": "in_progress",
-                "resumed": True,
-                "already_completed": False,
-                "run_id": existing["current_run_id"],
-                "attempt_number": existing["attempt_number"],
-                "draft_payload": _json_value(existing.get("draft_payload")),
-                "condition_code": assignment["condition_code"],
-                "step_id": data.step_id,
-            }
 
         instrument_code, version, instrument_name = STAGE_TO_INSTRUMENT[data.stage_code]
         attempt_number = int(existing["attempt_number"]) + 1 if existing else 1
