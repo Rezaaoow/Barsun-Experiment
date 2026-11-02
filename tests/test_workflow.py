@@ -795,3 +795,143 @@ def test_stage_start_resume_if_active_reuses_attempt_after_ambiguous_failure(cli
         ).fetchone()
     assert superseded["status"] == "superseded"
 
+
+
+def test_questionnaire_refresh_starts_a_new_attempt_but_transport_recovery_reuses_it(client):
+    step_id = "questionnaire-restarts-after-refresh"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "questionnaire"}],
+        code="QUESTIONNAIRE-REFRESH-RESTART",
+    )
+    first = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert first.status_code == 200, first.text
+    first_run_id = first.json()["run_id"]
+
+    saved = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={
+            **identity,
+            "run_id": first_run_id,
+            "step_id": step_id,
+            "question_code": "B1",
+            "response_value": "4",
+            "current_question_index": 0,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    # A normal start represents a page reload/re-entry: it must create a new attempt.
+    restarted = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert restarted.status_code == 200, restarted.text
+    assert restarted.json()["run_id"] != first_run_id
+    assert restarted.json()["attempt_number"] == first.json()["attempt_number"] + 1
+
+    with main.conn() as connection:
+        old_run = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (first_run_id,),
+        ).fetchone()
+        current = connection.execute(
+            "SELECT current_run_id,attempt_number,status FROM experiment_workflow_progress "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+        old_answer = connection.execute(
+            "SELECT response_value FROM questionnaire_responses "
+            "WHERE run_id=? AND question_code='B1'",
+            (first_run_id,),
+        ).fetchone()
+    assert old_run["status"] == "superseded"
+    assert current["current_run_id"] == restarted.json()["run_id"]
+    assert int(current["attempt_number"]) == 2
+    # The abandoned attempt remains separately inspectable; it is not copied into the new run.
+    assert old_answer["response_value"] == "4"
+
+    # Only the explicit recovery flag may reuse the active attempt after an ambiguous response.
+    recovered = client.post(
+        "/api/experiment/stages/start",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": step_id,
+            "resume_if_active": True,
+        },
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["run_id"] == restarted.json()["run_id"]
+    assert recovered.json()["attempt_number"] == restarted.json()["attempt_number"]
+    assert recovered.json()["resumed"] is True
+
+
+def test_time_event_idempotency_prevents_duplicate_active_time(client):
+    step_id = "time-event-idempotency"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "questionnaire"}],
+        code="TIME-EVENT-IDEMPOTENCY",
+    )
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert started.status_code == 200, started.text
+
+    start_payload = {
+        **identity,
+        "stage_code": "questionnaire",
+        "step_id": step_id,
+        "event": "start",
+        "event_id": "time-start-idempotency-001",
+    }
+    first_start = client.post("/api/experiment/time", json=start_payload)
+    assert first_start.status_code == 200, first_start.text
+    replayed_start = client.post("/api/experiment/time", json=start_payload)
+    assert replayed_start.status_code == 200, replayed_start.text
+    assert replayed_start.json()["duplicate"] is True
+
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 minutes') "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        )
+    heartbeat_payload = {
+        **identity,
+        "stage_code": "questionnaire",
+        "step_id": step_id,
+        "event": "heartbeat",
+        "event_id": "time-heartbeat-idempotency-001",
+    }
+    first_heartbeat = client.post("/api/experiment/time", json=heartbeat_payload)
+    assert first_heartbeat.status_code == 200, first_heartbeat.text
+    assert first_heartbeat.json()["active_seconds"] == 45
+
+    # Simulate a retry arriving after a later server-side timestamp would otherwise add time.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 minutes') "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        )
+    replayed_heartbeat = client.post("/api/experiment/time", json=heartbeat_payload)
+    assert replayed_heartbeat.status_code == 200, replayed_heartbeat.text
+    assert replayed_heartbeat.json()["duplicate"] is True
+    assert replayed_heartbeat.json()["active_seconds"] == 45
+
+    conflicting_replay = client.post(
+        "/api/experiment/time",
+        json={**heartbeat_payload, "event": "pause"},
+    )
+    assert conflicting_replay.status_code == 409
+
+    with main.conn() as connection:
+        event_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM experiment_time_event_requests WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()["n"]
+    assert int(event_count) == 2
