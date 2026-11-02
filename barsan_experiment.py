@@ -829,6 +829,17 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
     current_question_index: int = Field(default=0, ge=0, le=100)
 
+class QuestionnaireAnswerBatchItem(BaseModel):
+    question_code: str = Field(min_length=1, max_length=16)
+    response_value: Literal["1", "2", "3", "4", "5", "NA"]
+    current_question_index: int = Field(ge=0, le=100)
+
+
+class QuestionnaireAnswersBatchIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
+    answers: list[QuestionnaireAnswerBatchItem] = Field(min_length=1, max_length=10)
+
 
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
@@ -2652,62 +2663,110 @@ def save_questionnaire_draft(data: StageDraftIn):
     return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id, "step_id": data.step_id}
 
 
-@app.post("/api/experiment/questionnaire/answer")
-def save_questionnaire_answer(data: QuestionnaireAnswerIn):
-    """Upsert one answer by its hidden question code and refresh the server-side draft."""
-    if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
-        raise HTTPException(422, "Unknown questionnaire question code")
-    with conn() as connection:
-        assignment = _lookup_questionnaire_assignment_state(
-            connection, data.invitation_token, data.participant_code, step_id=data.step_id
-        )
-        marker = "%s" if DATABASE_URL else "?"
-        if data.step_id and assignment["workflow_run_id"] != data.run_id:
-            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if assignment["questionnaire_run_id"] != data.run_id:
-            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if assignment["questionnaire_status"] != "in_progress":
-            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
-        timestamp = now()
+def _persist_questionnaire_answer_rows(
+    connection: Any,
+    assignment: dict[str, Any],
+    run_id: str,
+    step_id: str | None,
+    answers: list[QuestionnaireAnswerBatchItem] | list[QuestionnaireAnswerIn],
+) -> list[dict[str, Any]]:
+    """Persist a bounded answer batch atomically and refresh the draft once."""
+    marker = "%s" if DATABASE_URL else "?"
+    timestamp = now()
+    saved: list[dict[str, Any]] = []
+    for answer in answers:
         if DATABASE_URL:
             connection.execute(
                 "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
                 "VALUES(%s,%s,%s,%s) ON CONFLICT(run_id,question_code) DO UPDATE SET "
                 "response_value=EXCLUDED.response_value,updated_at=EXCLUDED.updated_at",
-                (data.run_id, data.question_code, data.response_value, timestamp),
+                (run_id, answer.question_code, answer.response_value, timestamp),
             )
         else:
             connection.execute(
                 "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
                 "VALUES(?,?,?,?) ON CONFLICT(run_id,question_code) DO UPDATE SET "
                 "response_value=excluded.response_value,updated_at=excluded.updated_at",
-                (data.run_id, data.question_code, data.response_value, timestamp),
+                (run_id, answer.question_code, answer.response_value, timestamp),
             )
-        draft = _json_value(assignment["questionnaire_draft_payload"])
-        answers = draft.get("answers")
-        if not isinstance(answers, dict):
-            answers = {}
-        answers[data.question_code] = data.response_value
-        draft["answers"] = answers
-        draft["current_question_index"] = data.current_question_index
+        saved.append({
+            "question_code": answer.question_code,
+            "response_value": answer.response_value,
+            "current_question_index": answer.current_question_index,
+        })
+
+    draft = _json_value(assignment["questionnaire_draft_payload"])
+    draft_answers = draft.get("answers")
+    if not isinstance(draft_answers, dict):
+        draft_answers = {}
+    for answer in answers:
+        draft_answers[answer.question_code] = answer.response_value
+    draft["answers"] = draft_answers
+    draft["current_question_index"] = answers[-1].current_question_index
+    connection.execute(
+        "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
+        + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+        (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+    )
+    if step_id:
         connection.execute(
-            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+            "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
+            (_json_param(draft), timestamp, assignment["assignment_id"], step_id, run_id),
         )
-        if data.step_id:
-            connection.execute(
-                "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
-                + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
-                (_json_param(draft), timestamp, assignment["assignment_id"], data.step_id, data.run_id),
-            )
+    return saved
+
+
+def _validate_questionnaire_answer_codes(answers: list[Any]) -> None:
+    codes = [answer.question_code for answer in answers]
+    if any(code not in QUESTIONNAIRE_QUESTION_CODES for code in codes):
+        raise HTTPException(422, "Unknown questionnaire question code")
+    if len(codes) != len(set(codes)):
+        raise HTTPException(422, "A questionnaire batch cannot contain duplicate question codes")
+
+
+@app.post("/api/experiment/questionnaire/answers")
+def save_questionnaire_answer_batch(data: QuestionnaireAnswersBatchIn):
+    """Atomically upsert up to ten answers while acquiring one DB connection per batch."""
+    _validate_questionnaire_answer_codes(data.answers)
+    with conn() as connection:
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
+        )
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_status"] != "in_progress":
+            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
+        saved = _persist_questionnaire_answer_rows(
+            connection, assignment, data.run_id, data.step_id, data.answers
+        )
     return {
         "saved": True,
-        "question_code": data.question_code,
-        "response_value": data.response_value,
-        "current_question_index": data.current_question_index,
+        "saved_count": len(saved),
+        "answers": saved,
     }
 
+
+@app.post("/api/experiment/questionnaire/answer")
+def save_questionnaire_answer(data: QuestionnaireAnswerIn):
+    """Upsert one answer by its hidden question code and refresh the server-side draft."""
+    _validate_questionnaire_answer_codes([data])
+    with conn() as connection:
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
+        )
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_status"] != "in_progress":
+            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
+        saved = _persist_questionnaire_answer_rows(
+            connection, assignment, data.run_id, data.step_id, [data]
+        )[0]
+    return {"saved": True, **saved}
 
 def _lookup_active_ultimatum_stage(
     connection: Any,
