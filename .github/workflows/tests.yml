@@ -65,7 +65,8 @@ jobs:
           PY
           node --input-type=module --check < tests/load/k6_experiment.js
           node --input-type=module --check < ops/k6-ut-dd-resilience.js
-          python -m py_compile ops/run-ut-dd-resilience.py ops/deploy-ut-dd-resilience.py
+          node --input-type=module --check < ops/k6-final-soak.js
+          python -m py_compile ops/run-ut-dd-resilience.py ops/deploy-ut-dd-resilience.py ops/release-native.py ops/run-final-soak.py ops/live-final-browser.py ops/sample-stage-resources.py
       - name: Check client outbox failure recovery
         run: node ops/check_client_recovery.mjs
       - name: Run SQLite API regression tests

@@ -23,7 +23,7 @@ JOB=ROOT/'deployments'/('final-'+a.commit[:12])
 SOURCE=JOB/'runtime'
 NATIVE=ROOT/('native-asgi-trial-20261102' if staging else 'native-asgi')
 PYTHON=Path('/home/myexperi/virtualenv')/ROOT.name/'3.12/bin/python'
-SUPERVISOR=Path('/home/myexperi/virtualenv/lifetrade-staging/3.12/bin')
+SUPERVISOR=PYTHON.parent
 PUBLIC='https://staging.my-experiment.ir/lifetrade' if staging else 'https://my-experiment.ir/lifetrade'
 PORT=8766 if staging else 8767
 ROUTING=Path('/home/myexperi/public_html/staging/lifetrade/.htaccess' if staging else '/home/myexperi/public_html/lifetrade/.htaccess')
@@ -138,6 +138,12 @@ try:
     versions=run([str(PYTHON),'-c',"import importlib.metadata,json;print(json.dumps({k:importlib.metadata.version(k) for k in ['fastapi','uvicorn','psycopg','psycopg-pool']}))"])
     required={'fastapi':'0.115.12','uvicorn':'0.34.0','psycopg':'3.2.6','psycopg-pool':'3.2.6'}
     assert json.loads(versions.stdout)==required
+    supervisor_check=[str(PYTHON),'-c',"import importlib.metadata;print(importlib.metadata.version('supervisor'))"]
+    installed=subprocess.run(supervisor_check,capture_output=True,timeout=15)
+    if installed.returncode and not staging:
+        run([str(PYTHON),'-m','pip','install','--disable-pip-version-check','--no-deps','supervisor==4.3.0'])
+        installed=run(supervisor_check)
+    assert installed.returncode==0 and installed.stdout.strip()==b'4.3.0'
     for key,value in {'DB_POOL_MIN_SIZE':'1','DB_POOL_MAX_SIZE':'4','DB_POOL_TIMEOUT':'5','DB_POOL_MAX_WAITING':'128','DB_CONNECT_TIMEOUT':'5'}.items():values[key]=value
     assert '\n' not in ''.join(values.values())
     if not staging:atomic(ROOT/'config/app.env',''.join(key+'='+value+'\n' for key,value in values.items()).encode())

@@ -52,3 +52,41 @@ def test_foreign_link_and_rejected_legacy_queue_are_retained_without_blocking(br
       return {sends,retained:rows.length,held:await recoveryIsHeld(legacy),foreign:await recoveryIsHeld(foreign)};
     }''')
     assert result==dict(sends=1,retained=2,held=True,foreign=True)
+
+
+def test_pagehide_journal_recovers_when_idb_commit_cannot_finish(browser_env):
+    client,page,_,_=browser_env
+    identity,started,step=setup_module_run(client,'ultimatum')
+    assignment=client.post('/api/experiment/identify',json=identity).json()['assignment_id']
+    page.clock.install()
+    page.evaluate('''async data=>{
+      Object.assign(workflow,{participantCode:data.identity.participant_code,invitationToken:data.identity.invitation_token,assignmentId:data.assignment});
+      await BarsanClock.start(data.assignment,data.run,data.step,'ultimatum');await BarsanClock.flush();
+    }''',dict(identity=identity,assignment=assignment,run=started['run_id'],step=step))
+    page.clock.run_for(7500)
+    journal=page.evaluate('''()=>{
+      globalThis.BarsanStore={...BarsanStore,put:()=>new Promise(()=>{})};
+      window.dispatchEvent(new Event('pagehide'));
+      return JSON.parse(localStorage.getItem('barsan_clock_journal_v2_'+BarsanClock.currentRun()));
+    }''')
+    assert 7500<=journal['visible_ms']<9500
+    page.reload()
+    recovered=page.evaluate('async assignment=>await BarsanClock.pending(assignment)',assignment)
+    assert len(recovered)==1 and recovered[0]['value']['visible_ms']==journal['visible_ms']
+    page.evaluate('''async data=>{
+      Object.assign(workflow,{participantCode:data.identity.participant_code,invitationToken:data.identity.invitation_token,assignmentId:data.assignment});
+      await BarsanClock.flush();
+    }''',dict(identity=identity,assignment=assignment))
+    assert page.evaluate('async assignment=>(await BarsanClock.pending(assignment)).length',assignment)==0
+
+
+def test_long_browser_freeze_is_marked_uncertain(browser_env):
+    client,page,_,_=browser_env
+    identity,started,step=setup_module_run(client,'dd_lifetrade')
+    assignment=client.post('/api/experiment/identify',json=identity).json()['assignment_id']
+    page.clock.install()
+    page.evaluate("async data=>await BarsanClock.start(data.assignment,data.run,data.step,'dd_lifetrade')",dict(assignment=assignment,run=started['run_id'],step=step))
+    page.clock.fast_forward(90000)
+    page.evaluate('async()=>await BarsanClock.close()')
+    row=page.evaluate('()=>BarsanClock.snapshot()')
+    assert row['visible_ms']>=90000 and row['uncertain_ms']>=90000
