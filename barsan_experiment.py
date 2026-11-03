@@ -13,7 +13,7 @@ import threading
 import uuid
 import zipfile
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import lru_cache
 from typing import Any, Iterator, Literal
 
@@ -103,7 +103,7 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
-app.add_middleware(BulkExportMiddleware, lock_path=os.path.join(ROOT, ".bulk-export.lock"), token_getter=lambda: ADMIN_TOKEN)
+app.add_middleware(BulkExportMiddleware, lock_path=os.path.join(ROOT, ".bulk-export.lock"), token_getter=lambda: ADMIN_TOKEN, busy_checker=lambda: _recent_task_activity())
 if os.getenv("BARSAN_REQUEST_METRICS", "0") == "1":
     app.add_middleware(RequestMetricsMiddleware)
 
@@ -753,6 +753,23 @@ def _seed_registry(connection: Any) -> None:
 
 
 init_db()
+
+EXPORT_IDLE_SECONDS = max(0, int(os.getenv("BARSAN_EXPORT_IDLE_SECONDS", "0")))
+
+
+def _recent_task_activity() -> bool:
+    if not EXPORT_IDLE_SECONDS:
+        return False
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=EXPORT_IDLE_SECONDS)).isoformat()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT 1 AS busy WHERE EXISTS (SELECT 1 FROM experiment_client_clocks WHERE received_at>" + marker + ") "
+            "OR EXISTS (SELECT 1 FROM experiment_time_tracking WHERE stage_code IN ('dd_lifetrade','ultimatum') AND last_seen_at>" + marker + ") "
+            "OR EXISTS (SELECT 1 FROM instrument_runs r JOIN instrument_versions v USING(instrument_version_id) "
+            "WHERE v.instrument_code IN ('lifetrade','ultimatum') AND r.status='in_progress' AND r.started_at>" + marker + ")",
+            (cutoff, cutoff, cutoff)).fetchone()
+    return row is not None
 
 
 class SessionIn(BaseModel):

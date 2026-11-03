@@ -421,7 +421,7 @@ async function adminFetch(path,options){
  while(true){
   response=await fetch(basePath+path,{...requestOptions,headers:{...(requestOptions.headers||{}),"X-Admin-Token":token(),...(requestOptions.body?{"Content-Type":"application/json"}:{})},cache:"no-store"});
   if((requestOptions.method||'GET').toUpperCase()!=='GET'||response.status!==429||response.headers.get('X-Barsan-Export-Busy')!=='1'||Date.now()>=exportDeadline)break;
-  if($('exportStatus'))setStatus('exportStatus','خروجی دیگری در حال آماده‌شدن است؛ این دریافت در انتظار نوبت است.','info');
+  if($('exportStatus'))setStatus('exportStatus','دریافت خروجی در انتظار نوبت است؛ اجرای آزمایش در اولویت قرار دارد.','info');
   const seconds=Math.min(10,Math.max(1,Number(response.headers.get('Retry-After'))||2));
   if(response.body)await response.body.cancel();
   await new Promise(resolve=>setTimeout(resolve,seconds*1000+Math.floor(Math.random()*500)));

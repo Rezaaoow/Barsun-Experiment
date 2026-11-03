@@ -27,6 +27,7 @@ def initialize(connection):
         'clock_id TEXT NOT NULL, step_instance_id TEXT NOT NULL, stage_code TEXT NOT NULL, '
         'sequence INTEGER NOT NULL, visible_ms BIGINT NOT NULL, uncertain_ms BIGINT NOT NULL, '
         'closed INTEGER NOT NULL, received_at TEXT NOT NULL)')
+    connection.execute('CREATE INDEX IF NOT EXISTS idx_client_clocks_received ON experiment_client_clocks(received_at)')
     connection.execute('CREATE INDEX IF NOT EXISTS idx_client_clocks_assignment '
                        'ON experiment_client_clocks(assignment_id,step_instance_id)')
     connection.execute('CREATE TABLE IF NOT EXISTS experiment_client_clock_checkpoints ('

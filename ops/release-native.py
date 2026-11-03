@@ -16,11 +16,13 @@ parser=argparse.ArgumentParser()
 parser.add_argument('environment',choices=['staging','production'])
 parser.add_argument('commit')
 parser.add_argument('bundle_sha256')
+parser.add_argument('--build-id',default='')
 a=parser.parse_args()
+assert len(a.build_id)<=20 and all(ch in 'abcdefghijklmnopqrstuvwxyz0123456789-' for ch in a.build_id)
 assert len(a.commit)==40 and all(c in '0123456789abcdef' for c in a.commit)
 staging=a.environment=='staging'
 ROOT=Path('/home/myexperi/lifetrade-staging' if staging else '/home/myexperi/lifetrade')
-JOB=ROOT/'deployments'/('final-'+a.commit[:12])
+JOB=ROOT/'deployments'/('final-'+a.commit[:12]+('-'+a.build_id if a.build_id else ''))
 SOURCE=JOB/'runtime'
 NATIVE=ROOT/('native-asgi-trial-20261102' if staging else 'native-asgi')
 PYTHON=Path('/home/myexperi/virtualenv')/ROOT.name/'3.12/bin/python'
@@ -174,7 +176,7 @@ for raw in (ROOT/'config/app.env').read_text().splitlines():
 assert env.get('PUBLIC_EXPERIMENT_URL','').rstrip('/')==PUBLIC_VALUE
 for name,sha in FILES_VALUE.items():
  assert hashlib.sha256((SOURCE/name).read_bytes()).hexdigest()==sha
-for key,value in {'BARSAN_SYNC_THREADS':'8','BARSAN_REQUEST_METRICS':'1','DB_POOL_MIN_SIZE':'1','DB_POOL_MAX_SIZE':'4','DB_POOL_TIMEOUT':'5','DB_POOL_MAX_WAITING':'128','DB_CONNECT_TIMEOUT':'5'}.items():env[key]=value
+for key,value in {'BARSAN_SYNC_THREADS':'8','BARSAN_REQUEST_METRICS':'1','BARSAN_EXPORT_IDLE_SECONDS':'90','DB_POOL_MIN_SIZE':'1','DB_POOL_MAX_SIZE':'4','DB_POOL_TIMEOUT':'5','DB_POOL_MAX_WAITING':'128','DB_CONNECT_TIMEOUT':'5'}.items():env[key]=value
 os.chdir(SOURCE)
 os.execve(PYTHON,[PYTHON,'-m','uvicorn','barsan_experiment:app','--host','127.0.0.1','--port',PORT_VALUE,'--workers','2','--root-path','/lifetrade','--proxy-headers','--forwarded-allow-ips','127.0.0.1','--no-access-log','--header','X-Barsan-Runtime:uvicorn-final-native'],env)
 '''

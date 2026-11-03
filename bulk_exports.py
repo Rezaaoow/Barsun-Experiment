@@ -3,6 +3,8 @@ import asyncio
 import fcntl
 import os
 import secrets
+import logging
+from anyio.to_thread import run_sync
 from starlette.responses import JSONResponse
 
 
@@ -21,8 +23,8 @@ def take_slot(path):
 
 
 class BulkExportMiddleware:
-    def __init__(self,app,lock_path,token_getter):
-        self.app=app;self.lock_path=lock_path;self.token_getter=token_getter
+    def __init__(self,app,lock_path,token_getter,busy_checker):
+        self.app=app;self.lock_path=lock_path;self.token_getter=token_getter;self.busy_checker=busy_checker
 
     async def __call__(self,scope,receive,send):
         path=scope.get('path','')
@@ -33,9 +35,14 @@ class BulkExportMiddleware:
         supplied=dict(scope.get('headers',[])).get(b'x-admin-token',b'')
         if not configured or not secrets.compare_digest(supplied,configured.encode("utf-8")):
             return await self.app(scope,receive,send)
-        lease=take_slot(self.lock_path)
+        try:
+            recent_activity=await run_sync(self.busy_checker)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Bulk admission deferred: %s", type(exc).__name__)
+            recent_activity=True
+        lease=None if recent_activity else take_slot(self.lock_path)
         if lease is None:
-            response=JSONResponse({'detail':'خروجی دیگری در حال آماده‌شدن است؛ دریافت این خروجی به‌زودی دوباره انجام می‌شود.'},status_code=429,
+            response=JSONResponse({'detail':'دریافت خروجی در انتظار نوبت است؛ اجرای شرکت‌کنندگان در اولویت قرار دارد.'},status_code=429,
                 headers={'Retry-After':'2','X-Barsan-Export-Busy':'1','Cache-Control':'no-store'})
             return await response(scope,receive,send)
         async def paced_send(message):

@@ -343,6 +343,15 @@ def main_test():
         check_filtered_export_pages(resilience_client)
         from timing_checks import check_client_timing
         check_client_timing(resilience_client)
+        previous_idle = main.EXPORT_IDLE_SECONDS
+        try:
+            main.EXPORT_IDLE_SECONDS = 90
+            assert main._recent_task_activity()
+            queued = resilience_client.get('/api/admin/dd/records.csv', headers={'X-Admin-Token': main.ADMIN_TOKEN})
+            assert queued.status_code == 429 and queued.headers['X-Barsan-Export-Busy'] == '1'
+            assert resilience_client.get('/api/health').status_code == 200
+        finally:
+            main.EXPORT_IDLE_SECONDS = previous_idle
         check_dd_recovery(resilience_client)
         check_ultimatum_recovery(resilience_client, "A")
         check_ultimatum_recovery(resilience_client, "B")
