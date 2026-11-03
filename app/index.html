@@ -3083,8 +3083,11 @@ async function flushUtEvents(){
  if(utEventsFlushPromise)return utEventsFlushPromise;
  utEventsFlushPromise=(async()=>{
   if(!workflow.invitationToken||!workflow.participantCode)return;
+  const holds=new Map((await BarsanStore.list(BarsanStore.scope('recovery-hold',workflow.assignmentId||workflow.participantCode)))
+   .map(row=>[row.key,row.value.revision]));
   const all=(await BarsanStore.list()).filter(entry=>{
-   const parts=JSON.parse(entry.scope);return parts[0]==='ut'&&parts[1]===workflow.participantCode;
+   const parts=JSON.parse(entry.scope);return parts[0]==='ut'&&parts[1]===workflow.participantCode
+    &&queueBelongsToCurrentLink(entry)&&holds.get(entry.id)!==entry.revision;
   });
   for(const scope of [...new Set(all.map(entry=>entry.scope))]){
    const rows=all.filter(entry=>entry.scope===scope);

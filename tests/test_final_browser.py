@@ -120,3 +120,23 @@ def test_ut_dd_use_one_time_transport_and_keep_legacy_recovery(browser_env):
       api=normal;return paths;
     }''',dict(identity=identity,assignment=assignment,run=started['run_id'],step=step))
     assert '/api/experiment/time/checkpoints' in paths and '/api/experiment/time' not in paths
+
+
+def test_rejected_old_auxiliary_queue_is_not_resent_each_round(browser_env):
+    _,page,_,_=browser_env
+    result=page.evaluate('''async()=>{
+      workflow.participantCode='SYNTHETIC';workflow.assignmentId='current';workflow.invitationToken='synthetic';
+      const oldScope=BarsanStore.scope('ut','SYNTHETIC','old');
+      await BarsanStore.put(oldScope,'events:old',{kind:'events',payload:{round_id:'old',event_timestamps:{advance_clicked_at:'old'}}});
+      const normal=apiWithRetry;let rejected=0,accepted=0;
+      apiWithRetry=async(path,body)=>{
+        if(body.run_id==='old'){rejected++;throw Object.assign(new Error('stale'),{status:409});}
+        accepted++;return {saved:true};
+      };
+      await flushUtEvents();await flushUtEvents();
+      const active=BarsanStore.scope('ut','SYNTHETIC','new');
+      await BarsanStore.put(active,'events:new',{kind:'events',assignment_id:'current',payload:{round_id:'new',event_timestamps:{advance_clicked_at:'new'}}});
+      await flushUtEvents();apiWithRetry=normal;
+      return {rejected,accepted,oldRetained:(await BarsanStore.list(oldScope)).length,newPending:(await BarsanStore.list(active)).length};
+    }''')
+    assert result==dict(rejected=1,accepted=1,oldRetained=1,newPending=0)
