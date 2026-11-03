@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from request_metrics import RequestMetricsMiddleware, observed_connection
+from bulk_exports import BulkExportMiddleware
 from client_timing import TimingCheckpoint, initialize as initialize_client_timing, save as save_client_timing
 from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
 
@@ -102,6 +103,7 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
+app.add_middleware(BulkExportMiddleware, lock_path=os.path.join(ROOT, ".bulk-export.lock"), token_getter=lambda: ADMIN_TOKEN)
 if os.getenv("BARSAN_REQUEST_METRICS", "0") == "1":
     app.add_middleware(RequestMetricsMiddleware)
 

@@ -8,3 +8,5 @@
 **/app.env
 **/participants*.json
 **/.barsan_invitation_tokens.key
+
+**/.bulk-export.lock

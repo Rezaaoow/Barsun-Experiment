@@ -140,3 +140,30 @@ def test_rejected_old_auxiliary_queue_is_not_resent_each_round(browser_env):
       return {rejected,accepted,oldRetained:(await BarsanStore.list(oldScope)).length,newPending:(await BarsanStore.list(active)).length};
     }''')
     assert result==dict(rejected=1,accepted=1,oldRetained=1,newPending=0)
+
+
+def test_admin_bulk_download_waits_and_retries_only_export_busy(browser_env):
+    _,page,_,base=browser_env
+    import barsan_experiment as main
+    page.goto(base+'/admin')
+    page.locator('#adminToken').fill(main.ADMIN_TOKEN)
+    calls=[]
+    def queued(route):
+        calls.append(1)
+        if len(calls)==1:
+            route.fulfill(status=429,headers={'X-Barsan-Export-Busy':'1','Retry-After':'1'},json={'detail':'Synthetic export busy'})
+        else:
+            route.fulfill(status=200,content_type='text/csv',body='run_id\nsynthetic\n')
+    page.route('**/api/admin/dd/records.csv?*',queued)
+    with page.expect_download(timeout=10000):
+        page.locator('[data-export="dd_records"]').click()
+    assert len(calls)==2
+    page.wait_for_function("document.getElementById('exportStatus').classList.contains('success')")
+    page.unroute('**/api/admin/dd/records.csv?*')
+    rejected=[]
+    def regular_limit(route):
+        rejected.append(1);route.fulfill(status=429,json={'detail':'Other limit'})
+    page.route('**/api/admin/dd/records.csv?*',regular_limit)
+    page.locator('[data-export="dd_records"]').click()
+    page.wait_for_function("document.getElementById('exportStatus').classList.contains('error')")
+    assert len(rejected)==1
