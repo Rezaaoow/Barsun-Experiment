@@ -1,5 +1,11 @@
 # BarSan Experiment — database architecture
 
+## Additive UT/DD record organization — 2026-11-03
+
+No research rows, raw payload fields, previous attempts or legacy exports are removed. `task_records.py` provides schema-version-2 read adapters with separate identity, run, design, stimulus/choice, timing, outcome, model and quality groups. `/api/admin/dd/records.csv` and `/api/admin/ultimatum/records.csv` expose stable ordered columns plus structured and original payload JSON. These exports include attempt status, including superseded attempts; filter it explicitly for analysis. Old export semantics remain unchanged. Normalization is performed on read, avoiding another copy of each research response in the database. Exports read at most 200 indexed IDs per page and release the DB connection before sending that page to a slow downloader.
+
+The optional batched Ultimatum event endpoint validates ownership and uses a stable row-lock order; a failed item rolls back the batch. Actual proposer wait duration can arrive after resolve and is first-write-only. `/api/experiment/dd/complete` requires 30 persisted unique response events before finalizing the active stage. Existing endpoints remain available. These are application changes without destructive DDL or data migration.
+
 ## Application shape
 
 The target is one FastAPI/Python application and one PostgreSQL database. It contains three separately versioned modules:
@@ -90,3 +96,4 @@ Environment variables:
 - `DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE`, `DB_POOL_TIMEOUT`, `DB_POOL_MAX_WAITING`, `DB_CONNECT_TIMEOUT`: optional connection-pool settings.
 
 Keep database credentials and `ADMIN_TOKEN` out of GitHub and out of browser JavaScript.
+

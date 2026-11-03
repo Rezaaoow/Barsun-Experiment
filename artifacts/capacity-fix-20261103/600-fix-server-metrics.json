@@ -1,0 +1,189 @@
+{
+  "cohort": "600-fix",
+  "window_epoch": [
+    1793655799.6926432,
+    1793656093.231413
+  ],
+  "request_starts": 27955,
+  "request_ends": 27955,
+  "starts_without_end_in_window": 0,
+  "status_counts": {
+    "200": 27955
+  },
+  "errors": {},
+  "max_inflight_per_worker": 3,
+  "max_python_threads_per_worker": 7,
+  "ingress_delta_ms_including_clock_skew": {
+    "count": 27955,
+    "min": -1444.182,
+    "median": -1096.098,
+    "p95": 5170.779,
+    "p99": 21942.315,
+    "max": 59006.369
+  },
+  "timings": {
+    "app_ms": {
+      "count": 27955,
+      "min": 1.214,
+      "median": 3.272,
+      "p95": 4.561,
+      "p99": 5.9,
+      "max": 11.383
+    },
+    "first_db_ms": {
+      "count": 27955,
+      "min": 0.42,
+      "median": 0.657,
+      "p95": 0.953,
+      "p99": 1.307,
+      "max": 4.666
+    },
+    "pool_wait_ms": {
+      "count": 27955,
+      "min": 0.013,
+      "median": 0.02,
+      "p95": 0.031,
+      "p99": 0.036,
+      "max": 0.456
+    },
+    "sql_ms": {
+      "count": 27955,
+      "min": 0.25,
+      "median": 1.671,
+      "p95": 2.749,
+      "p99": 3.918,
+      "max": 7.625
+    },
+    "db_scope_ms": {
+      "count": 27955,
+      "min": 0.456,
+      "median": 2.122,
+      "p95": 3.296,
+      "p99": 4.611,
+      "max": 10.136
+    }
+  },
+  "routes": {
+    "/api/experiment/consent": {
+      "count": 600,
+      "app_ms": {
+        "count": 600,
+        "min": 1.611,
+        "median": 2.047,
+        "p95": 2.761,
+        "p99": 3.359,
+        "max": 10.142
+      }
+    },
+    "/api/experiment/identify": {
+      "count": 600,
+      "app_ms": {
+        "count": 600,
+        "min": 1.974,
+        "median": 2.681,
+        "p95": 3.507,
+        "p99": 4.226,
+        "max": 6.236
+      }
+    },
+    "/api/experiment/stages/start": {
+      "count": 1768,
+      "app_ms": {
+        "count": 1768,
+        "min": 3.146,
+        "median": 3.834,
+        "p95": 5.295,
+        "p99": 6.607,
+        "max": 9.734
+      }
+    },
+    "/api/experiment/time": {
+      "count": 5431,
+      "app_ms": {
+        "count": 5431,
+        "min": 1.805,
+        "median": 2.266,
+        "p95": 3.186,
+        "p99": 3.993,
+        "max": 7.23
+      }
+    },
+    "/api/experiment/questionnaire/answers": {
+      "count": 3001,
+      "app_ms": {
+        "count": 3001,
+        "min": 3.01,
+        "median": 3.635,
+        "p95": 5.088,
+        "p99": 6.289,
+        "max": 10.242
+      }
+    },
+    "/api/experiment/stages/complete": {
+      "count": 1179,
+      "app_ms": {
+        "count": 1179,
+        "min": 1.824,
+        "median": 2.858,
+        "p95": 3.941,
+        "p99": 4.841,
+        "max": 6.108
+      }
+    },
+    "/api/trials": {
+      "count": 3569,
+      "app_ms": {
+        "count": 3569,
+        "min": 2.635,
+        "median": 3.486,
+        "p95": 4.507,
+        "p99": 5.375,
+        "max": 11.383
+      }
+    },
+    "/api/complete": {
+      "count": 581,
+      "app_ms": {
+        "count": 581,
+        "min": 1.214,
+        "median": 1.595,
+        "p95": 2.488,
+        "p99": 3.108,
+        "max": 3.917
+      }
+    },
+    "/api/experiment/ultimatum/prepare": {
+      "count": 3981,
+      "app_ms": {
+        "count": 3981,
+        "min": 2.157,
+        "median": 3.202,
+        "p95": 4.661,
+        "p99": 5.868,
+        "max": 8.043
+      }
+    },
+    "/api/experiment/ultimatum/resolve": {
+      "count": 3696,
+      "app_ms": {
+        "count": 3696,
+        "min": 2.331,
+        "median": 3.658,
+        "p95": 5.337,
+        "p99": 6.738,
+        "max": 9.668
+      }
+    },
+    "/api/experiment/ultimatum/events": {
+      "count": 3549,
+      "app_ms": {
+        "count": 3549,
+        "min": 2.111,
+        "median": 2.604,
+        "p95": 3.656,
+        "p99": 4.344,
+        "max": 7.258
+      }
+    }
+  }
+}

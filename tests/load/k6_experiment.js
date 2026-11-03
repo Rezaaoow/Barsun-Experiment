@@ -19,6 +19,8 @@ if (!Array.isArray(fixture) && fixture.complete !== true) {
 }
 
 const completedParticipants = new Counter("completed_participants");
+const transientRetryAttempts = new Counter("transient_retry_attempts");
+const terminalRequestFailures = new Counter("terminal_request_failures");
 const questionCodes = [
   "B1", "B2", "B3", "B4", "B5",
   "PJ1", "PJ2", "PJ3", "PJ4", "PJ5", "PJ6", "PJ7",
@@ -52,8 +54,8 @@ const fullWorkflowScenario = loadProfile === "burst"
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "20s", target: 100 },
-        { duration: "30s", target: 300 },
+        { duration: "20s", target: Math.min(100, expectedUsers) },
+        { duration: "30s", target: Math.min(300, expectedUsers) },
         { duration: "40s", target: expectedUsers },
         { duration: "3m", target: expectedUsers },
         { duration: "30s", target: 0 }
@@ -99,24 +101,54 @@ export function setup() {
   return {};
 }
 
-function post(path, payload) {
-  const response = http.post(
-    baseUrl + path,
-    JSON.stringify(payload),
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      },
-      timeout: "45s",
-      tags: { api_path: path }
+function post(path, payload, options = {}) {
+  // Retries are opt-in and only used for endpoints with idempotent server semantics.
+  const maxAttempts = options.retryable === true ? 4 : 1;
+  let response = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    response = http.post(
+      baseUrl + path,
+      JSON.stringify(payload),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        timeout: "45s",
+        tags: { api_path: path }
+      }
+    );
+    if (response.status >= 200 && response.status < 300) break;
+
+    const retryableStatus = [0, 408, 425, 429, 500, 502, 503, 504].includes(response.status);
+    if (!options.retryable || !retryableStatus || attempt >= maxAttempts - 1) break;
+
+    transientRetryAttempts.add(1, { api_path: path });
+    const ceilingMs = Math.min(8000, 500 * Math.pow(2, attempt));
+    let delayMs = Math.floor(Math.random() * ceilingMs);
+    const retryAfter = response.headers && (
+      response.headers["Retry-After"] || response.headers["retry-after"]
+    );
+    const retryAfterSeconds = Number(retryAfter);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+      delayMs = Math.max(delayMs, Math.min(60000, retryAfterSeconds * 1000));
     }
-  );
-  const ok = check(response, {
-    "HTTP request returns 2xx": (res) => res.status >= 200 && res.status < 300
-  });
+    sleep(delayMs / 1000);
+  }
+
+  const ok = options.skipCheck === true
+    ? response.status >= 200 && response.status < 300
+    : check(response, {
+        "Final HTTP response returns 2xx": (res) => res.status >= 200 && res.status < 300
+      });
   if (!ok) {
-    throw new Error(path + " returned HTTP " + response.status);
+    if (options.countTerminalFailure !== false) {
+      terminalRequestFailures.add(1, { api_path: path });
+    }
+    const error = new Error(path + " returned HTTP " + response.status);
+    error.status = response.status;
+    error.retryable = [0, 408, 425, 429, 500, 502, 503, 504].includes(response.status);
+    throw error;
   }
   try {
     return response.json();
@@ -125,6 +157,27 @@ function post(path, payload) {
   }
 }
 
+function startStageWithRecovery(payload) {
+  try {
+    // Send the non-idempotent start once. If the response is ambiguous, use
+    // the server's explicit resume mode for all subsequent attempts.
+    return post("/api/experiment/stages/start", payload, {
+      countTerminalFailure: false,
+      skipCheck: true
+    });
+  } catch (error) {
+    if (!error.retryable) {
+      terminalRequestFailures.add(1, { api_path: "/api/experiment/stages/start" });
+      throw error;
+    }
+    return post("/api/experiment/stages/start", {
+      ...payload,
+      resume_if_active: true
+    }, { retryable: true });
+  }
+}
+
+
 function timestamp() {
   return new Date().toISOString();
 }
@@ -132,14 +185,15 @@ function timestamp() {
 function startTimeTracking(identity, stageCode, stepId) {
   const payload = { ...identity, stage_code: stageCode, step_id: stepId };
   post("/api/experiment/time", { ...payload, event: "start" });
+  let heartbeatIntervalMs = 27000 + Math.floor(Math.random() * 6000);
   let lastHeartbeatAt = Date.now();
 
-  // Called during participant activity; emits a heartbeat at the same 15-second
-  // interval as the browser without using background timers in a k6 VU.
+  // Match the browser's randomized 27–33 second heartbeat without synchronizing VUs.
   return function heartbeatIfDue() {
-    if (Date.now() - lastHeartbeatAt >= 15000) {
-      post("/api/experiment/time", { ...payload, event: "heartbeat" });
+    if (Date.now() - lastHeartbeatAt >= heartbeatIntervalMs) {
+      post("/api/experiment/time", { ...payload, event: "heartbeat" }, { retryable: true });
       lastHeartbeatAt = Date.now();
+      heartbeatIntervalMs = 27000 + Math.floor(Math.random() * 6000);
     }
   };
 }
@@ -150,7 +204,7 @@ function completeTimeTracking(identity, stageCode, stepId) {
     stage_code: stageCode,
     step_id: stepId,
     event: "complete"
-  });
+  }, { retryable: true });
 }
 
 function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial, sequence, heartbeatIfDue) {
@@ -163,7 +217,7 @@ function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial,
     trial_in_block: trial,
     trial_sequence: sequence,
     client_metadata: { source: "k6-staging-load-test" }
-  });
+  }, { retryable: true });
 
   const role = phase === "practice"
     ? (blockCode === "practice_proposer_agent" ? "proposer" : "responder")
@@ -187,7 +241,7 @@ function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial,
     resolvePayload.participant_decision = "accept";
   }
 
-  const result = post("/api/experiment/ultimatum/resolve", resolvePayload);
+  const result = post("/api/experiment/ultimatum/resolve", resolvePayload, { retryable: true });
 
   const events = {
     result_screen_shown_at: timestamp(),
@@ -201,7 +255,7 @@ function runUltimatumRound(identity, runId, phase, blockCode, blockOrder, trial,
     run_id: runId,
     round_id: result.round_id,
     event_timestamps: events
-  });
+  }, { retryable: true });
 
   return result;
 }
@@ -223,35 +277,43 @@ export function participantFlow() {
     invitation_token: participant.invitation_token
   };
 
-  post("/api/experiment/consent", { ...identity, accepted: true });
-  const identified = post("/api/experiment/identify", identity);
+  post("/api/experiment/consent", { ...identity, accepted: true }, { retryable: true });
+  const identified = post("/api/experiment/identify", identity, { retryable: true });
   if (identified.current_step_id !== "load-questionnaire") {
     throw new Error("Unexpected initial workflow step for VU " + __VU);
   }
 
   // Module 1: persist all 25 questionnaire answers, then complete the stage.
-  const questionnaire = post("/api/experiment/stages/start", {
+  const questionnaire = startStageWithRecovery({
     ...identity,
     stage_code: "questionnaire",
     step_id: "load-questionnaire"
   });
   const questionnaireHeartbeat = startTimeTracking(identity, "questionnaire", "load-questionnaire");
   const answers = {};
+  let answerBatch = [];
+  const questionnaireBatchSize = 4;
   for (let index = 0; index < questionCodes.length; index++) {
     // Synthetic but plausible short reading/decision interval for each question.
     sleep(3);
     const code = questionCodes[index];
     const value = String((index % 5) + 1);
     answers[code] = value;
-    post("/api/experiment/questionnaire/answer", {
-      ...identity,
-      run_id: questionnaire.run_id,
-      step_id: "load-questionnaire",
+    answerBatch.push({
       question_code: code,
       response_value: value,
       current_question_index: index
     });
-    questionnaireHeartbeat();
+    if (answerBatch.length >= questionnaireBatchSize || index === questionCodes.length - 1) {
+      post("/api/experiment/questionnaire/answers", {
+        ...identity,
+        run_id: questionnaire.run_id,
+        step_id: "load-questionnaire",
+        answers: answerBatch
+      }, { retryable: true });
+      answerBatch = [];
+      questionnaireHeartbeat();
+    }
   }
   post("/api/experiment/stages/complete", {
     ...identity,
@@ -263,11 +325,11 @@ export function participantFlow() {
       answers,
       question_order: questionCodes
     }
-  });
+  }, { retryable: true });
   completeTimeTracking(identity, "questionnaire", "load-questionnaire");
 
   // Module 2: submit 30 synthetic Life-Trade rows in bounded batches.
-  const dd = post("/api/experiment/stages/start", {
+  const dd = startStageWithRecovery({
     ...identity,
     stage_code: "dd_lifetrade",
     step_id: "load-dd"
@@ -296,24 +358,24 @@ export function participantFlow() {
     post("/api/trials", {
       session_id: dd.run_id,
       trials: trialRows.slice(offset, offset + 5)
-    });
+    }, { retryable: true });
     ddHeartbeat();
   }
   post("/api/complete", {
     session_id: dd.run_id,
     status: "completed",
     trial_count: trialRows.length
-  });
+  }, { retryable: true });
   post("/api/experiment/stages/complete", {
     ...identity,
     stage_code: "dd_lifetrade",
     step_id: "load-dd",
     run_id: dd.run_id
-  });
+  }, { retryable: true });
   completeTimeTracking(identity, "dd_lifetrade", "load-dd");
 
   // Module 3: complete both practice trials and all 20 main trials.
-  const ultimatum = post("/api/experiment/stages/start", {
+  const ultimatum = startStageWithRecovery({
     ...identity,
     stage_code: "ultimatum",
     step_id: "load-ultimatum"

@@ -1,6 +1,21 @@
 # AI Agent Instructions — BarSan Experiment
 
-This repository backs a live behavioral-research application. Participant records, PostgreSQL, invitation URLs, admin credentials, and the cPanel host are production-sensitive.
+## Current authorized release work — 2026-11-03
+
+The user authorized final Staging fault/stability acceptance followed by Production promotion of the identical tested runtime. See `docs/FINAL_RELEASE_FA.md`. New runtime files include `client_timing.py`, `bulk_exports.py` and `app/task_timing.js`; include them in pinned manifests. Native launchers will use immutable `deployments/final-<sha>/runtime` sources; `/repo` is mirrored after verification for legacy compatibility. Production remains unchanged until Staging acceptance is complete. Separate Production env/database/invitation key must be preserved. Never run load/fault tests on Production; only release verification. Two synthetic browser invitation fixtures are specifically authorized for the private Mac directory `/Users/rezaaoow/barsan-loadtest/final-release-20261103/`; no other fixture export is authorized by that approval. Actual release results supersede this in-progress note when recorded.
+
+
+## Last verified staging runtime — 2026-11-03
+
+UT/DD resilience source `68d22169d8d599d4fe6bc2034873c6a58ab7f593` is deployed and verified on Staging. Runtime dependencies now include `task_records.py`, `app/persistence.js` and the versioned local font/license; the launcher pins the whole runtime set. A fresh guarded HTTPS API sequence completed 100/100, 300/300 and 600/600 UT/DD-only workflows with zero HTTP failures/retries, exact PostgreSQL counts and p95 about 11/13/211 ms respectively. The 600 cohort stored 18,000 DD and 13,200 Ultimatum rounds, including all wait/end/advance timing fields. This is an on-host generator sharing account resources, not 600 real browsers/networks. An isolated browser on the actual Staging origin verified font and IndexedDB reload/offline persistence. 1,002 new synthetic links and 8 group links were deactivated; no data removed. Production source/config hashes were unchanged and all 95 trial health probes succeeded. A later post-trial Production timeout recurred while Staging stayed healthy; one ordinary Passenger restart recovered three successive 200 probes. No Production code/config deployment; its historical intermittent behavior is not permanently resolved. See `docs/UT_DD_RESILIENCE_FA.md` and sanitized `artifacts/ut-dd-resilience-20261103/`.
+
+An initial SSH failure was transient. The private env file had a stale admin value; it was backed up and aligned with the already-active credential without rotating it or printing/transferring it. Keep env/key/backup files outside Git/web. Do not read raw private test logs into tool output; use explicitly whitelisted aggregate JSON counters. Full offline Ultimatum and questionnaire redesign remain outside this change.
+
+Staging runs PR #27 application source `68d22169d8d599d4fe6bc2034873c6a58ab7f593`: LiteSpeed loopback proxy to Uvicorn, two workers on port 8766, source `/home/myexperi/lifetrade-staging/repo`. Each worker has an opt-in limit of eight simultaneous sync handlers and a four-connection PostgreSQL pool. Production retains the Passenger paths below. Read `docs/CAPACITY_FIX_2026-11-03_FA.md` and `ops/README_CAPACITY_FA.md` first. Staging restart uses Supervisor; touching Passenger restart.txt does not restart Uvicorn. Runtime releases must include `request_metrics.py`; the launcher pins both runtime file hashes. Stop the service before replacing dependencies; wait for bounded readiness retries after start and verify public HTML/API.
+
+Earlier tests on source `7af1838` completed 600 API workflows with exact database counts and zero HTTP failures in on-host HTTPS and two-origin tests. External latency thresholds still failed; the single-IP external 600 run was aborted. This is not 600-browser/600-IP or unconditional production readiness. User confirmed real participants use individual internet connections. Synthetic fixtures contain private invitation tokens: never print/commit them or transfer them outside the specifically authorized scope. All current-trial links are deactivated after tests and data retained. No production code/configuration deployment is included.
+
+Remote Desktop Commander plus the user's authorized SSH identity was available. The legacy statement below about unavailable SSH is a historical capability snapshot: re-check current tools and authorization, never request or expose credentials.
 
 ## Read first
 

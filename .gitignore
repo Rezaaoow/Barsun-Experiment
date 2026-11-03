@@ -1,0 +1,12 @@
+**/__pycache__/
+**/.pytest_cache/
+**/.venv*/
+**/*.sqlite3
+**/*.sqlite3-*
+**/.env
+**/.env.*
+**/app.env
+**/participants*.json
+**/.barsan_invitation_tokens.key
+
+**/.bulk-export.lock

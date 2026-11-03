@@ -1,0 +1,8 @@
+{
+  "started_at": 1793656646.21201,
+  "release": "7af183881410faf5d089efefe44d71d43781d8ce",
+  "base": "https://staging.my-experiment.ir/lifetrade",
+  "users": 600,
+  "generator": "on-host k6 v2.3.0 official",
+  "shares_host_resources": true
+}

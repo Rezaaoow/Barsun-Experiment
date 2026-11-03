@@ -366,6 +366,8 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 <div class="export-grid">
 <button class="secondary" data-export="questionnaire" type="button">خروجی پرسشنامه CSV</button>
 <button class="secondary" data-export="lifetrade" type="button">خروجی Life-Trade CSV</button>
+<button type="button" class="btn secondary" data-export="dd_records">خروجی مرتب بازی انتخاب</button>
+<button type="button" class="btn secondary" data-export="ut_records">خروجی مرتب بازی باشگاه</button>
 <button class="secondary" data-export="ultimatum" type="button">خروجی Ultimatum CSV</button>
 <button data-export="all" type="button">خروجی کامل ZIP</button>
 </div>
@@ -414,7 +416,16 @@ function escapeHtml(value){return String(value==null?"":value).replace(/[&<>"']/
 async function adminFetch(path,options){
  if(!token())throw new Error("ابتدا توکن مدیریتی را وارد کن.");
  const requestOptions=options||{};
- const response=await fetch(basePath+path,{...requestOptions,headers:{...(requestOptions.headers||{}),"X-Admin-Token":token(),...(requestOptions.body?{"Content-Type":"application/json"}:{})},cache:"no-store"});
+ let response;
+ const exportDeadline=Date.now()+15*60*1000;
+ while(true){
+  response=await fetch(basePath+path,{...requestOptions,headers:{...(requestOptions.headers||{}),"X-Admin-Token":token(),...(requestOptions.body?{"Content-Type":"application/json"}:{})},cache:"no-store"});
+  if((requestOptions.method||'GET').toUpperCase()!=='GET'||response.status!==429||response.headers.get('X-Barsan-Export-Busy')!=='1'||Date.now()>=exportDeadline)break;
+  if($('exportStatus'))setStatus('exportStatus','دریافت خروجی در انتظار نوبت است؛ اجرای آزمایش در اولویت قرار دارد.','info');
+  const seconds=Math.min(10,Math.max(1,Number(response.headers.get('Retry-After'))||2));
+  if(response.body)await response.body.cancel();
+  await new Promise(resolve=>setTimeout(resolve,seconds*1000+Math.floor(Math.random()*500)));
+ }
  if(!response.ok){
   let detail="درخواست ناموفق بود ("+response.status+")";
   try{const data=await response.json();detail=typeof data.detail==="string"?data.detail:JSON.stringify(data.detail||data)}catch(_){}
@@ -832,6 +843,8 @@ function renderProgress(){
    const order=document.createElement("span");order.className="progress-step-order";order.textContent=Number(step.step_order).toLocaleString("fa-IR");
    const label=document.createElement("span");label.className="progress-step-label";label.textContent=step.module_label||stageLabel(step.module_code);
    const statusText=document.createElement("span");statusText.className="progress-step-status";statusText.textContent=step.status==="completed"?"کامل":step.status==="in_progress"?"در حال انجام":"شروع نشده";
+   chip.title=formatDuration(step.active_seconds)+(step.time_source==="client_visible_v2"?"؛ زمان حضور در صفحه":"؛ زمان تقریبی سرور")
+    +(Number(step.uncertain_seconds)>0?"؛ وقفهٔ نامطمئن: "+formatDuration(step.uncertain_seconds):"");
    chip.append(order,label,statusText);chips.appendChild(chip);
   });
   progress.appendChild(chips);tr.appendChild(progress);
@@ -942,7 +955,7 @@ $("createFullTestLinks").addEventListener("click",async()=>{
 });
 document.querySelectorAll("[data-export]").forEach(button=>button.addEventListener("click",async()=>{
  clearStatus("exportStatus");button.disabled=true;const scope=$("monitorScope").value,type=button.dataset.export;
- const paths={questionnaire:"/api/admin/questionnaire/export.csv",lifetrade:"/api/admin/export.csv",ultimatum:"/api/admin/ultimatum/export.csv",all:"/api/admin/export-all.zip"};
+ const paths={dd_records:"/api/admin/dd/records.csv",ut_records:"/api/admin/ultimatum/records.csv",questionnaire:"/api/admin/questionnaire/export.csv",lifetrade:"/api/admin/export.csv",ultimatum:"/api/admin/ultimatum/export.csv",all:"/api/admin/export-all.zip"};
  try{const filename=await downloadResponse(paths[type]+"?scope="+scope,(scope==="test"?"barsan_test_":"barsan_main_")+type+(type==="all"?".zip":".csv"));setStatus("exportStatus","دانلود آماده شد: "+filename,"success");}
  catch(e){setStatus("exportStatus",e.message,"error");}
  finally{button.disabled=false;}
@@ -978,3 +991,4 @@ $("resetData").addEventListener("click",async()=>{
 </script>
 </body>
 </html>
+

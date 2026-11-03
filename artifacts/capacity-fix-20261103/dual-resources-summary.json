@@ -1,0 +1,9 @@
+{
+  "samples": 141,
+  "max_app_rss_mb": 191.81640625,
+  "max_app_cpu_cores": 1.5526523932218643,
+  "max_app_threads": 26,
+  "max_visible_account_threads": 63,
+  "max_pg_connections": 9,
+  "last_new_errors": {}
+}

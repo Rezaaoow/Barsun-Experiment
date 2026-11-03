@@ -1,0 +1,26 @@
+{
+  "ordinary_restart_only": true,
+  "production_source_unchanged": true,
+  "production_config_unchanged": true,
+  "probes": [
+    {
+      "probe": 1,
+      "http": 200,
+      "ok": true,
+      "seconds": 1.8656
+    },
+    {
+      "probe": 2,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0057
+    },
+    {
+      "probe": 3,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0054
+    }
+  ],
+  "recovered": true
+}

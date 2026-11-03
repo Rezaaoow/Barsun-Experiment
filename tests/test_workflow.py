@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 import barsan_experiment as main
+from stage_start_checks import check_concurrent_starts
 
 
 @pytest.fixture
@@ -655,4 +656,337 @@ def test_questionnaire_answer_updates_custom_workflow_draft_without_separate_dra
         },
     )
     assert wrong_step.status_code == 409
+
+def test_questionnaire_answer_batch_is_atomic_idempotent_and_updates_draft(client):
+    step_id = "questionnaire-batch"
+    steps = [{"step_id": step_id, "module_code": "questionnaire"}]
+    _, identity = create_workflow_assignment(
+        client, steps, code="QUESTIONNAIRE-BATCH-SAVE"
+    )
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert started.status_code == 200, started.text
+    run_id = started.json()["run_id"]
+
+    batch = {
+        **identity,
+        "run_id": run_id,
+        "step_id": step_id,
+        "answers": [
+            {"question_code": "B1", "response_value": "5", "current_question_index": 0},
+            {"question_code": "B2", "response_value": "NA", "current_question_index": 1},
+            {"question_code": "PJ1", "response_value": "2", "current_question_index": 5},
+        ],
+    }
+
+    first = client.post("/api/experiment/questionnaire/answers", json=batch)
+    assert first.status_code == 200, first.text
+    assert first.json()["saved_count"] == 3
+
+    # Replaying a batch after a lost response must be safe: rows are upserted,
+    # not duplicated, and their values remain unchanged.
+    replay = client.post("/api/experiment/questionnaire/answers", json=batch)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["saved_count"] == 3
+
+    with main.conn() as connection:
+        rows = connection.execute(
+            "SELECT question_code,response_value FROM questionnaire_responses WHERE run_id=?",
+            (run_id,),
+        ).fetchall()
+        progress = connection.execute(
+            "SELECT draft_payload FROM experiment_stage_progress WHERE current_run_id=?",
+            (run_id,),
+        ).fetchone()
+    assert {row["question_code"]: row["response_value"] for row in rows} == {
+        "B1": "5", "B2": "NA", "PJ1": "2"
+    }
+    import json
+    draft = progress["draft_payload"] if isinstance(progress["draft_payload"], dict) else json.loads(progress["draft_payload"])
+    assert draft["answers"]["B1"] == "5"
+    assert draft["answers"]["B2"] == "NA"
+    assert draft["answers"]["PJ1"] == "2"
+    assert draft["current_question_index"] == 5
+
+    # Validate the complete batch before writing anything; no partial batch is allowed.
+    invalid_batch = {
+        **identity,
+        "run_id": run_id,
+        "step_id": step_id,
+        "answers": [
+            {"question_code": "B4", "response_value": "4", "current_question_index": 3},
+            {"question_code": "NOT_A_QUESTION", "response_value": "3", "current_question_index": 4},
+        ],
+    }
+    invalid = client.post("/api/experiment/questionnaire/answers", json=invalid_batch)
+    assert invalid.status_code == 422, invalid.text
+    with main.conn() as connection:
+        not_written = connection.execute(
+            "SELECT COUNT(*) AS n FROM questionnaire_responses WHERE run_id=? AND question_code='B4'",
+            (run_id,),
+        ).fetchone()
+    assert int(not_written["n"]) == 0
+
+    wrong_step = client.post(
+        "/api/experiment/questionnaire/answers",
+        json={
+            **identity,
+            "run_id": run_id,
+            "step_id": "not-the-active-questionnaire-step",
+            "answers": [
+                {"question_code": "B4", "response_value": "4", "current_question_index": 3}
+            ],
+        },
+    )
+    assert wrong_step.status_code == 409
+
+def test_stage_start_resume_if_active_reuses_attempt_after_ambiguous_failure(client):
+    step_id = "dd-resume-after-network-error"
+    steps = [{"step_id": step_id, "module_code": "dd_lifetrade"}]
+    _, identity = create_workflow_assignment(
+        client, steps, code="STAGE-START-RESUME-IDEMPOTENCY"
+    )
+    payload = {
+        **identity,
+        "stage_code": "dd_lifetrade",
+        "step_id": step_id,
+    }
+
+    first = client.post("/api/experiment/stages/start", json=payload)
+    assert first.status_code == 200, first.text
+    original_run_id = first.json()["run_id"]
+    original_attempt = first.json()["attempt_number"]
+
+    recovered = client.post(
+        "/api/experiment/stages/start",
+        json={**payload, "resume_if_active": True},
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["run_id"] == original_run_id
+    assert recovered.json()["attempt_number"] == original_attempt
+    assert recovered.json()["resumed"] is True
+
+    with main.conn() as connection:
+        original = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (original_run_id,),
+        ).fetchone()
+        progress = connection.execute(
+            "SELECT current_run_id,attempt_number,status FROM experiment_workflow_progress "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+    assert original["status"] == "in_progress"
+    assert progress["current_run_id"] == original_run_id
+    assert int(progress["attempt_number"]) == original_attempt
+    assert progress["status"] == "in_progress"
+
+    # An ordinary start (without the recovery flag) still keeps the original
+    # explicit-restart behavior and creates a new attempt.
+    restarted = client.post("/api/experiment/stages/start", json=payload)
+    assert restarted.status_code == 200, restarted.text
+    assert restarted.json()["run_id"] != original_run_id
+    assert restarted.json()["attempt_number"] == original_attempt + 1
+    with main.conn() as connection:
+        superseded = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (original_run_id,),
+        ).fetchone()
+    assert superseded["status"] == "superseded"
+
+
+
+def test_questionnaire_refresh_starts_a_new_attempt_but_transport_recovery_reuses_it(client):
+    step_id = "questionnaire-restarts-after-refresh"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "questionnaire"}],
+        code="QUESTIONNAIRE-REFRESH-RESTART",
+    )
+    first = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert first.status_code == 200, first.text
+    first_run_id = first.json()["run_id"]
+
+    saved = client.post(
+        "/api/experiment/questionnaire/answer",
+        json={
+            **identity,
+            "run_id": first_run_id,
+            "step_id": step_id,
+            "question_code": "B1",
+            "response_value": "4",
+            "current_question_index": 0,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    # A normal start represents a page reload/re-entry: it must create a new attempt.
+    restarted = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert restarted.status_code == 200, restarted.text
+    assert restarted.json()["run_id"] != first_run_id
+    assert restarted.json()["attempt_number"] == first.json()["attempt_number"] + 1
+
+    with main.conn() as connection:
+        old_run = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (first_run_id,),
+        ).fetchone()
+        current = connection.execute(
+            "SELECT current_run_id,attempt_number,status FROM experiment_workflow_progress "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+        old_answer = connection.execute(
+            "SELECT response_value FROM questionnaire_responses "
+            "WHERE run_id=? AND question_code='B1'",
+            (first_run_id,),
+        ).fetchone()
+    assert old_run["status"] == "superseded"
+    assert current["current_run_id"] == restarted.json()["run_id"]
+    assert int(current["attempt_number"]) == 2
+    # The abandoned attempt remains separately inspectable; it is not copied into the new run.
+    assert old_answer["response_value"] == "4"
+
+    # Only the explicit recovery flag may reuse the active attempt after an ambiguous response.
+    recovered = client.post(
+        "/api/experiment/stages/start",
+        json={
+            **identity,
+            "stage_code": "questionnaire",
+            "step_id": step_id,
+            "resume_if_active": True,
+        },
+    )
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["run_id"] == restarted.json()["run_id"]
+    assert recovered.json()["attempt_number"] == restarted.json()["attempt_number"]
+    assert recovered.json()["resumed"] is True
+
+
+def test_time_event_idempotency_prevents_duplicate_active_time(client):
+    step_id = "time-event-idempotency"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "questionnaire"}],
+        code="TIME-EVENT-IDEMPOTENCY",
+    )
+    started = client.post(
+        "/api/experiment/stages/start",
+        json={**identity, "stage_code": "questionnaire", "step_id": step_id},
+    )
+    assert started.status_code == 200, started.text
+
+    start_payload = {
+        **identity,
+        "stage_code": "questionnaire",
+        "step_id": step_id,
+        "event": "start",
+        "event_id": "time-start-idempotency-001",
+    }
+    first_start = client.post("/api/experiment/time", json=start_payload)
+    assert first_start.status_code == 200, first_start.text
+    replayed_start = client.post("/api/experiment/time", json=start_payload)
+    assert replayed_start.status_code == 200, replayed_start.text
+    assert replayed_start.json()["duplicate"] is True
+
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 minutes') "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        )
+    heartbeat_payload = {
+        **identity,
+        "stage_code": "questionnaire",
+        "step_id": step_id,
+        "event": "heartbeat",
+        "event_id": "time-heartbeat-idempotency-001",
+    }
+    first_heartbeat = client.post("/api/experiment/time", json=heartbeat_payload)
+    assert first_heartbeat.status_code == 200, first_heartbeat.text
+    assert first_heartbeat.json()["active_seconds"] == 45
+
+    # Simulate a retry arriving after a later server-side timestamp would otherwise add time.
+    with main.conn() as connection:
+        connection.execute(
+            "UPDATE experiment_time_tracking SET last_seen_at=datetime('now','-2 minutes') "
+            "WHERE step_instance_id=?",
+            (step_id,),
+        )
+    replayed_heartbeat = client.post("/api/experiment/time", json=heartbeat_payload)
+    assert replayed_heartbeat.status_code == 200, replayed_heartbeat.text
+    assert replayed_heartbeat.json()["duplicate"] is True
+    assert replayed_heartbeat.json()["active_seconds"] == 45
+
+    conflicting_replay = client.post(
+        "/api/experiment/time",
+        json={**heartbeat_payload, "event": "pause"},
+    )
+    assert conflicting_replay.status_code == 409
+
+    with main.conn() as connection:
+        event_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM experiment_time_event_requests WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()["n"]
+    assert int(event_count) == 2
+
+
+def test_stage_start_request_id_replays_same_attempt_but_new_page_id_restarts(client):
+    step_id = "dd-start-request-idempotency"
+    _, identity = create_workflow_assignment(
+        client, [{"step_id": step_id, "module_code": "dd_lifetrade"}],
+        code="DD-START-REQUEST-ID",
+    )
+    first_request_id = str(uuid.uuid4())
+    first_payload = {
+        **identity,
+        "stage_code": "dd_lifetrade",
+        "step_id": step_id,
+        "start_request_id": first_request_id,
+    }
+    first = client.post("/api/experiment/stages/start", json=first_payload)
+    assert first.status_code == 200, first.text
+
+    # A retry of the exact same in-memory request must replay the same run.
+    replay = client.post("/api/experiment/stages/start", json=first_payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["run_id"] == first.json()["run_id"]
+    assert replay.json()["attempt_number"] == first.json()["attempt_number"]
+    assert replay.json()["resumed"] is True
+
+    # A page reload creates a new request ID and must start a new attempt from its beginning.
+    refreshed = client.post(
+        "/api/experiment/stages/start",
+        json={**first_payload, "start_request_id": str(uuid.uuid4())},
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert refreshed.json()["run_id"] != first.json()["run_id"]
+    assert refreshed.json()["attempt_number"] == first.json()["attempt_number"] + 1
+
+    # The old request cannot resurrect a run that has been superseded by the refresh.
+    stale_retry = client.post("/api/experiment/stages/start", json=first_payload)
+    assert stale_retry.status_code == 409
+
+    with main.conn() as connection:
+        old_run = connection.execute(
+            "SELECT status FROM instrument_runs WHERE run_id=?",
+            (first.json()["run_id"],),
+        ).fetchone()
+        current_run = connection.execute(
+            "SELECT current_run_id FROM experiment_workflow_progress WHERE step_instance_id=?",
+            (step_id,),
+        ).fetchone()
+    assert old_run["status"] == "superseded"
+    assert current_run["current_run_id"] == refreshed.json()["run_id"]
+
+
+def test_concurrent_stage_starts_replay_and_serialize_new_attempts(client):
+    check_concurrent_starts(main, client, "test-admin-token")
 

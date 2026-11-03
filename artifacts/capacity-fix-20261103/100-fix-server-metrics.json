@@ -1,0 +1,211 @@
+{
+  "cohort": "100-fix",
+  "window_epoch": [
+    1793655346.752084,
+    1793655757.273837
+  ],
+  "request_starts": 9692,
+  "request_ends": 9692,
+  "starts_without_end_in_window": 0,
+  "status_counts": {
+    "200": 9692
+  },
+  "errors": {},
+  "max_inflight_per_worker": 3,
+  "max_python_threads_per_worker": 7,
+  "ingress_delta_ms_including_clock_skew": {
+    "count": 9685,
+    "min": -1436.923,
+    "median": -1384.121,
+    "p95": -790.754,
+    "p99": -206.813,
+    "max": 4636.499
+  },
+  "timings": {
+    "app_ms": {
+      "count": 9692,
+      "min": 1.313,
+      "median": 3.361,
+      "p95": 4.71,
+      "p99": 6.599,
+      "max": 161.148
+    },
+    "first_db_ms": {
+      "count": 9692,
+      "min": 0.416,
+      "median": 0.659,
+      "p95": 0.971,
+      "p99": 1.105,
+      "max": 8.22
+    },
+    "pool_wait_ms": {
+      "count": 9692,
+      "min": 0.013,
+      "median": 0.021,
+      "p95": 0.034,
+      "p99": 0.04,
+      "max": 0.402
+    },
+    "sql_ms": {
+      "count": 9692,
+      "min": 0.273,
+      "median": 1.696,
+      "p95": 2.816,
+      "p99": 4.566,
+      "max": 111.345
+    },
+    "db_scope_ms": {
+      "count": 9692,
+      "min": 0.495,
+      "median": 2.182,
+      "p95": 3.399,
+      "p99": 5.154,
+      "max": 153.62
+    }
+  },
+  "routes": {
+    "/api/experiment/consent": {
+      "count": 98,
+      "app_ms": {
+        "count": 98,
+        "min": 1.782,
+        "median": 3.261,
+        "p95": 4.027,
+        "p99": 4.229,
+        "max": 4.821
+      }
+    },
+    "/api/experiment/identify": {
+      "count": 100,
+      "app_ms": {
+        "count": 100,
+        "min": 2.106,
+        "median": 3.328,
+        "p95": 4.759,
+        "p99": 6.523,
+        "max": 14.47
+      }
+    },
+    "/api/experiment/stages/start": {
+      "count": 300,
+      "app_ms": {
+        "count": 300,
+        "min": 3.43,
+        "median": 4.2,
+        "p95": 6.617,
+        "p99": 7.536,
+        "max": 8.036
+      }
+    },
+    "/api/experiment/time": {
+      "count": 1087,
+      "app_ms": {
+        "count": 1087,
+        "min": 1.815,
+        "median": 2.364,
+        "p95": 3.465,
+        "p99": 4.596,
+        "max": 10.481
+      }
+    },
+    "/api/experiment/questionnaire/answers": {
+      "count": 500,
+      "app_ms": {
+        "count": 500,
+        "min": 3.217,
+        "median": 4.093,
+        "p95": 6.675,
+        "p99": 7.604,
+        "max": 15.756
+      }
+    },
+    "/api/experiment/stages/complete": {
+      "count": 300,
+      "app_ms": {
+        "count": 300,
+        "min": 2.109,
+        "median": 3.433,
+        "p95": 4.855,
+        "p99": 6.253,
+        "max": 8.397
+      }
+    },
+    "/api/trials": {
+      "count": 600,
+      "app_ms": {
+        "count": 600,
+        "min": 2.91,
+        "median": 3.699,
+        "p95": 4.767,
+        "p99": 5.667,
+        "max": 8.455
+      }
+    },
+    "/api/complete": {
+      "count": 100,
+      "app_ms": {
+        "count": 100,
+        "min": 1.313,
+        "median": 1.746,
+        "p95": 2.501,
+        "p99": 3.521,
+        "max": 3.869
+      }
+    },
+    "/api/experiment/ultimatum/prepare": {
+      "count": 2200,
+      "app_ms": {
+        "count": 2200,
+        "min": 2.464,
+        "median": 3.309,
+        "p95": 4.562,
+        "p99": 5.693,
+        "max": 6.841
+      }
+    },
+    "/api/experiment/ultimatum/resolve": {
+      "count": 2200,
+      "app_ms": {
+        "count": 2200,
+        "min": 3.021,
+        "median": 3.727,
+        "p95": 4.827,
+        "p99": 6.933,
+        "max": 9.603
+      }
+    },
+    "/api/experiment/ultimatum/events": {
+      "count": 2200,
+      "app_ms": {
+        "count": 2200,
+        "min": 2.143,
+        "median": 2.612,
+        "p95": 3.407,
+        "p99": 4.013,
+        "max": 6.896
+      }
+    },
+    "/api/health": {
+      "count": 1,
+      "app_ms": {
+        "count": 1,
+        "min": 1.876,
+        "median": 1.876,
+        "p95": 1.876,
+        "p99": 1.876,
+        "max": 1.876
+      }
+    },
+    "/api/admin/assignments": {
+      "count": 6,
+      "app_ms": {
+        "count": 6,
+        "min": 153.996,
+        "median": 155.904,
+        "p95": 160.907,
+        "p99": 161.1,
+        "max": 161.148
+      }
+    }
+  }
+}

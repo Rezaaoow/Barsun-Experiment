@@ -1,0 +1,74 @@
+{
+  "cohort": "600-fix",
+  "request_bodies_excluded": true,
+  "samples": [
+    {
+      "trace": "01a19e39d1a9006400000018783d60e0",
+      "path": "/api/experiment/stages/complete",
+      "status": 0,
+      "waiting_ms": 45012.035,
+      "error_code": 1050,
+      "client_trace_created_epoch": 1793655951.785
+    },
+    {
+      "trace": "01a19e3b198300fa0000001ca198aa6a",
+      "path": "/api/experiment/ultimatum/prepare",
+      "status": 0,
+      "waiting_ms": 45004.807,
+      "error_code": 1050,
+      "client_trace_created_epoch": 1793656035.715
+    },
+    {
+      "trace": "01a19e3b0ff001de0000001bb6cb9b40",
+      "path": "/api/experiment/time",
+      "status": 0,
+      "waiting_ms": 45002.679,
+      "error_code": 1050,
+      "client_trace_created_epoch": 1793656033.264
+    },
+    {
+      "trace": "01a19e3a19d70003000000282739145c",
+      "path": "/api/experiment/time",
+      "status": 0,
+      "waiting_ms": 45002.635,
+      "error_code": 1050,
+      "client_trace_created_epoch": 1793655970.263
+    },
+    {
+      "trace": "01a19e3a377300840000001d54293552",
+      "path": "/api/experiment/ultimatum/resolve",
+      "status": 200,
+      "waiting_ms": 44876.774,
+      "app_ms": 3.359,
+      "error_code": 0,
+      "client_trace_created_epoch": 1793655977.843
+    },
+    {
+      "trace": "01a19e3b1125004f0000002e8a07cdab",
+      "path": "/api/experiment/ultimatum/resolve",
+      "status": 200,
+      "waiting_ms": 44863.669,
+      "app_ms": 3.373,
+      "error_code": 0,
+      "client_trace_created_epoch": 1793656033.573
+    },
+    {
+      "trace": "01a19e39f5b200430000001d92b3a080",
+      "path": "/api/experiment/ultimatum/events",
+      "status": 200,
+      "waiting_ms": 44834.296,
+      "app_ms": 2.327,
+      "error_code": 0,
+      "client_trace_created_epoch": 1793655961.01
+    },
+    {
+      "trace": "01a19e3b3843024f000000145bce4656",
+      "path": "/api/trials",
+      "status": 200,
+      "waiting_ms": 44691.892,
+      "app_ms": 3.158,
+      "error_code": 0,
+      "client_trace_created_epoch": 1793656043.587
+    }
+  ]
+}

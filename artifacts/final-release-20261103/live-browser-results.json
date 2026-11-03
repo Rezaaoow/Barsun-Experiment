@@ -1,0 +1,37 @@
+[
+  {
+    "engine": "webkit",
+    "mobile_profile": true,
+    "prescribed_delays_unchanged": true,
+    "dd_offline_seconds": 10,
+    "dd_completed_via_ui": true,
+    "no_horizontal_overflow": true,
+    "passed": true,
+    "ultimatum_ui_rounds": 22,
+    "workflow_steps_completed": 2,
+    "pending_entries": 0,
+    "lost_ack_retried": true,
+    "slow_auxiliary_injected": true,
+    "page_error_count": 0,
+    "duration_seconds": 174.08
+  },
+  {
+    "engine": "chromium",
+    "mobile_profile": false,
+    "prescribed_delays_unchanged": true,
+    "dd_offline_seconds": 95,
+    "old_dd_answer_retained": true,
+    "fresh_attempt_after_reload": true,
+    "dd_completed_via_ui": true,
+    "actual_staging_restart_with_pending_decision": true,
+    "old_ut_decision_recovered_before_new_attempt": true,
+    "passed": true,
+    "ultimatum_ui_rounds": 22,
+    "workflow_steps_completed": 2,
+    "pending_entries": 0,
+    "lost_ack_retried": false,
+    "slow_auxiliary_injected": false,
+    "page_error_count": 0,
+    "duration_seconds": 361.71
+  }
+]

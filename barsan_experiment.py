@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import random
@@ -12,15 +13,19 @@ import threading
 import uuid
 import zipfile
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import lru_cache
 from typing import Any, Iterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from request_metrics import RequestMetricsMiddleware, observed_connection
+from bulk_exports import BulkExportMiddleware
+from client_timing import TimingCheckpoint, initialize as initialize_client_timing, save as save_client_timing
+from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
@@ -98,6 +103,20 @@ DB_POOL_MAX_WAITING = max(1, int(os.getenv("DB_POOL_MAX_WAITING", "128")))
 SQLITE_BUSY_TIMEOUT_MS = max(1000, int(os.getenv("SQLITE_BUSY_TIMEOUT_MS", "10000")))
 
 app = FastAPI(title="BarSan Experiment Research API", version="0.4.0")
+app.add_middleware(BulkExportMiddleware, lock_path=os.path.join(ROOT, ".bulk-export.lock"), token_getter=lambda: ADMIN_TOKEN, busy_checker=lambda: _recent_task_activity())
+if os.getenv("BARSAN_REQUEST_METRICS", "0") == "1":
+    app.add_middleware(RequestMetricsMiddleware)
+
+
+@app.on_event("startup")
+async def configure_sync_threads():
+    """Bound sync handler threads when configured for a constrained host."""
+    limit = int(os.getenv("BARSAN_SYNC_THREADS", "0"))
+    if not 0 <= limit <= 128:
+        raise ValueError("BARSAN_SYNC_THREADS must be between 0 and 128")
+    if limit:
+        from anyio.to_thread import current_default_thread_limiter
+        current_default_thread_limiter().total_tokens = limit
 
 
 def _invitation_fernet() -> Fernet:
@@ -238,7 +257,7 @@ if DATABASE_URL:
     def conn() -> Iterator[Any]:
         _ensure_db_pool_for_process()
         try:
-            with DB_POOL.connection(timeout=DB_POOL_TIMEOUT) as connection:
+            with observed_connection(DB_POOL.connection(timeout=DB_POOL_TIMEOUT)) as connection:
                 yield connection
         except (PoolTimeout, TooManyRequests) as exc:
             raise HTTPException(
@@ -309,6 +328,12 @@ if DATABASE_URL:
                 "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
+                "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
+                "request_fingerprint TEXT NOT NULL, assignment_id TEXT REFERENCES experiment_assignments(assignment_id), "
+                "created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
                 "ON experiment_assignments(group_link_id)"
             )
@@ -317,6 +342,12 @@ if DATABASE_URL:
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_start_requests ("
+                "request_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT, stage_code TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "attempt_number INTEGER NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -351,6 +382,11 @@ if DATABASE_URL:
                 "active_seconds DOUBLE PRECISION NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 0, "
                 "started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, completed_at TEXT, "
                 "PRIMARY KEY(assignment_id,step_instance_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_event_requests ("
+                "event_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, stage_code TEXT NOT NULL, event TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
@@ -436,7 +472,7 @@ else:
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
 
     @contextmanager
-    def conn() -> Iterator[sqlite3.Connection]:
+    def _sqlite_conn() -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(
             DB_PATH,
             timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
@@ -454,6 +490,9 @@ else:
             raise
         finally:
             connection.close()
+
+    def conn():
+        return observed_connection(_sqlite_conn())
 
     def init_db() -> None:
         with conn() as connection:
@@ -523,6 +562,12 @@ else:
                 "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
             )
             connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
+                "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
+                "request_fingerprint TEXT NOT NULL, assignment_id TEXT REFERENCES experiment_assignments(assignment_id), "
+                "created_at TEXT NOT NULL)"
+            )
+            connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_experiment_assignments_group_link "
                 "ON experiment_assignments(group_link_id)"
             )
@@ -531,6 +576,12 @@ else:
                 "assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
                 "consent_version TEXT NOT NULL, accepted_at TEXT NOT NULL, "
                 "PRIMARY KEY(assignment_id, consent_version))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_stage_start_requests ("
+                "request_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT, stage_code TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES instrument_runs(run_id), "
+                "attempt_number INTEGER NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_stage_progress ("
@@ -565,6 +616,11 @@ else:
                 "active_seconds REAL NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 0, "
                 "started_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, completed_at TEXT, "
                 "PRIMARY KEY(assignment_id,step_instance_id))"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS experiment_time_event_requests ("
+                "event_id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL REFERENCES experiment_assignments(assignment_id), "
+                "step_instance_id TEXT NOT NULL, stage_code TEXT NOT NULL, event TEXT NOT NULL, created_at TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS questionnaire_responses ("
@@ -648,6 +704,7 @@ else:
 
 def _seed_registry(connection: Any) -> None:
     """Idempotently register the study and all three planned experiment modules."""
+    initialize_client_timing(connection)
     instrument_rows = [
         ("lifetrade", INSTRUMENT_NAME),
         ("questionnaire", "BarSan questionnaire"),
@@ -696,6 +753,23 @@ def _seed_registry(connection: Any) -> None:
 
 
 init_db()
+
+EXPORT_IDLE_SECONDS = max(0, int(os.getenv("BARSAN_EXPORT_IDLE_SECONDS", "0")))
+
+
+def _recent_task_activity() -> bool:
+    if not EXPORT_IDLE_SECONDS:
+        return False
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=EXPORT_IDLE_SECONDS)).isoformat()
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        row = connection.execute(
+            "SELECT 1 AS busy WHERE EXISTS (SELECT 1 FROM experiment_client_clocks WHERE received_at>" + marker + ") "
+            "OR EXISTS (SELECT 1 FROM experiment_time_tracking WHERE stage_code IN ('dd_lifetrade','ultimatum') AND last_seen_at>" + marker + ") "
+            "OR EXISTS (SELECT 1 FROM instrument_runs r JOIN instrument_versions v USING(instrument_version_id) "
+            "WHERE v.instrument_code IN ('lifetrade','ultimatum') AND r.status='in_progress' AND r.started_at>" + marker + ")",
+            (cutoff, cutoff, cutoff)).fetchone()
+    return row is not None
 
 
 class SessionIn(BaseModel):
@@ -768,6 +842,8 @@ class GroupClaimIn(BaseModel):
     group_token: str = Field(min_length=20, max_length=200)
     participant_code: str | None = Field(default=None, max_length=100)
     assign_random: bool = False
+    # Stable UUID lets the server return the same allocation after a lost response.
+    claim_request_id: str | None = Field(default=None, min_length=16, max_length=100)
 
 
 class AssignmentStatusBatchIn(BaseModel):
@@ -813,6 +889,10 @@ class ExperimentConsentIn(ExperimentIdentityIn):
 class StageStartIn(ExperimentIdentityIn):
     stage_code: StageCode
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
+    # Stable only within one in-memory start operation; a page reload creates a new ID.
+    start_request_id: str | None = Field(default=None, min_length=1, max_length=100)
+    # Backward-compatible recovery path for older clients.
+    resume_if_active: bool = False
 
 
 class StageDraftIn(ExperimentIdentityIn):
@@ -829,18 +909,42 @@ class QuestionnaireAnswerIn(ExperimentIdentityIn):
     response_value: Literal["1", "2", "3", "4", "5", "NA"]
     current_question_index: int = Field(default=0, ge=0, le=100)
 
+class QuestionnaireAnswerBatchItem(BaseModel):
+    question_code: str = Field(min_length=1, max_length=16)
+    response_value: Literal["1", "2", "3", "4", "5", "NA"]
+    current_question_index: int = Field(ge=0, le=100)
+
+
+class QuestionnaireAnswersBatchIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    step_id: str | None = Field(default=None, min_length=1, max_length=80)
+    answers: list[QuestionnaireAnswerBatchItem] = Field(min_length=1, max_length=10)
+
+
+class UltimatumEventItem(BaseModel):
+    round_id: str = Field(min_length=1, max_length=100)
+    event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
+    wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+
+
+class ClientTimingIn(ExperimentIdentityIn):
+    checkpoints: list[TimingCheckpoint] = Field(min_length=1, max_length=25)
+
 
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
     final_payload: dict[str, Any] | None = None
+    auxiliary_events: list[UltimatumEventItem] = Field(default_factory=list, max_length=25)
+    timing_checkpoints: list[TimingCheckpoint] = Field(default_factory=list, max_length=25)
 
 
 class ExperimentTimeIn(ExperimentIdentityIn):
     step_id: str = Field(min_length=1, max_length=80)
     stage_code: StageCode
     event: Literal["start", "heartbeat", "pause", "complete"]
+    event_id: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class UltimatumPrepareIn(ExperimentIdentityIn):
@@ -865,6 +969,9 @@ class UltimatumResolveIn(ExperimentIdentityIn):
     responded_at: str | None = Field(default=None, max_length=80)
     reaction_time_ms: float | None = Field(default=None, ge=0, le=3600000)
     wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    planned_wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    prepare_next: bool = False
+    auxiliary_events: list[UltimatumEventItem] = Field(default_factory=list, max_length=25)
     client_metadata: dict[str, Any] = Field(default_factory=dict)
     client_event_timestamps: dict[str, str] = Field(default_factory=dict)
 
@@ -873,6 +980,11 @@ class UltimatumEventsIn(ExperimentIdentityIn):
     run_id: str = Field(min_length=1, max_length=100)
     round_id: str = Field(min_length=1, max_length=100)
     event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
+
+
+class UltimatumEventsBatchIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    events: list[UltimatumEventItem] = Field(min_length=1, max_length=25)
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -1314,6 +1426,7 @@ def _lookup_assignment(
     participant_code: str,
     *,
     require_consent: bool = False,
+    lock_for_start: bool = False,
 ) -> dict[str, Any]:
     """Resolve one active invitation; optionally validate consent in the same DB round-trip."""
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
@@ -1340,6 +1453,8 @@ def _lookup_assignment(
         (CONSENT_VERSION, normalized_code, token_hash)
         if require_consent else (normalized_code, token_hash)
     )
+    if lock_for_start and DATABASE_URL:
+        query += " FOR UPDATE OF a"
     row = connection.execute(query, params).fetchone()
     if not row:
         # A generic error avoids distinguishing a bad code from a bad invitation link.
@@ -2110,8 +2225,20 @@ def claim_group_invitation(data: GroupClaimIn):
     if data.assign_random:
         if supplied_code:
             raise HTTPException(422, "برای دریافت کد تصادفی، فیلد کد شخصی باید خالی باشد.")
-    elif not supplied_code:
-        raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
+        normalized_code = ""
+        request_fingerprint = "random"
+    else:
+        if not supplied_code:
+            raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
+        normalized_code = normalize_participant_code(supplied_code)
+        request_fingerprint = "own:" + normalized_code
+
+    claim_request_id = None
+    if data.claim_request_id:
+        try:
+            claim_request_id = str(uuid.UUID(data.claim_request_id.strip()))
+        except (ValueError, AttributeError):
+            raise HTTPException(422, "شناسه درخواست لینک گروهی معتبر نیست.") from None
 
     group_token_hash = hashlib.sha256(data.group_token.strip().encode("utf-8")).hexdigest()
     marker = "%s" if DATABASE_URL else "?"
@@ -2125,6 +2252,57 @@ def claim_group_invitation(data: GroupClaimIn):
             ).fetchone()
             if not group or not bool(group["active"]):
                 raise HTTPException(404, "لینک گروهی معتبر نیست یا غیرفعال شده است.")
+
+            # Reserve the client request ID in the same transaction as the
+            # assignment. Concurrent replays wait for the first transaction,
+            # then receive the exact participant identity and invitation token.
+            if claim_request_id:
+                reservation = connection.execute(
+                    "INSERT INTO experiment_group_claim_requests("
+                    "request_id,group_link_id,request_fingerprint,assignment_id,created_at) "
+                    "VALUES(" + ",".join([marker] * 5) + ") "
+                    "ON CONFLICT(request_id) DO NOTHING",
+                    (claim_request_id, group["group_link_id"], request_fingerprint, None, now()),
+                )
+                if reservation.rowcount != 1:
+                    previous_request = connection.execute(
+                        "SELECT group_link_id,request_fingerprint,assignment_id "
+                        "FROM experiment_group_claim_requests WHERE request_id=" + marker,
+                        (claim_request_id,),
+                    ).fetchone()
+                    if (
+                        not previous_request
+                        or previous_request["group_link_id"] != group["group_link_id"]
+                        or previous_request["request_fingerprint"] != request_fingerprint
+                        or not previous_request["assignment_id"]
+                    ):
+                        raise HTTPException(409, "این شناسه درخواست قبلاً برای عملیات دیگری استفاده شده است.")
+                    previous_assignment = connection.execute(
+                        "SELECT a.assignment_id,a.group_link_id,a.invitation_token_encrypted,"
+                        "a.condition_code,a.active,p.participant_code "
+                        "FROM experiment_assignments AS a "
+                        "JOIN participants AS p ON p.participant_id=a.participant_id "
+                        "WHERE a.assignment_id=" + marker,
+                        (previous_request["assignment_id"],),
+                    ).fetchone()
+                    if (
+                        not previous_assignment
+                        or previous_assignment["group_link_id"] != group["group_link_id"]
+                        or not bool(previous_assignment["active"])
+                    ):
+                        raise HTTPException(409, "تخصیص قبلی این درخواست دیگر فعال نیست.")
+                    previous_token = _decrypt_invitation_token(
+                        previous_assignment["invitation_token_encrypted"]
+                    )
+                    if not previous_token:
+                        raise HTTPException(503, "بازیابی لینک اختصاصی موقتاً ممکن نشد.")
+                    return {
+                        "participant_code": previous_assignment["participant_code"],
+                        "invitation_token": previous_token,
+                        "condition_code": previous_assignment["condition_code"],
+                        "reused": True,
+                        "random_code_assigned": data.assign_random,
+                    }
 
             if data.assign_random:
                 participant_code = ""
@@ -2140,7 +2318,7 @@ def claim_group_invitation(data: GroupClaimIn):
                 if not participant_code:
                     raise HTTPException(503, "ساخت کد تصادفی ممکن نشد؛ دوباره تلاش کنید.")
             else:
-                participant_code = normalize_participant_code(supplied_code)
+                participant_code = normalized_code
 
             participant_id, _participation_id = _ensure_participation(
                 connection,
@@ -2161,6 +2339,12 @@ def claim_group_invitation(data: GroupClaimIn):
                 ):
                     previous_token = _decrypt_invitation_token(existing["invitation_token_encrypted"])
                     if previous_token:
+                        if claim_request_id:
+                            connection.execute(
+                                "UPDATE experiment_group_claim_requests SET assignment_id=" + marker
+                                + " WHERE request_id=" + marker,
+                                (existing["assignment_id"], claim_request_id),
+                            )
                         return {
                             "participant_code": participant_code,
                             "invitation_token": previous_token,
@@ -2170,6 +2354,7 @@ def claim_group_invitation(data: GroupClaimIn):
                         }
                 raise HTTPException(409, "برای این کد قبلاً در این مطالعه لینک اختصاصی صادر شده است.")
 
+            assignment_id = str(uuid.uuid4())
             invitation_token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
             token_encrypted = _encrypt_invitation_token(invitation_token)
@@ -2179,10 +2364,16 @@ def claim_group_invitation(data: GroupClaimIn):
                 "invitation_token_encrypted,active,assigned_at,workflow_json,group_link_id) VALUES("
                 + ",".join([marker] * 10) + ")",
                 (
-                    str(uuid.uuid4()), group["study_code"], participant_id, group["condition_code"],
+                    assignment_id, group["study_code"], participant_id, group["condition_code"],
                     token_hash, token_encrypted, 1, now(), group["workflow_json"], group["group_link_id"],
                 ),
             )
+            if claim_request_id:
+                connection.execute(
+                    "UPDATE experiment_group_claim_requests SET assignment_id=" + marker
+                    + " WHERE request_id=" + marker,
+                    (assignment_id, claim_request_id),
+                )
     except Exception as exc:
         if getattr(exc, "sqlstate", None) == "23505" or isinstance(exc, sqlite3.IntegrityError):
             raise HTTPException(409, "این کد هم‌زمان در حال ثبت است یا قبلاً برای این مطالعه استفاده شده است.") from None
@@ -2350,6 +2541,7 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     current_step = next((step for step in public_steps if step["status"] != "completed"), None)
     return {
         "participant_code": assignment["participant_code"],
+        "assignment_id": assignment["assignment_id"],
         "condition_code": assignment["condition_code"],
         "study_code": assignment["study_code"],
         "test_module_only": module_only,
@@ -2360,9 +2552,19 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     }
 
 
+@app.post("/api/experiment/time/checkpoints")
+def track_client_time(data: ClientTimingIn):
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        acknowledged = save_client_timing(connection, assignment, data.checkpoints, bool(DATABASE_URL), _json_value, now())
+    return {"saved": True, "acknowledged_checkpoints": acknowledged}
+
+
 @app.post("/api/experiment/time")
 def track_experiment_time(data: ExperimentTimeIn):
-    """Update active time atomically; avoid a SELECT followed by a separate UPDATE."""
+    """Update active time atomically and de-duplicate replayed client events."""
     with conn() as connection:
         assignment = _lookup_assignment(
             connection, data.invitation_token, data.participant_code, require_consent=True
@@ -2373,6 +2575,47 @@ def track_experiment_time(data: ExperimentTimeIn):
             raise HTTPException(422, "این ماژول در روند آزمایش این لینک وجود ندارد.")
 
         marker = "%s" if DATABASE_URL else "?"
+        if data.event_id:
+            inserted = connection.execute(
+                "INSERT INTO experiment_time_event_requests("
+                "event_id,assignment_id,step_instance_id,stage_code,event,created_at) "
+                "VALUES(" + ",".join([marker] * 6) + ") ON CONFLICT(event_id) DO NOTHING",
+                (
+                    data.event_id, assignment["assignment_id"], data.step_id,
+                    data.stage_code, data.event, now(),
+                ),
+            )
+            if inserted.rowcount == 0:
+                previous = connection.execute(
+                    "SELECT assignment_id,step_instance_id,stage_code,event "
+                    "FROM experiment_time_event_requests WHERE event_id=" + marker,
+                    (data.event_id,),
+                ).fetchone()
+                if (
+                    not previous
+                    or previous["assignment_id"] != assignment["assignment_id"]
+                    or previous["step_instance_id"] != data.step_id
+                    or previous["stage_code"] != data.stage_code
+                    or previous["event"] != data.event
+                ):
+                    raise HTTPException(409, "شناسهٔ رخداد زمان قبلاً برای درخواست دیگری استفاده شده است.")
+                snapshot = connection.execute(
+                    "SELECT active_seconds,is_active FROM experiment_time_tracking "
+                    "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
+                    (assignment["assignment_id"], data.step_id),
+                ).fetchone()
+                if not snapshot:
+                    raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
+                return {
+                    "saved": True,
+                    "duplicate": True,
+                    "event_id": data.event_id,
+                    "step_id": data.step_id,
+                    "event": data.event,
+                    "active_seconds": round(float(snapshot["active_seconds"] or 0), 2),
+                    "is_active": bool(snapshot["is_active"]),
+                }
+
         timestamp = now()
         is_active = 0 if data.event in {"pause", "complete"} else 1
         completed_at = timestamp if data.event == "complete" else None
@@ -2433,6 +2676,8 @@ def track_experiment_time(data: ExperimentTimeIn):
             raise HTTPException(409, "ثبت زمان این ماژول هنوز آغاز نشده است.")
         return {
             "saved": True,
+            "duplicate": False,
+            "event_id": data.event_id,
             "step_id": data.step_id,
             "event": data.event,
             "active_seconds": round(float(row["active_seconds"] or 0), 2),
@@ -2442,11 +2687,70 @@ def track_experiment_time(data: ExperimentTimeIn):
 
 @app.post("/api/experiment/stages/start")
 def start_experiment_stage(data: StageStartIn):
-    """Resume questionnaire draft, or supersede/restart an incomplete task attempt."""
+    """Start a fresh attempt unless an ambiguous transport retry explicitly requests recovery."""
     with conn() as connection:
+        # Take the write lock before any SQLite read: a deferred read-to-write
+        # upgrade can otherwise fail or let two starts observe missing progress.
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        elif data.start_request_id:
+            # Serialize even conflicting use of the same globally unique ID by
+            # different assignments. The lock is released by commit/rollback.
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("barsan-stage-start:" + data.start_request_id,),
+            )
         assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
+            connection, data.invitation_token, data.participant_code,
+            require_consent=True, lock_for_start=True,
         )
+        marker = "%s" if DATABASE_URL else "?"
+        if data.start_request_id:
+            prior_request = connection.execute(
+                "SELECT assignment_id,step_instance_id,stage_code,run_id,attempt_number "
+                "FROM experiment_stage_start_requests WHERE request_id=" + marker,
+                (data.start_request_id,),
+            ).fetchone()
+            if prior_request:
+                if (
+                    prior_request["assignment_id"] != assignment["assignment_id"]
+                    or prior_request["step_instance_id"] != data.step_id
+                    or prior_request["stage_code"] != data.stage_code
+                ):
+                    raise HTTPException(409, "شناسهٔ شروع قبلاً برای درخواست دیگری استفاده شده است.")
+                run = connection.execute(
+                    "SELECT status FROM instrument_runs WHERE run_id=" + marker,
+                    (prior_request["run_id"],),
+                ).fetchone()
+                if not run:
+                    raise HTTPException(409, "اجرای ثبت‌شده برای این درخواست دیگر موجود نیست.")
+                progress = None
+                if data.step_id:
+                    progress = connection.execute(
+                        "SELECT current_run_id,status,draft_payload FROM experiment_workflow_progress "
+                        "WHERE assignment_id=" + marker + " AND step_instance_id=" + marker,
+                        (assignment["assignment_id"], data.step_id),
+                    ).fetchone()
+                else:
+                    progress = connection.execute(
+                        "SELECT current_run_id,status,draft_payload FROM experiment_stage_progress "
+                        "WHERE participation_id=" + marker + " AND stage_code=" + marker,
+                        (assignment["participation_id"], data.stage_code),
+                    ).fetchone()
+                if not progress or progress["current_run_id"] != prior_request["run_id"]:
+                    raise HTTPException(409, "این اجرای آزمایش با شروع مجدد جایگزین شده است.")
+                return {
+                    "stage_code": data.stage_code,
+                    "status": progress["status"],
+                    "resumed": True,
+                    "already_completed": progress["status"] == "completed",
+                    "run_id": prior_request["run_id"],
+                    "attempt_number": prior_request["attempt_number"],
+                    "draft_payload": _json_value(progress["draft_payload"]),
+                    "condition_code": assignment["condition_code"],
+                    "step_id": data.step_id,
+                }
+
         # Workflow assignments use their own per-step progress rows. Avoid loading
         # legacy stage snapshots on the event path when a step_id is supplied.
         rows = _get_stage_rows(connection, assignment["participation_id"]) if not data.step_id else {}
@@ -2479,20 +2783,14 @@ def start_experiment_stage(data: StageStartIn):
                 "attempt_number": existing["attempt_number"],
             }
 
-        if not data.step_id:
-            stage_index = STAGE_ORDER.index(data.stage_code)
-            if stage_index > 0:
-                previous = STAGE_ORDER[stage_index - 1]
-                previous_state = rows.get(previous)
-                if not previous_state or previous_state["status"] != "completed":
-                    raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
-
-        # For the questionnaire, keep the same run and its saved draft after refresh.
+        # A retry after an ambiguous transport failure must not supersede a run
+        # that may already have committed. This flag is intentionally opt-in so
+        # an ordinary participant restart retains its established semantics.
         if (
-            data.stage_code == "questionnaire"
+            data.resume_if_active
             and existing
             and existing["status"] == "in_progress"
-            and existing["current_run_id"]
+            and existing.get("current_run_id")
         ):
             return {
                 "stage_code": data.stage_code,
@@ -2506,6 +2804,14 @@ def start_experiment_stage(data: StageStartIn):
                 "step_id": data.step_id,
             }
 
+        if not data.step_id:
+            stage_index = STAGE_ORDER.index(data.stage_code)
+            if stage_index > 0:
+                previous = STAGE_ORDER[stage_index - 1]
+                previous_state = rows.get(previous)
+                if not previous_state or previous_state["status"] != "completed":
+                    raise HTTPException(409, "مرحلهٔ قبلی هنوز تکمیل نشده است.")
+
         instrument_code, version, instrument_name = STAGE_TO_INSTRUMENT[data.stage_code]
         attempt_number = int(existing["attempt_number"]) + 1 if existing else 1
         timestamp = now()
@@ -2513,10 +2819,21 @@ def start_experiment_stage(data: StageStartIn):
 
         if old_run_id:
             marker = "%s" if DATABASE_URL else "?"
+            old_run = connection.execute(
+                "SELECT metadata FROM instrument_runs WHERE run_id=" + marker,
+                (old_run_id,),
+            ).fetchone()
+            old_metadata = _json_value(old_run["metadata"]) if old_run else {}
+            if not isinstance(old_metadata, dict):
+                old_metadata = {}
+            abandoned_draft = _json_value(existing.get("draft_payload")) if existing else {}
+            if abandoned_draft:
+                old_metadata["abandoned_draft_payload"] = abandoned_draft
+            old_metadata["supersede_reason"] = "participant_reentry"
             connection.execute(
                 "UPDATE instrument_runs SET status='superseded',completed_at=COALESCE(completed_at,"
-                + marker + ") WHERE run_id=" + marker,
-                (timestamp, old_run_id),
+                + marker + "),metadata=" + marker + " WHERE run_id=" + marker,
+                (timestamp, _json_param(old_metadata), old_run_id),
             )
 
         if DATABASE_URL:
@@ -2610,6 +2927,16 @@ def start_experiment_stage(data: StageStartIn):
                     (assignment["assignment_id"], assignment["participation_id"], data.step_id, workflow_step_index + 1,
                      data.stage_code, attempt_number, run_id, json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
                 )
+        if data.start_request_id:
+            connection.execute(
+                "INSERT INTO experiment_stage_start_requests("
+                "request_id,assignment_id,step_instance_id,stage_code,run_id,attempt_number,created_at) "
+                "VALUES(" + ",".join([marker] * 7) + ")",
+                (
+                    data.start_request_id, assignment["assignment_id"], data.step_id,
+                    data.stage_code, run_id, attempt_number, timestamp,
+                ),
+            )
     return {
         "stage_code": data.stage_code,
         "status": "in_progress",
@@ -2625,7 +2952,7 @@ def start_experiment_stage(data: StageStartIn):
 
 @app.post("/api/experiment/stages/draft")
 def save_questionnaire_draft(data: StageDraftIn):
-    """Persist questionnaire answers continuously so a refresh restores the same draft."""
+    """Persist draft state within an attempt; re-entry creates a separate fresh attempt."""
     with conn() as connection:
         assignment = _lookup_questionnaire_assignment_state(
             connection, data.invitation_token, data.participant_code, step_id=data.step_id
@@ -2652,62 +2979,110 @@ def save_questionnaire_draft(data: StageDraftIn):
     return {"saved": True, "stage_code": data.stage_code, "run_id": data.run_id, "step_id": data.step_id}
 
 
-@app.post("/api/experiment/questionnaire/answer")
-def save_questionnaire_answer(data: QuestionnaireAnswerIn):
-    """Upsert one answer by its hidden question code and refresh the server-side draft."""
-    if data.question_code not in QUESTIONNAIRE_QUESTION_CODES:
-        raise HTTPException(422, "Unknown questionnaire question code")
-    with conn() as connection:
-        assignment = _lookup_questionnaire_assignment_state(
-            connection, data.invitation_token, data.participant_code, step_id=data.step_id
-        )
-        marker = "%s" if DATABASE_URL else "?"
-        if data.step_id and assignment["workflow_run_id"] != data.run_id:
-            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if assignment["questionnaire_run_id"] != data.run_id:
-            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
-        if assignment["questionnaire_status"] != "in_progress":
-            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
-        timestamp = now()
+def _persist_questionnaire_answer_rows(
+    connection: Any,
+    assignment: dict[str, Any],
+    run_id: str,
+    step_id: str | None,
+    answers: list[QuestionnaireAnswerBatchItem] | list[QuestionnaireAnswerIn],
+) -> list[dict[str, Any]]:
+    """Persist a bounded answer batch atomically and refresh the draft once."""
+    marker = "%s" if DATABASE_URL else "?"
+    timestamp = now()
+    saved: list[dict[str, Any]] = []
+    for answer in answers:
         if DATABASE_URL:
             connection.execute(
                 "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
                 "VALUES(%s,%s,%s,%s) ON CONFLICT(run_id,question_code) DO UPDATE SET "
                 "response_value=EXCLUDED.response_value,updated_at=EXCLUDED.updated_at",
-                (data.run_id, data.question_code, data.response_value, timestamp),
+                (run_id, answer.question_code, answer.response_value, timestamp),
             )
         else:
             connection.execute(
                 "INSERT INTO questionnaire_responses(run_id,question_code,response_value,updated_at) "
                 "VALUES(?,?,?,?) ON CONFLICT(run_id,question_code) DO UPDATE SET "
                 "response_value=excluded.response_value,updated_at=excluded.updated_at",
-                (data.run_id, data.question_code, data.response_value, timestamp),
+                (run_id, answer.question_code, answer.response_value, timestamp),
             )
-        draft = _json_value(assignment["questionnaire_draft_payload"])
-        answers = draft.get("answers")
-        if not isinstance(answers, dict):
-            answers = {}
-        answers[data.question_code] = data.response_value
-        draft["answers"] = answers
-        draft["current_question_index"] = data.current_question_index
+        saved.append({
+            "question_code": answer.question_code,
+            "response_value": answer.response_value,
+            "current_question_index": answer.current_question_index,
+        })
+
+    draft = _json_value(assignment["questionnaire_draft_payload"])
+    draft_answers = draft.get("answers")
+    if not isinstance(draft_answers, dict):
+        draft_answers = {}
+    for answer in answers:
+        draft_answers[answer.question_code] = answer.response_value
+    draft["answers"] = draft_answers
+    draft["current_question_index"] = answers[-1].current_question_index
+    connection.execute(
+        "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
+        + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
+        (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+    )
+    if step_id:
         connection.execute(
-            "UPDATE experiment_stage_progress SET draft_payload=" + marker + ",updated_at=" + marker
-            + " WHERE participation_id=" + marker + " AND stage_code=" + marker,
-            (_json_param(draft), timestamp, assignment["participation_id"], "questionnaire"),
+            "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
+            + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
+            (_json_param(draft), timestamp, assignment["assignment_id"], step_id, run_id),
         )
-        if data.step_id:
-            connection.execute(
-                "UPDATE experiment_workflow_progress SET draft_payload=" + marker + ",updated_at=" + marker
-                + " WHERE assignment_id=" + marker + " AND step_instance_id=" + marker + " AND current_run_id=" + marker,
-                (_json_param(draft), timestamp, assignment["assignment_id"], data.step_id, data.run_id),
-            )
+    return saved
+
+
+def _validate_questionnaire_answer_codes(answers: list[Any]) -> None:
+    codes = [answer.question_code for answer in answers]
+    if any(code not in QUESTIONNAIRE_QUESTION_CODES for code in codes):
+        raise HTTPException(422, "Unknown questionnaire question code")
+    if len(codes) != len(set(codes)):
+        raise HTTPException(422, "A questionnaire batch cannot contain duplicate question codes")
+
+
+@app.post("/api/experiment/questionnaire/answers")
+def save_questionnaire_answer_batch(data: QuestionnaireAnswersBatchIn):
+    """Atomically upsert up to ten answers while acquiring one DB connection per batch."""
+    _validate_questionnaire_answer_codes(data.answers)
+    with conn() as connection:
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
+        )
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_status"] != "in_progress":
+            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
+        saved = _persist_questionnaire_answer_rows(
+            connection, assignment, data.run_id, data.step_id, data.answers
+        )
     return {
         "saved": True,
-        "question_code": data.question_code,
-        "response_value": data.response_value,
-        "current_question_index": data.current_question_index,
+        "saved_count": len(saved),
+        "answers": saved,
     }
 
+
+@app.post("/api/experiment/questionnaire/answer")
+def save_questionnaire_answer(data: QuestionnaireAnswerIn):
+    """Upsert one answer by its hidden question code and refresh the server-side draft."""
+    _validate_questionnaire_answer_codes([data])
+    with conn() as connection:
+        assignment = _lookup_questionnaire_assignment_state(
+            connection, data.invitation_token, data.participant_code, step_id=data.step_id
+        )
+        if data.step_id and assignment["workflow_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_run_id"] != data.run_id:
+            raise HTTPException(409, "این اجرای پرسشنامه دیگر فعال نیست.")
+        if assignment["questionnaire_status"] != "in_progress":
+            raise HTTPException(409, "پرسشنامه در وضعیت قابل ویرایش نیست.")
+        saved = _persist_questionnaire_answer_rows(
+            connection, assignment, data.run_id, data.step_id, [data]
+        )[0]
+    return {"saved": True, **saved}
 
 def _lookup_active_ultimatum_stage(
     connection: Any,
@@ -3153,8 +3528,7 @@ def _ultimatum_score_totals(connection: Any, run_id: str, block_code: str) -> tu
     return {"score": total_score, "lost": total_lost}, selected_block
 
 
-@app.post("/api/experiment/ultimatum/resolve")
-def resolve_ultimatum_round(data: UltimatumResolveIn):
+def _resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
     _validate_event_timestamps(data.client_event_timestamps, ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS)
     with conn() as connection:
@@ -3247,6 +3621,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "potential_points_lost": potential_points_lost,
             "reaction_time_ms": reaction_time,
             "wait_duration_ms": wait_duration,
+            "planned_wait_duration_ms": data.planned_wait_duration_ms,
             "decision_screen_shown_at": data.decision_screen_shown_at,
             "responded_at": responded_at,
             "client_metadata_resolve": data.client_metadata,
@@ -3314,37 +3689,133 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
         return result
 
 
+def _next_ultimatum_request(data: UltimatumResolveIn, result: dict[str, Any]) -> dict[str, Any] | None:
+    if result["phase"] == "practice" and result["block_code"] == "practice_proposer_agent":
+        return {"phase": "practice", "block_code": "practice_responder_coworker", "block_order": 0,
+                "trial_in_block": 1, "trial_sequence": 0}
+    if result["phase"] == "main" and result["trial_in_block"] < ULTIMATUM_MAIN_BLOCK_TRIALS:
+        trial = result["trial_in_block"] + 1
+        order = result["block_order"]
+        return {"phase": "main", "block_code": result["block_code"], "block_order": order,
+                "trial_in_block": trial, "trial_sequence": (order - 1) * 5 + trial}
+    if result["phase"] == "main" and result["block_order"] == ULTIMATUM_MAIN_BLOCK_COUNT:
+        return None
+    with conn() as connection:
+        _assignment, state = _lookup_active_ultimatum_stage(
+            connection, data.invitation_token, data.participant_code, data.run_id
+        )
+        order_list = _json_value(state["draft_payload"])["block_order"]
+    order = 1 if result["phase"] == "practice" else result["block_order"] + 1
+    return {"phase": "main", "block_code": order_list[order - 1], "block_order": order,
+            "trial_in_block": 1, "trial_sequence": (order - 1) * 5 + 1}
+
+
+@app.post("/api/experiment/ultimatum/resolve")
+def resolve_ultimatum_round(data: UltimatumResolveIn):
+    result = _resolve_ultimatum_round(data)
+    if data.auxiliary_events:
+        result = dict(result)
+        result["acknowledged_event_round_ids"] = _append_auxiliary_events(data, data.auxiliary_events)
+    if not data.prepare_next:
+        return result
+    # The choice is committed before optional prefetch. A prefetch failure must not
+    # turn a successfully persisted response into a failed resolve.
+    result = dict(result)
+    result["next_round"] = None
+    result["next_round_request"] = None
+    try:
+        request = _next_ultimatum_request(data, result)
+        if request:
+            result["next_round"] = prepare_ultimatum_round(UltimatumPrepareIn(
+                invitation_token=data.invitation_token, participant_code=data.participant_code,
+                run_id=data.run_id, client_metadata=data.client_metadata, **request
+            ))
+            result["next_round_request"] = request
+    except HTTPException as exc:
+        if exc.status_code not in {409, 503}:
+            raise
+        result["prefetch_deferred"] = True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Round prefetch deferred: %s", type(exc).__name__)
+        result["prefetch_deferred"] = True
+    return result
+
+
+def _record_round_events(connection: Any, assignment: dict[str, Any], run_id: str,
+                         item: UltimatumEventItem, extended: bool = False) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT trial.status,trial.payload FROM ultimatum_trials AS trial "
+        "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+        "JOIN instrument_versions AS instrument "
+        "ON instrument.instrument_version_id=run.instrument_version_id "
+        "WHERE trial.round_id=" + marker + " AND trial.run_id=" + marker
+        + " AND run.participation_id=" + marker + " AND instrument.instrument_code='ultimatum'"
+        + (" FOR UPDATE OF trial" if DATABASE_URL else ""),
+        (item.round_id, run_id, assignment["participation_id"]),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "دور اولتیماتوم برای این شرکت‌کننده پیدا نشد.")
+    if row["status"] != "completed":
+        raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
+    payload = _json_value(row["payload"])
+    timestamps = payload.get("client_event_timestamps") or {}
+    first_wait_end = "waiting_ended_at" not in timestamps
+    for event_name, event_time in item.event_timestamps.items():
+        timestamps.setdefault(event_name, event_time)
+    payload["client_event_timestamps"] = timestamps
+    payload.setdefault("client_event_server_received_at", now())
+    update_wait = (extended and first_wait_end and "waiting_ended_at" in item.event_timestamps
+                   and item.wait_duration_ms is not None and payload.get("wait_duration_ms") is None)
+    if update_wait:
+        payload["wait_duration_ms"] = item.wait_duration_ms
+    connection.execute(
+        "UPDATE ultimatum_trials SET payload=" + marker
+        + (",wait_duration_ms=" + marker if update_wait else "")
+        + " WHERE round_id=" + marker + " AND run_id=" + marker,
+        ((_json_param(payload), item.wait_duration_ms, item.round_id, run_id) if update_wait
+         else (_json_param(payload), item.round_id, run_id)),
+    )
+
+
 @app.post("/api/experiment/ultimatum/events")
 def record_ultimatum_events(data: UltimatumEventsIn):
-    """Append post-decision client event times to a completed, active-attempt trial."""
+    """Compatibility endpoint; preserve first-write timestamps, including old attempts."""
     _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
-    marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        _assignment, row = _lookup_active_ultimatum_round(
-            connection,
-            data.invitation_token,
-            data.participant_code,
-            data.run_id,
-            data.round_id,
-        )
-        if row["status"] != "completed":
-            raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
-        payload = _json_value(row["payload"])
-        timestamps = payload.get("client_event_timestamps") or {}
-        # Keep first-write timestamps so retries remain idempotent and auditable.
-        for event_name, event_time in data.event_timestamps.items():
-            timestamps.setdefault(event_name, event_time)
-        payload["client_event_timestamps"] = timestamps
-        payload["client_event_server_received_at"] = now()
-        connection.execute(
-            "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker + " AND run_id=" + marker,
-            (_json_param(payload), data.round_id, data.run_id),
-        )
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        item = UltimatumEventItem(round_id=data.round_id, event_timestamps=data.event_timestamps)
+        _record_round_events(connection, assignment, data.run_id, item)
+        marker = "%s" if DATABASE_URL else "?"
+        saved = connection.execute("SELECT payload FROM ultimatum_trials WHERE round_id=" + marker,
+                                   (data.round_id,)).fetchone()
+        timestamps = _json_value(saved["payload"])["client_event_timestamps"]
     return {"round_id": data.round_id, "saved": True, "event_timestamps": timestamps}
 
 
-@app.post("/api/experiment/stages/complete")
-def complete_experiment_stage(data: StageCompleteIn):
+@app.post("/api/experiment/ultimatum/events/batch")
+def record_ultimatum_event_batch(data: UltimatumEventsBatchIn):
+    """One bounded atomic upload for non-critical events; no changed random outcomes."""
+    allowed = ULTIMATUM_POST_RESOLVE_EVENT_FIELDS | {"waiting_ended_at"}
+    if len({item.round_id for item in data.events}) != len(data.events):
+        raise HTTPException(422, "هر دور فقط یک‌بار در بستهٔ زمان‌ها مجاز است.")
+    for item in data.events:
+        _validate_event_timestamps(item.event_timestamps, allowed)
+        if item.wait_duration_ms is not None and "waiting_ended_at" not in item.event_timestamps:
+            raise HTTPException(422, "مدت انتظار باید همراه زمان پایان انتظار باشد.")
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        # Stable lock order avoids deadlocks between overlapping batches.
+        for item in sorted(data.events, key=lambda item: item.round_id):
+            _record_round_events(connection, assignment, data.run_id, item, extended=True)
+    return {"saved": True, "round_ids": [item.round_id for item in data.events]}
+
+
+def _complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
     with conn() as connection:
         assignment = _lookup_assignment(
@@ -3485,6 +3956,57 @@ def complete_experiment_stage(data: StageCompleteIn):
         )
     return {"completed": True, "already_completed": False, "stage_code": data.stage_code, "step_id": data.step_id}
 
+
+
+def _append_auxiliary_events(identity: Any, events: list[UltimatumEventItem]) -> list[str]:
+    try:
+        response = record_ultimatum_event_batch(UltimatumEventsBatchIn(
+            invitation_token=identity.invitation_token, participant_code=identity.participant_code,
+            run_id=identity.run_id, events=events,
+        ))
+        return response["round_ids"]
+    except HTTPException:
+        # A bad auxiliary item never invalidates an already committed choice.
+        # No ack is returned; the local rows remain available for recovery.
+        return []
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Auxiliary timing upload deferred: %s", type(exc).__name__)
+        return []
+
+
+@app.post("/api/experiment/stages/complete")
+def complete_experiment_stage(data: StageCompleteIn):
+    result = _complete_experiment_stage(data)
+    if data.timing_checkpoints:
+        try:
+            result["acknowledged_checkpoints"] = track_client_time(ClientTimingIn(
+                invitation_token=data.invitation_token, participant_code=data.participant_code,
+                checkpoints=data.timing_checkpoints))["acknowledged_checkpoints"]
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Client timing deferred: %s", type(exc).__name__)
+    if data.stage_code == "ultimatum" and data.auxiliary_events:
+        result["acknowledged_event_round_ids"] = _append_auxiliary_events(data, data.auxiliary_events)
+    return result
+
+
+@app.post("/api/experiment/dd/complete")
+def complete_dd_task(data: StageCompleteIn):
+    if data.stage_code != "dd_lifetrade":
+        raise HTTPException(422, "این مسیر فقط برای بازی انتخاب است.")
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        count = connection.execute(
+            "SELECT COUNT(*) AS n FROM lifetrade_trials AS trial "
+            "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+            "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
+            "WHERE trial.run_id=" + marker + " AND run.participation_id=" + marker
+            + " AND version.instrument_code='lifetrade'",
+            (data.run_id, assignment["participation_id"]),
+        ).fetchone()
+        if count["n"] != 30:
+            raise HTTPException(422, "همهٔ ۳۰ پاسخ بازی انتخاب هنوز ثبت نشده‌اند.")
+    return complete_experiment_stage(data)
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -3736,6 +4258,12 @@ def reset_study_data(
     # The preview count and deletion occur within a single transaction; scoped child rows are
     # removed before their parent run/participation/assignment rows to respect foreign keys.
     with conn() as connection:
+        for table in ("experiment_client_clock_checkpoints", "experiment_client_clocks"):
+            cursor = connection.execute("DELETE FROM " + table + " WHERE run_id IN ("
+                "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp "
+                "ON sp.participation_id=ir.participation_id WHERE "
+                + condition.replace("study_code", "sp.study_code") + ")", params)
+            deleted[table] = max(0, int(cursor.rowcount or 0))
         for name, query in (
             ("questionnaire_responses",
              "DELETE FROM questionnaire_responses WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
@@ -3840,6 +4368,11 @@ def experiment_progress(
         workflow_rows = [dict(row) for row in connection.execute(workflow_query, params).fetchall()]
         stage_rows = [dict(row) for row in connection.execute(stage_query, params).fetchall()]
         time_rows = [dict(row) for row in connection.execute(time_query, params).fetchall()] if include_timing else []
+        client_times = [dict(row) for row in connection.execute(
+            "SELECT t.assignment_id,t.step_instance_id,SUM(t.visible_ms) AS visible_ms,"
+            "SUM(t.uncertain_ms) AS uncertain_ms,MAX(t.received_at) AS received_at "
+            "FROM experiment_client_clocks t JOIN experiment_assignments a ON a.assignment_id=t.assignment_id WHERE "
+            + condition + " AND a.active=1 GROUP BY t.assignment_id,t.step_instance_id", params).fetchall()] if include_timing else []
 
     workflow_by_assignment: dict[str, dict[str, dict[str, Any]]] = {}
     for saved in workflow_rows:
@@ -3865,6 +4398,14 @@ def experiment_progress(
             "active_seconds": round(seconds, 2),
             "last_seen_at": timed["last_seen_at"],
         }
+
+    for observed in client_times:
+        timing = time_by_assignment.setdefault(str(observed["assignment_id"]), {}).setdefault(str(observed["step_instance_id"]), {})
+        timing["legacy_active_seconds"] = timing.get("active_seconds", 0)
+        timing["active_seconds"] = round(observed["visible_ms"] / 1000, 2)
+        timing["uncertain_seconds"] = round(observed["uncertain_ms"] / 1000, 2)
+        timing["time_source"] = "client_visible_v2"
+        timing["last_seen_at"] = observed["received_at"]
 
     stale_cutoff = current_time.timestamp() - 24 * 60 * 60
 
@@ -3916,6 +4457,9 @@ def experiment_progress(
                 "completed_at": (saved or {}).get("completed_at"),
                 "updated_at": (saved or {}).get("updated_at"),
                 "active_seconds": round(seconds, 2) if include_timing else None,
+                "time_source": timing.get("time_source", "server_arrival_legacy") if include_timing else None,
+                "legacy_active_seconds": timing.get("legacy_active_seconds", seconds) if include_timing else None,
+                "uncertain_seconds": timing.get("uncertain_seconds", 0) if include_timing else None,
             })
             for field in ("started_at", "completed_at", "updated_at"):
                 last_activity_candidates.append(parse_time((saved or {}).get(field)))
@@ -4322,6 +4866,116 @@ async def _read_streaming_response(response: StreamingResponse) -> bytes:
     return b"".join(chunks)
 
 
+def _ordered_task_export(module: str, scope: str):
+    """Bounded keyset reads release the DB connection before yielding to a slow client."""
+    marker = "%s" if DATABASE_URL else "?"
+    table, key = (("lifetrade_trials", "client_event_id") if module == "dd" else ("ultimatum_trials", "round_id"))
+    fields = DD_FIELDS if module == "dd" else UT_FIELDS
+    def encode(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    def generate():
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        cursor = ""
+        while True:
+            params = (cursor,)
+            with conn() as connection:
+                rows = connection.execute(
+                    "SELECT trial.*,sp.study_code,p.participant_code,a.condition_code,"
+                    "run.status AS run_status,run.started_at AS run_started_at,run.completed_at AS run_completed_at,"
+                    "run.metadata AS run_metadata,version.version AS instrument_version "
+                    "FROM (SELECT * FROM " + table + " WHERE " + key + ">" + marker
+                    + " ORDER BY " + key + " LIMIT 200) AS trial "
+                    "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+                    "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
+                    "JOIN study_participations AS sp ON sp.participation_id=run.participation_id "
+                    "JOIN participants AS p ON p.participant_id=sp.participant_id "
+                    "LEFT JOIN experiment_assignments AS a ON a.participant_id=sp.participant_id AND a.study_code=sp.study_code "
+                    "ORDER BY trial." + key, params,
+                ).fetchall()
+            if not rows:
+                break
+            buffer.seek(0);buffer.truncate(0)
+            for raw in rows:
+                if not (str(raw["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else raw["study_code"] == STUDY_CODE):
+                    continue
+                item = dict(raw)
+                payload = _json_value(item["payload"])
+                metadata = _json_value(item.pop("run_metadata"))
+                item.update(schema_version=2, attempt_number=metadata.get("attempt_number", 1),
+                            server_received_at=item.get("received_at"))
+                if module == "dd":
+                    record = dd_record(item, payload)
+                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at"}})
+                    item.update(stimulus_index=payload.get("index"),
+                                left_stimulus=record["stimulus"]["left"],right_stimulus=record["stimulus"]["right"],
+                                stimulus_parameters_json=encode(record["stimulus"]["parameters"]),
+                                adaptive_path_json=encode(record["adaptive_path"]))
+                else:
+                    item["round_status"] = item["status"]
+                    record = ultimatum_record(item, payload)
+                    item.update(planned_wait_duration_ms=payload.get("planned_wait_duration_ms"),
+                                events_json=encode(record["timing"]["events"]),
+                                model_json=encode(record["model"]),device_json=encode(record["device"]))
+                item.update(record_json=encode(record), raw_payload_json=encode(payload))
+                writer.writerow(item)
+            cursor = rows[-1][key]
+            if buffer.tell():
+                yield buffer.getvalue()
+    return StreamingResponse(generate(),media_type="text/csv; charset=utf-8",headers={
+        "Content-Disposition": 'attachment; filename="barsan_' + module + '_records_v2_' + scope + '.csv"',
+        "Cache-Control": "no-store",
+    })
+
+
+@app.get("/api/admin/dd/records.csv")
+def export_dd_records(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    return _ordered_task_export("dd", scope)
+
+
+@app.get("/api/admin/ultimatum/records.csv")
+def export_ultimatum_records(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    return _ordered_task_export("ultimatum", scope)
+
+
+@app.get("/api/admin/time/checkpoints.csv")
+def export_client_time(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    def generate():
+        fields = ["schema_version", "study_code", "participant_code", "run_id", "run_status", "step_instance_id",
+                  "stage_code", "clock_id", "sequence", "visible_ms", "uncertain_ms", "closed", "received_at"]
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        cursor = ("", 0)
+        while True:
+            params = cursor
+            with conn() as connection:
+                rows = connection.execute(
+                    "SELECT c.*,t.clock_id,t.step_instance_id,t.stage_code,r.status AS run_status,"
+                    "sp.study_code,p.participant_code FROM (SELECT * FROM experiment_client_clock_checkpoints "
+                    "WHERE (run_id,sequence)>(" + marker + "," + marker + ") ORDER BY run_id,sequence LIMIT 200) c "
+                    "JOIN experiment_client_clocks t USING(run_id) JOIN instrument_runs r USING(run_id) "
+                    "JOIN study_participations sp USING(participation_id) JOIN participants p USING(participant_id) "
+                    "ORDER BY c.run_id,c.sequence", params).fetchall()
+            if not rows:
+                break
+            cursor = (rows[-1]["run_id"], rows[-1]["sequence"])
+            buffer.seek(0); buffer.truncate(0)
+            writer.writerows({"schema_version": 2, **dict(row)} for row in rows
+                if (str(row["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else row["study_code"] == STUDY_CODE))
+            if buffer.tell():
+                yield buffer.getvalue()
+    return StreamingResponse(generate(), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="barsan_time_checkpoints_v2.csv"', "Cache-Control": "no-store"})
+
+
 @app.get("/api/admin/export-all.zip")
 def export_all_modules_zip(
     x_admin_token: str | None = Header(default=None),
@@ -4334,6 +4988,7 @@ def export_all_modules_zip(
         ("questionnaire.csv", export_questionnaire_csv(x_admin_token, scope)),
         ("lifetrade.csv", export_csv(x_admin_token, scope)),
         ("ultimatum.csv", export_ultimatum_csv(x_admin_token, scope)),
+        ("time_checkpoints_v2.csv", export_client_time(x_admin_token, scope)),
     ]
     archive_buffer = io.BytesIO()
     with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -4374,7 +5029,12 @@ app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")
 @lru_cache(maxsize=1)
 def load_homepage() -> str:
     with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
-        return file.read()
+        html = file.read()
+    with open(os.path.join(ROOT, "app", "persistence.js"), encoding="utf-8") as file:
+        persistence = file.read()
+    with open(os.path.join(ROOT, "app", "task_timing.js"), encoding="utf-8") as file:
+        timing = file.read()
+    return html.replace("<!-- BARSAN_PERSISTENCE -->", "<script>" + persistence + "</script><script>" + timing + "</script>", 1)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -4389,6 +5049,13 @@ def admin_links_page():
         raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 
 
+@app.get("/assets/vazirmatn-v33.003.woff2")
+def task_font():
+    return FileResponse(os.path.join(ROOT, "app", "fonts", "vazirmatn-v33.003.woff2"),
+                        media_type="font/woff2", headers={"Cache-Control": "public,max-age=31536000,immutable"})
+
+
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return load_homepage()
+def home(request: Request):
+    root_path = request.scope.get("root_path", "").rstrip("/")
+    return load_homepage().replace("__BARSAN_FONT_URL__", root_path + "/assets/vazirmatn-v33.003.woff2")

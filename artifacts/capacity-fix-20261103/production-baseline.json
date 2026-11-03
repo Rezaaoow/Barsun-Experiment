@@ -1,0 +1,42 @@
+{
+  "baseline": {
+    "time": 1793655224.169144,
+    "ok": true,
+    "seconds": 0.092
+  },
+  "restart_performed": false,
+  "probes": [
+    {
+      "time": 1793655224.176055,
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "time": 1793655229.183529,
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "time": 1793655234.1907353,
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "time": 1793655239.1989074,
+      "ok": true,
+      "seconds": 0.008
+    },
+    {
+      "time": 1793655244.2061474,
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "time": 1793655249.2135725,
+      "ok": true,
+      "seconds": 0.007
+    }
+  ],
+  "stable_baseline": true,
+  "production_source_and_route_unchanged": true
+}

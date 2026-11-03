@@ -1,0 +1,57 @@
+{
+  "checks": [
+    {
+      "name": "six concurrent starts share one run: check-questionnaire",
+      "passed": true
+    },
+    {
+      "name": "six concurrent starts share one run: check-questionnaire",
+      "passed": true
+    },
+    {
+      "name": "start_request_id replays the same attempt",
+      "passed": true
+    },
+    {
+      "name": "six concurrent starts share one run: check-questionnaire",
+      "passed": true
+    },
+    {
+      "name": "questionnaire batch replay, atomic rejection, and superseded data preservation",
+      "passed": true
+    },
+    {
+      "name": "time event replay deduplicates and conflicting event IDs reject",
+      "passed": true
+    },
+    {
+      "name": "six concurrent starts share one run: check-dd",
+      "passed": true
+    },
+    {
+      "name": "Life-Trade 30 trials with replayed batches",
+      "passed": true
+    },
+    {
+      "name": "six concurrent starts share one run: check-frame",
+      "passed": true
+    },
+    {
+      "name": "check-frame: 22 rounds, idempotent resolution, and post-completion events",
+      "passed": true
+    },
+    {
+      "name": "six concurrent starts share one run: check-control",
+      "passed": true
+    },
+    {
+      "name": "check-control: 22 rounds, idempotent resolution, and post-completion events",
+      "passed": true
+    },
+    {
+      "name": "database confirms 25 questionnaire responses, 30 unique DD trials, 44 Ultimatum rounds, and 4 completed steps",
+      "passed": true
+    }
+  ],
+  "release_sha": "7af183881410faf5d089efefe44d71d43781d8ce"
+}

@@ -1,0 +1,23 @@
+{
+  "commit": "7af183881410faf5d089efefe44d71d43781d8ce",
+  "time": 1793655066.657864,
+  "health": [
+    {
+      "status": 200,
+      "trace": "7a3f3e2c3e7e4f20838904bbf1df0659",
+      "timing": "app;dur=1.687,pool;dur=0.041,sql;dur=0.441"
+    },
+    {
+      "status": 200,
+      "trace": "802432743d8a47778bfd081eeef8ca6f",
+      "timing": "app;dur=2.570,pool;dur=0.054,sql;dur=0.600"
+    },
+    {
+      "status": 200,
+      "trace": "7502713b375549b5ac4ceffdd454c6c5",
+      "timing": "app;dur=1.473,pool;dur=0.032,sql;dur=0.360"
+    }
+  ],
+  "production_source_and_route_unchanged": true,
+  "supervisor": "barsan-native                    RUNNING   pid 3725016, uptime 0:00:12"
+}

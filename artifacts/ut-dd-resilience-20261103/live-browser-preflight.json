@@ -1,0 +1,11 @@
+{
+  "public_html_status": 200,
+  "features": {
+    "store": true,
+    "transport": true,
+    "completion": true,
+    "font": true
+  },
+  "indexeddb_survived_reload_and_offline": true,
+  "probe_remaining": 0
+}

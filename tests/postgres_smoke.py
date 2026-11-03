@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
 
 import barsan_experiment as main
+from stage_start_checks import check_concurrent_starts
+from resilience_checks import check_dd_recovery, check_ultimatum_recovery
 
 
 def main_test():
@@ -332,8 +334,30 @@ def main_test():
         ).fetchone()["total"]
     assert total == 120, total
 
-    print("PostgreSQL smoke and 24-participant concurrency tests passed")
+    with TestClient(main.app) as client:
+        check_concurrent_starts(main, client, "ci-admin-token")
+    print("PostgreSQL smoke, 24-participant and concurrent stage-start tests passed")
+
+    with TestClient(main.app) as resilience_client:
+        from export_checks import check_filtered_export_pages
+        check_filtered_export_pages(resilience_client)
+        from timing_checks import check_client_timing
+        check_client_timing(resilience_client)
+        previous_idle = main.EXPORT_IDLE_SECONDS
+        try:
+            main.EXPORT_IDLE_SECONDS = 90
+            assert main._recent_task_activity()
+            queued = resilience_client.get('/api/admin/dd/records.csv', headers={'X-Admin-Token': main.ADMIN_TOKEN})
+            assert queued.status_code == 429 and queued.headers['X-Barsan-Export-Busy'] == '1'
+            assert resilience_client.get('/api/health').status_code == 200
+        finally:
+            main.EXPORT_IDLE_SECONDS = previous_idle
+        check_dd_recovery(resilience_client)
+        check_ultimatum_recovery(resilience_client, "A")
+        check_ultimatum_recovery(resilience_client, "B")
+    print("PostgreSQL task recovery: DD + both Ultimatum variants passed")
 
 
 if __name__ == "__main__":
     main_test()
+

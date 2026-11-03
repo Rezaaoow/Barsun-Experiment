@@ -1,0 +1,25 @@
+{
+  "client_completed": 600,
+  "expected_users": 600,
+  "http_requests": 58219,
+  "failed_http_requests": 0,
+  "external_200": {
+    "p95_ms": 1202.9069499999994,
+    "p99_ms": 2553.569989999998,
+    "exit_code": 99
+  },
+  "on_host_400": {
+    "p95_ms": 180.04631459999996,
+    "p99_ms": 218.9420627000001,
+    "exit_code": 0
+  },
+  "external_production_guard": {
+    "probes": 38,
+    "failures": 0
+  },
+  "database_integrity_passed": true,
+  "performance_thresholds_all_passed": false,
+  "quantiles_not_aggregated": true,
+  "sources": 2,
+  "real_browsers": false
+}
