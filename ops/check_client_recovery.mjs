@@ -34,7 +34,7 @@ const BarsanStore={
   const id=JSON.stringify([scope,key]),previous=entries.get(id);
   let merged=previous&&mode==='immutable'?previous.value:value;
   if(previous&&mode==='events')merged={...previous.value,...value,payload:{...previous.value.payload,...value.payload,event_timestamps:{...value.payload.event_timestamps,...previous.value.payload.event_timestamps}}};
-  const entry={id,scope,key,revision:(previous?.revision||0)+1,value:merged};entries.set(id,entry);return entry;
+  const entry={id,scope,key,revision:randomUUID(),value:merged};entries.set(id,entry);return entry;
  },
  async list(scope){return [...entries.values()].filter(entry=>scope===undefined||entry.scope===scope);},
  async ack(sent){for(const entry of sent)if(entries.get(entry.id)?.revision===entry.revision)entries.delete(entry.id);},

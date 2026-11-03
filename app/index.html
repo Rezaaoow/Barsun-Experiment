@@ -1560,7 +1560,10 @@ async function startStepTimer(){
  if(['dd_lifetrade','ultimatum'].includes(workflow.currentStage)&&workflow.assignmentId){
   try{if(!await BarsanClock.start(workflow.assignmentId,workflow.timerRunId,workflow.currentStepId,workflow.currentStage)){workflow.timerActive=false;return;}}
   catch(error){workflow.timerActive=false;throw error;}
+  workflow.timerUsesClientClock=true;
+  return;
  }
+ workflow.timerUsesClientClock=false;
  try{postStepTime('start').catch(error=>console.warn('Time start deferred',error));}
  catch(error){workflow.timerActive=false;console.warn('Time tracking start failed',error);return;}
  scheduleWorkflowHeartbeat();
@@ -1569,14 +1572,14 @@ async function pauseStepTimer(){
  if(!workflow.timerActive)return;
  workflow.timerActive=false;
  stopWorkflowHeartbeat();
- await BarsanClock.pause();
+ if(workflow.timerUsesClientClock){await BarsanClock.pause();return;}
  try{postStepTime('pause').catch(error=>console.warn('Time pause deferred',error));}catch(error){console.warn('Time tracking pause failed',error);}
 }
 async function finishStepTimer(){
  if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
  workflow.timerActive=false;
  stopWorkflowHeartbeat();
- await BarsanClock.close();
+ if(workflow.timerUsesClientClock){await BarsanClock.close();return;}
  try{postStepTime('complete').catch(error=>console.warn('Time completion deferred',error));}catch(error){console.warn('Time tracking completion failed',error);}
 }
 document.addEventListener('visibilitychange',()=>{
@@ -1587,7 +1590,8 @@ document.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('pagehide',()=>{
  if(workflow.timeTrackingEnabled&&workflow.timerActive){
-  workflow.timerActive=false;stopWorkflowHeartbeat();postStepTime('pause',true);
+  workflow.timerActive=false;stopWorkflowHeartbeat();
+  if(!workflow.timerUsesClientClock)postStepTime('pause',true);
  }
 });
 function utDelay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}

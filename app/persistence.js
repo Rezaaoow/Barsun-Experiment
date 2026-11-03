@@ -55,7 +55,7 @@
    request.onsuccess=()=>{
     const previous=request.result;
     const merged=mergeValue(previous?.value,value,mode);
-    const entry={id:id(scope,key),scope,key,revision:(previous?.revision||0)+1,
+    const entry={id:id(scope,key),scope,key,revision:crypto.randomUUID(),
      created_at:previous?.created_at||new Date().toISOString(),value:merged};
     store.put(entry);done(entry);
    };
@@ -90,7 +90,7 @@
     const entryId=id(scopeValue,item.key),request=store.get(entryId);
     request.onsuccess=()=>{
      const previous=request.result;
-     store.put({id:entryId,scope:scopeValue,key:item.key,revision:(previous?.revision||0)+1,
+     store.put({id:entryId,scope:scopeValue,key:item.key,revision:crypto.randomUUID(),
       created_at:previous?.created_at||new Date().toISOString(),
       value:mergeValue(previous?.value,item.value,item.mode||'immutable')});
     };

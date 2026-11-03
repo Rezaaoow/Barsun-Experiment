@@ -90,3 +90,33 @@ def test_long_browser_freeze_is_marked_uncertain(browser_env):
     page.evaluate('async()=>await BarsanClock.close()')
     row=page.evaluate('()=>BarsanClock.snapshot()')
     assert row['visible_ms']>=90000 and row['uncertain_ms']>=90000
+
+
+def test_late_ack_cannot_delete_a_recreated_queue_entry(browser_env):
+    _,page,_,_=browser_env
+    result=page.evaluate('''async()=>{
+      const scope=BarsanStore.scope('test','late-ack');
+      const old=await BarsanStore.put(scope,'round-events',{payload:{event_timestamps:{result_screen_shown_at:'first'}}},'events');
+      const newer=await BarsanStore.put(scope,'round-events',{payload:{event_timestamps:{advance_clicked_at:'second'}}},'events');
+      await BarsanStore.ack([newer]);
+      const recreated=await BarsanStore.put(scope,'round-events',{payload:{event_timestamps:{next_trial_clicked_at:'third'}}},'events');
+      await BarsanStore.ack([old,newer]);
+      const rows=await BarsanStore.list(scope);
+      return {retained:rows.length,distinct:recreated.revision!==old.revision,
+        timestamp:rows[0]?.value.payload.event_timestamps.next_trial_clicked_at};
+    }''')
+    assert result==dict(retained=1,distinct=True,timestamp='third')
+
+
+def test_ut_dd_use_one_time_transport_and_keep_legacy_recovery(browser_env):
+    client,page,_,_=browser_env
+    identity,started,step=setup_module_run(client,'ultimatum')
+    assignment=client.post('/api/experiment/identify',json=identity).json()['assignment_id']
+    paths=page.evaluate('''async data=>{
+      const normal=api,paths=[];api=(path,...args)=>{paths.push(path);return normal(path,...args);};
+      Object.assign(workflow,{participantCode:data.identity.participant_code,invitationToken:data.identity.invitation_token,
+        assignmentId:data.assignment,timerRunId:data.run,currentStepId:data.step,currentStage:'ultimatum',timeTrackingEnabled:true});
+      await startStepTimer();await pauseStepTimer();await startStepTimer();await finishStepTimer();await BarsanClock.flush();
+      api=normal;return paths;
+    }''',dict(identity=identity,assignment=assignment,run=started['run_id'],step=step))
+    assert '/api/experiment/time/checkpoints' in paths and '/api/experiment/time' not in paths
