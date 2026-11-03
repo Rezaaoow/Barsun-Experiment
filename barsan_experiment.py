@@ -43,10 +43,15 @@ STAGE_TO_INSTRUMENT = {
     "questionnaire": ("questionnaire", "barsan-questionnaire-v1", "Questionnaire"),
     "dd_lifetrade": ("lifetrade", "online-mvp-0.4-randomization-visibility-fa", "DD vs Life-Trade"),
     "ultimatum": ("ultimatum", "barsan-ultimatum-v1", "Ultimatum Game"),
+    "intermission": ("intermission", "barsan-intermission-v1", "Between-game rest"),
 }
 STAGE_ORDER = ("questionnaire", "dd_lifetrade", "ultimatum")
 ULTIMATUM_WORKFLOW_VARIANTS = {"ultimatum_frame": "Frame", "ultimatum_control": "Control"}
-WORKFLOW_MODULE_CODES = frozenset((*STAGE_ORDER, *ULTIMATUM_WORKFLOW_VARIANTS))
+DD_WORKFLOW_DESIGNS = {
+    "dd_lifetrade": {"task_keys": ["LT", "KT"], "magnitude_keys": None, "expected_trials": 30},
+    "dd_standalone": {"task_keys": ["KT"], "magnitude_keys": ["100M"], "expected_trials": 5},
+}
+WORKFLOW_MODULE_CODES = frozenset((*STAGE_ORDER, *ULTIMATUM_WORKFLOW_VARIANTS, "dd_standalone", "intermission"))
 DEFAULT_WORKFLOW = (
     {"step_id": "default-questionnaire", "module_code": "questionnaire"},
     {"step_id": "default-dd-lifetrade", "module_code": "dd_lifetrade"},
@@ -703,13 +708,9 @@ else:
 
 
 def _seed_registry(connection: Any) -> None:
-    """Idempotently register the study and all three planned experiment modules."""
+    """Idempotently register the study and every canonical module."""
     initialize_client_timing(connection)
-    instrument_rows = [
-        ("lifetrade", INSTRUMENT_NAME),
-        ("questionnaire", "BarSan questionnaire"),
-        ("ultimatum", "Ultimatum Game"),
-    ]
+    instrument_rows = list({code: name for code, _version, name in STAGE_TO_INSTRUMENT.values()}.items())
     for instrument_code, instrument_name in instrument_rows:
         if DATABASE_URL:
             connection.execute(
@@ -801,9 +802,10 @@ class CompleteIn(BaseModel):
     status: str = "completed"
     trial_count: int = Field(default=0, ge=0)
 
-StageCode = Literal["questionnaire", "dd_lifetrade", "ultimatum"]
+StageCode = Literal["questionnaire", "dd_lifetrade", "ultimatum", "intermission"]
 WorkflowModuleCode = Literal[
-    "questionnaire", "dd_lifetrade", "ultimatum", "ultimatum_frame", "ultimatum_control"
+    "questionnaire", "dd_lifetrade", "ultimatum", "ultimatum_frame", "ultimatum_control",
+    "dd_standalone", "intermission"
 ]
 
 
@@ -868,7 +870,7 @@ class InactiveAssignmentDeleteIn(BaseModel):
 
 
 class ModuleTestLinkIn(BaseModel):
-    stage_code: StageCode
+    stage_code: Literal["questionnaire", "dd_lifetrade", "ultimatum"]
     condition_code: Literal["A", "B"] = "A"
 
 
@@ -1326,6 +1328,8 @@ def _normalize_workflow_steps(raw_steps: Any) -> list[dict[str, str]]:
 
 
 def _canonical_workflow_stage(module_code: str) -> str:
+    if module_code == "dd_standalone":
+        return "dd_lifetrade"
     return "ultimatum" if module_code in ULTIMATUM_WORKFLOW_VARIANTS else module_code
 
 
@@ -1363,6 +1367,8 @@ def _workflow_module_label(module_code: str) -> str:
     return {
         "questionnaire": "پرسشنامه",
         "dd_lifetrade": "DD / Life-Trade",
+        "dd_standalone": "DD مستقل · ۵۰ / ۱۰۰ میلیون · ۵ دور",
+        "intermission": "استراحت بین بازی‌ها",
         "ultimatum": "بازی Ultimatum",
         "ultimatum_frame": "Ultimatum — Frame",
         "ultimatum_control": "Ultimatum — Control",
@@ -1736,6 +1742,8 @@ def _group_workflow_details(raw_steps: Any) -> tuple[list[dict[str, Any]], str]:
     titles = {
         "questionnaire": "پرسشنامه",
         "dd_lifetrade": "بازی انتخاب",
+        "dd_standalone": "بازی انتخاب · ۵ دور",
+        "intermission": "استراحت بین بازی‌ها",
         "ultimatum": "بازی باشگاه رانندگان بارسان",
         "ultimatum_frame": "بازی باشگاه رانندگان بارسان · Frame",
         "ultimatum_control": "بازی باشگاه رانندگان بارسان · Control",
@@ -2465,6 +2473,8 @@ def get_public_experiment_workflow(invite: str | None = None, group: str | None 
         steps = _default_workflow_steps()
         is_legacy = True
     module_details = {
+        "dd_standalone": ("بازی انتخاب", "پنج انتخاب میان دریافت پاداش در زمان‌های متفاوت"),
+        "intermission": ("استراحت", "فرصتی برای استراحت و ادامه با آمادگی شما"),
         "questionnaire": (
             "پرسشنامه",
             "چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری",
@@ -2688,6 +2698,8 @@ def track_experiment_time(data: ExperimentTimeIn):
 @app.post("/api/experiment/stages/start")
 def start_experiment_stage(data: StageStartIn):
     """Start a fresh attempt unless an ambiguous transport retry explicitly requests recovery."""
+    if data.stage_code == "intermission" and not data.step_id:
+        raise HTTPException(422, "استراحت باید بخشی از روند همین لینک باشد.")
     with conn() as connection:
         # Take the write lock before any SQLite read: a deferred read-to-write
         # upgrade can otherwise fail or let two starts observe missing progress.
@@ -2852,6 +2864,8 @@ def start_experiment_stage(data: StageStartIn):
         run_id = str(uuid.uuid4())
         stage_draft: dict[str, Any] = {}
         workflow_module_code = workflow_step["module_code"] if workflow_step else data.stage_code
+        if workflow_module_code == "dd_standalone":
+            stage_draft["dd_design"] = DD_WORKFLOW_DESIGNS[workflow_module_code]
         if data.stage_code == "ultimatum":
             stage_draft["workflow_module_code"] = workflow_module_code
             stage_draft["ultimatum_variant"] = ULTIMATUM_WORKFLOW_VARIANTS.get(workflow_module_code)
@@ -2866,6 +2880,7 @@ def start_experiment_stage(data: StageStartIn):
             "condition_code": assignment["condition_code"],
             "attempt_number": attempt_number,
             "block_order": stage_draft.get("block_order"),
+            "dd_design": stage_draft.get("dd_design"),
             "workflow_step_id": data.step_id,
         }
         if DATABASE_URL:
@@ -2875,16 +2890,17 @@ def start_experiment_stage(data: StageStartIn):
                 (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
                  timestamp, Jsonb(metadata)),
             )
-            connection.execute(
-                "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
-                "draft_payload,started_at,completed_at,updated_at) VALUES(%s,%s,'in_progress',%s,%s,%s,%s,NULL,%s) "
-                "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
-                "attempt_number=EXCLUDED.attempt_number,current_run_id=EXCLUDED.current_run_id,"
-                "draft_payload=EXCLUDED.draft_payload,started_at=EXCLUDED.started_at,completed_at=NULL,"
-                "updated_at=EXCLUDED.updated_at",
-                (assignment["participation_id"], data.stage_code, attempt_number, run_id,
-                 Jsonb(stage_draft), timestamp, timestamp),
-            )
+            if data.stage_code in STAGE_ORDER:
+                connection.execute(
+                    "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+                    "draft_payload,started_at,completed_at,updated_at) VALUES(%s,%s,'in_progress',%s,%s,%s,%s,NULL,%s) "
+                    "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
+                    "attempt_number=EXCLUDED.attempt_number,current_run_id=EXCLUDED.current_run_id,"
+                    "draft_payload=EXCLUDED.draft_payload,started_at=EXCLUDED.started_at,completed_at=NULL,"
+                    "updated_at=EXCLUDED.updated_at",
+                    (assignment["participation_id"], data.stage_code, attempt_number, run_id,
+                     Jsonb(stage_draft), timestamp, timestamp),
+                )
         else:
             connection.execute(
                 "INSERT INTO instrument_runs(run_id,participation_id,instrument_version_id,started_at,status,metadata) "
@@ -2892,16 +2908,17 @@ def start_experiment_stage(data: StageStartIn):
                 (run_id, assignment["participation_id"], instrument_version["instrument_version_id"],
                  timestamp, "in_progress", json.dumps(metadata, ensure_ascii=False)),
             )
-            connection.execute(
-                "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
-                "draft_payload,started_at,completed_at,updated_at) VALUES(?,?,'in_progress',?,?,?, ?,NULL,?) "
-                "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
-                "attempt_number=excluded.attempt_number,current_run_id=excluded.current_run_id,"
-                "draft_payload=excluded.draft_payload,started_at=excluded.started_at,completed_at=NULL,"
-                "updated_at=excluded.updated_at",
-                (assignment["participation_id"], data.stage_code, attempt_number, run_id,
-                 json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
-            )
+            if data.stage_code in STAGE_ORDER:
+                connection.execute(
+                    "INSERT INTO experiment_stage_progress(participation_id,stage_code,status,attempt_number,current_run_id,"
+                    "draft_payload,started_at,completed_at,updated_at) VALUES(?,?,'in_progress',?,?,?, ?,NULL,?) "
+                    "ON CONFLICT(participation_id,stage_code) DO UPDATE SET status='in_progress',"
+                    "attempt_number=excluded.attempt_number,current_run_id=excluded.current_run_id,"
+                    "draft_payload=excluded.draft_payload,started_at=excluded.started_at,completed_at=NULL,"
+                    "updated_at=excluded.updated_at",
+                    (assignment["participation_id"], data.stage_code, attempt_number, run_id,
+                     json.dumps(stage_draft, ensure_ascii=False), timestamp, timestamp),
+                )
         if data.step_id and workflow_step is not None:
             if DATABASE_URL:
                 connection.execute(
@@ -3838,8 +3855,25 @@ def _complete_experiment_stage(data: StageCompleteIn):
             raise HTTPException(409, "این مرحله هنوز شروع نشده است.")
         if state["current_run_id"] != data.run_id:
             raise HTTPException(409, "این اجرای مرحله دیگر فعال نیست.")
+        run = connection.execute(
+            "SELECT participation_id,metadata FROM instrument_runs WHERE run_id=" + marker
+            + (" FOR UPDATE" if DATABASE_URL else ""), (data.run_id,),
+        ).fetchone()
+        metadata = _json_value(run["metadata"]) if run else {}
+        if (not run or run["participation_id"] != assignment["participation_id"]
+                or metadata.get("stage_code") != data.stage_code
+                or metadata.get("workflow_step_id") != data.step_id):
+            raise HTTPException(422, "نوع ماژول یا شناسهٔ مرحله با اجرای ثبت‌شده یکسان نیست.")
+        if metadata.get("workflow_module_code") == "dd_standalone":
+            _validate_dd_responses(connection, data.run_id, 5, standalone=True)
         if state["status"] == "completed":
             return {"completed": True, "already_completed": True, "stage_code": data.stage_code, "step_id": data.step_id}
+        if data.stage_code == "intermission":
+            if not data.step_id or not (data.final_payload or {}).get("continue_clicked_at"):
+                raise HTTPException(422, "ادامهٔ استراحت باید در همان مرحله تأیید شود.")
+            metadata["intermission_completion"] = data.final_payload
+            connection.execute("UPDATE instrument_runs SET metadata=" + marker + " WHERE run_id=" + marker,
+                               (_json_param(metadata), data.run_id))
         timestamp = now()
         if data.stage_code == "questionnaire":
             if data.final_payload is None:
@@ -3989,6 +4023,19 @@ def complete_experiment_stage(data: StageCompleteIn):
     return result
 
 
+def _validate_dd_responses(connection, run_id, expected, *, standalone=False):
+    marker = "%s" if DATABASE_URL else "?"
+    rows = connection.execute(
+        "SELECT task_code,magnitude,trial_in_block FROM lifetrade_trials WHERE run_id=" + marker,
+        (run_id,),
+    ).fetchall()
+    if len(rows) != expected:
+        raise HTTPException(422, f"همهٔ {expected} پاسخ بازی انتخاب هنوز ثبت نشده‌اند.")
+    if standalone and (any(row["task_code"] != "KT" or row["magnitude"] != "100M" for row in rows)
+                       or {row["trial_in_block"] for row in rows} != {1, 2, 3, 4, 5}):
+        raise HTTPException(422, "پاسخ‌های DD مستقل باید دقیقاً پنج دور با مبلغ تعیین‌شده باشند.")
+
+
 @app.post("/api/experiment/dd/complete")
 def complete_dd_task(data: StageCompleteIn):
     if data.stage_code != "dd_lifetrade":
@@ -3996,16 +4043,17 @@ def complete_dd_task(data: StageCompleteIn):
     marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
-        count = connection.execute(
-            "SELECT COUNT(*) AS n FROM lifetrade_trials AS trial "
-            "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+        run = connection.execute(
+            "SELECT run.metadata FROM instrument_runs AS run "
             "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
-            "WHERE trial.run_id=" + marker + " AND run.participation_id=" + marker
+            "WHERE run.run_id=" + marker + " AND run.participation_id=" + marker
             + " AND version.instrument_code='lifetrade'",
             (data.run_id, assignment["participation_id"]),
         ).fetchone()
-        if count["n"] != 30:
-            raise HTTPException(422, "همهٔ ۳۰ پاسخ بازی انتخاب هنوز ثبت نشده‌اند.")
+        if not run:
+            raise HTTPException(403, "این اجرا متعلق به بازی انتخاب همین دعوت نیست.")
+        standalone = _json_value(run["metadata"]).get("workflow_module_code") == "dd_standalone"
+        _validate_dd_responses(connection, data.run_id, 5 if standalone else 30, standalone=standalone)
     return complete_experiment_stage(data)
 
 
@@ -4064,7 +4112,7 @@ def _persist_trials(run_id: str, records: list[TrialRecord]) -> tuple[int, int]:
 
         if DATABASE_URL:
             exists = connection.execute(
-                "SELECT 1 FROM instrument_runs ir "
+                "SELECT ir.metadata FROM instrument_runs ir "
                 "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
                 "JOIN instruments i ON i.instrument_code=iv.instrument_code "
                 "WHERE ir.run_id=%s AND i.instrument_code=%s",
@@ -4078,7 +4126,7 @@ def _persist_trials(run_id: str, records: list[TrialRecord]) -> tuple[int, int]:
             )
         else:
             exists = connection.execute(
-                "SELECT 1 FROM instrument_runs ir "
+                "SELECT ir.metadata FROM instrument_runs ir "
                 "JOIN instrument_versions iv ON iv.instrument_version_id=ir.instrument_version_id "
                 "JOIN instruments i ON i.instrument_code=iv.instrument_code "
                 "WHERE ir.run_id=? AND i.instrument_code=?",
@@ -4091,6 +4139,13 @@ def _persist_trials(run_id: str, records: list[TrialRecord]) -> tuple[int, int]:
             )
         if not exists:
             raise HTTPException(404, "Unknown LifeTrade run")
+
+        if _json_value(exists["metadata"]).get("workflow_module_code") == "dd_standalone":
+            for record in records:
+                row = record.row
+                if (row.get("task") != "KT" or row.get("magnitude") != "100M"
+                        or row.get("trial_in_block") not in (1, 2, 3, 4, 5)):
+                    raise HTTPException(422, "دادهٔ پاسخ با طراحی DD مستقل سازگار نیست.")
 
         cursor = connection.execute(sql, params)
         inserted = max(0, cursor.rowcount or 0)
@@ -4907,8 +4962,10 @@ def _ordered_task_export(module: str, scope: str):
                 item.update(schema_version=2, attempt_number=metadata.get("attempt_number", 1),
                             server_received_at=item.get("received_at"))
                 if module == "dd":
+                    item.update(workflow_module_code=metadata.get("workflow_module_code", "dd_lifetrade"),
+                                workflow_step_id=metadata.get("workflow_step_id"))
                     record = dd_record(item, payload)
-                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at"}})
+                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at", "workflow_module_code", "workflow_step_id"}})
                     item.update(stimulus_index=payload.get("index"),
                                 left_stimulus=record["stimulus"]["left"],right_stimulus=record["stimulus"]["right"],
                                 stimulus_parameters_json=encode(record["stimulus"]["parameters"]),
@@ -5039,12 +5096,13 @@ def load_homepage() -> str:
 
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/links", response_class=HTMLResponse)
-def admin_links_page():
+def admin_links_page(request: Request):
     """Serve the protected-action UI; actual link creation/export still requires ADMIN_TOKEN."""
     path = os.path.join(ROOT, "app", "admin-links.html")
     try:
         with open(path, encoding="utf-8") as file:
-            return HTMLResponse(file.read())
+            return HTMLResponse(file.read().replace("__BARSAN_FONT_URL__",
+                request.scope.get("root_path", "").rstrip("/") + "/assets/vazirmatn-v33.003.woff2"))
     except OSError as exc:
         raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 

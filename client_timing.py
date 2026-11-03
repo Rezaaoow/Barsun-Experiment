@@ -7,7 +7,7 @@ class TimingCheckpoint(BaseModel):
     run_id: str = Field(min_length=1, max_length=100)
     clock_id: str = Field(min_length=1, max_length=100)
     step_id: str = Field(min_length=1, max_length=80)
-    stage_code: str = Field(pattern=r'^(dd_lifetrade|ultimatum)$')
+    stage_code: str = Field(pattern=r'^(dd_lifetrade|ultimatum|intermission)$')
     sequence: int = Field(ge=1, le=1000000)
     visible_ms: int = Field(ge=0, le=604800000)
     uncertain_ms: int = Field(ge=0, le=604800000)

@@ -48,7 +48,7 @@
   },27000+Math.floor(Math.random()*6000));
  }
  async function start(assignment,run,step,stage){
-  if(!assignment||!run||!['dd_lifetrade','ultimatum'].includes(stage))return false;
+  if(!assignment||!run||!['dd_lifetrade','ultimatum','intermission'].includes(stage))return false;
   if(clock?.row.run_id===run){
    if(!clock.row.closed&&!clock.visible){clock.visible=!document.hidden;clock.perf=performance.now();clock.wall=Date.now();schedule();}
    return !clock.row.closed;

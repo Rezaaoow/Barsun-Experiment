@@ -1,11 +1,18 @@
 # AI Agent Instructions — BarSan Experiment
 
-## Current authorized release work — 2026-11-03
+## وضعیت قطعی پس از انتشار — ۳ نوامبر ۲۰۲۶
 
-The user authorized final Staging fault/stability acceptance followed by Production promotion of the identical tested runtime. See `docs/FINAL_RELEASE_FA.md`. New runtime files include `client_timing.py`, `bulk_exports.py` and `app/task_timing.js`; include them in pinned manifests. Native launchers will use immutable `deployments/final-<sha>/runtime` sources; `/repo` is mirrored after verification for legacy compatibility. Production remains unchanged until Staging acceptance is complete. Separate Production env/database/invitation key must be preserved. Never run load/fault tests on Production; only release verification. Two synthetic browser invitation fixtures are specifically authorized for the private Mac directory `/Users/rezaaoow/barsan-loadtest/final-release-20261103/`; no other fixture export is authorized by that approval. Actual release results supersede this in-progress note when recorded.
+هر دو محیط اکنون منبع ثابت `8e4838c54e3fcc82a1d1a25af337293c57b98551` را با native ASGI اجرا می‌کنند. PR #27 ادغام و CI منبع و main موفق شده‌اند. تطبیق هر 217 فایل با Git و دو محیط، HTML عمومی و سلامت سرویس‌ها تأیید شد؛ داده، توکن و کلید Production مستقل و محفوظ‌اند. 600 جریان نهایی Staging با صفر شکست/retry و p95=230.23ms کامل شد؛ 128 تست و Chrome/WebKit موفق. روی Production فقط بررسی انتشار انجام شد، بدون تست بار/اختلال/شرکت‌کنندهٔ مصنوعی.
+
+مرجع تازه: [گزارش نهایی](docs/FINAL_RELEASE_RESULTS_2026-11-03_FA.md) و [عملیات native](ops/README_FINAL_NATIVE_FA.md). مسیر زنده از `runtime_source` در `current-release.json` هر محیط خوانده می‌شود؛ `/repo` آینه/ورودی fallback است. تنظیمات مؤثر در `config/app.env` خصوصی و launcher/Supervisor همان محیط‌اند؛ Application Manager/Passenger restart به‌تنهایی native را restart نمی‌کند. گزارش‌های قدیمیِ «Production هنوز Passenger» سابقهٔ پیش از این انتشارند.
 
 
-## Last verified staging runtime — 2026-11-03
+## Release authorization and historical preparation — 2026-11-03
+
+The user authorized final Staging fault/stability acceptance followed by Production promotion of the identical tested runtime. See `docs/FINAL_RELEASE_FA.md`. New runtime files include `client_timing.py`, `bulk_exports.py` and `app/task_timing.js`; include them in pinned manifests. Native launchers will use immutable `deployments/final-<sha>/runtime` sources; `/repo` is mirrored after verification for legacy compatibility. Staging acceptance and the authorized Production promotion are now complete; the latest status above supersedes this preparation snapshot. Separate Production env/database/invitation key must be preserved. Never run load/fault tests on Production; only release verification. Two synthetic browser invitation fixtures are specifically authorized for the private Mac directory `/Users/rezaaoow/barsan-loadtest/final-release-20261103/`; no other fixture export is authorized by that approval. Actual release results supersede this in-progress note when recorded.
+
+
+## Historical Staging snapshot before final promotion — 2026-11-03
 
 UT/DD resilience source `68d22169d8d599d4fe6bc2034873c6a58ab7f593` is deployed and verified on Staging. Runtime dependencies now include `task_records.py`, `app/persistence.js` and the versioned local font/license; the launcher pins the whole runtime set. A fresh guarded HTTPS API sequence completed 100/100, 300/300 and 600/600 UT/DD-only workflows with zero HTTP failures/retries, exact PostgreSQL counts and p95 about 11/13/211 ms respectively. The 600 cohort stored 18,000 DD and 13,200 Ultimatum rounds, including all wait/end/advance timing fields. This is an on-host generator sharing account resources, not 600 real browsers/networks. An isolated browser on the actual Staging origin verified font and IndexedDB reload/offline persistence. 1,002 new synthetic links and 8 group links were deactivated; no data removed. Production source/config hashes were unchanged and all 95 trial health probes succeeded. A later post-trial Production timeout recurred while Staging stayed healthy; one ordinary Passenger restart recovered three successive 200 probes. No Production code/config deployment; its historical intermittent behavior is not permanently resolved. See `docs/UT_DD_RESILIENCE_FA.md` and sanitized `artifacts/ut-dd-resilience-20261103/`.
 
@@ -37,7 +44,7 @@ Re-check live GitHub state and the host before relying on any SHA, CI result, or
 - Do not merge/deploy a moving branch. After merge, re-check main SHA and CI.
 - GitHub merge, host deployment, and live verification are three different states. Never claim deployment until the real public page and API have been verified.
 
-## Critical cPanel invariant — do not violate
+## Legacy Passenger fallback paths — historical import root
 
 Observed cPanel values:
 - Passenger Application Root: `/home/myexperi/lifetrade`
@@ -49,7 +56,7 @@ Observed cPanel values:
 - Restart trigger: `/home/myexperi/lifetrade/tmp/restart.txt`
 - Public URL: `https://my-experiment.ir/lifetrade/`
 
-The Application Root is not the Python import root. Publishing to `/home/myexperi/lifetrade/app/` or putting Python files directly in `/home/myexperi/lifetrade/` updates inactive duplicates and does not update the current Passenger app. Deploy runtime files into `.../lifetrade/repo/`. Do not casually overwrite `passenger_wsgi.py`, `.htaccess`, virtualenv, host environment, or local files.
+These Passenger paths are fallback/mirror paths after the final native migration. The live import root is the immutable runtime_source in current-release.json. The Application Root is not the Python import root. Publishing to `/home/myexperi/lifetrade/app/` or putting Python files directly in `/home/myexperi/lifetrade/` updates inactive duplicates and does not update the current Passenger app. Deploy runtime files into `.../lifetrade/repo/`. Do not casually overwrite `passenger_wsgi.py`, `.htaccess`, virtualenv, host environment, or local files.
 
 See `docs/AI_HANDOFF_FA.md` before writing any deploy command.
 
@@ -64,6 +71,8 @@ See `docs/AI_HANDOFF_FA.md` before writing any deploy command.
 
 ## Product constraints
 
+- Every new participant module must reuse `BarsanStore`, shared retry/network lanes, durable completion intents and `BarsanClock` v2 where it has a run. Add SQLite/PostgreSQL and real-browser offline/lost-ack/re-entry coverage; do not build an independent queue/network loop. See `docs/STANDALONE_DD_AND_REST_FA.md`. Preserve invitation snapshots and existing research algorithms. `dd_standalone` is canonical `dd_lifetrade` with a server-frozen five-trial KT/100M design. `intermission` uses workflow-only progress, never the legacy three-stage CHECK table.
+
 - Modules: questionnaire, DD/Life-Trade, Ultimatum. Server owns identity, assignment, consent, workflow order, active attempts, scoring, and persistence.
 - Participant interface is Persian/RTL. Do not expose experiment internals, Frame/Control, block labels, or admin information on participant screens unless requested.
 - Welcome heading currently approved: «به برنامهٔ پژوهشی بارسان خوش آمدید». Its ordered stages must be fetched from `/api/experiment/workflow?invite=...` and mapped to participant-facing labels only: `questionnaire → پرسشنامه`, `dd_lifetrade → بازی انتخاب`, and all Ultimatum variants → `بازی باشگاه رانندگان بارسان`. Never expose module codes, Frame/Control names, or descriptions. For the legacy default flow, include the Ultimatum stage after questionnaire and DD/Life-Trade because the legacy participant journey starts it automatically after DD.
@@ -74,5 +83,5 @@ See `docs/AI_HANDOFF_FA.md` before writing any deploy command.
 - cPanel virtualenv observed: `/home/myexperi/virtualenv/lifetrade/3.12/bin/python`; CI uses Python 3.12.
 - CI checks inline JS in `app/index.html` and `app/admin-links.html` using Node, runs `pytest -q`, then `tests/postgres_smoke.py` against PostgreSQL 16.
 - `Procfile` and `render.yaml` describe a separate Uvicorn/Render deployment; they do not describe the observed cPanel Passenger bootstrap.
-- The assistant has GitHub integration but cannot SSH into the user's cPanel. Provide host commands and request sanitized output; never imply direct host access.
+- Authorized SSH was used for this release; inspect current tool availability. Never request or expose credentials, and never assume a dated capability snapshot remains current.
 - When a deployment fails, identify the exact failing stage and inspect the actual runtime path/logs. Never repeat a failed script unchanged.

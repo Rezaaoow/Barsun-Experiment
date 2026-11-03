@@ -1,5 +1,9 @@
 # BarSan Experiment — workflow architecture
 
+## Standalone DD and intermission extension
+
+See docs/STANDALONE_DD_AND_REST_FA.md. `dd_standalone` is a workflow variant of canonical `dd_lifetrade` with a frozen five-response KT/100M design; it reuses the exact task/outbox/timing/completion pipeline. `intermission` is workflow-only with its own instrument/run and v2 visible-time clock, persisted completion and predecessor checks. It is never inserted into the three-stage legacy progress table. Existing assignment snapshots and default workflows are preserved.
+
 ## UT/DD resilience update — 2026-11-03
 
 The participant DD and Ultimatum response queues now use transactional IndexedDB; questionnaire persistence remains unchanged. Prescribed stimulus/opponent delays and server-owned random outcomes are unchanged. Ultimatum resolve starts during the proposer wait, can return the next permitted prepared round, and can acknowledge auxiliary events from previous rounds. Post-result navigation awaits a local commit, never the telemetry network request. Completion intents survive reload and are retried with the original run ID; replaying old decisions precedes creating a new attempt. This does not provide full offline Ultimatum execution: an authoritative server result is still required. See `docs/UT_DD_RESILIENCE_FA.md` for validation and deployment status.
@@ -160,3 +164,7 @@ Body: `invitation_token`, `participant_code`, `stage_code`, `run_id`; questionna
 - Test refresh at every stage, browser close/reopen, dropped network, duplicate submission, wrong code/link combination, fixed condition, all 22 Ultimatum rows, and complete-vs-incomplete stage routing on the hosted PostgreSQL database.
 - Deploy only after automated tests, a pilot on the actual cPanel/PostgreSQL database, and review of data exports.
 
+
+## اجرای نهایی native و حفاظت ظرفیت
+
+هر محیط LiteSpeed → Uvicorn دو worker → PostgreSQL مستقل دارد؛ دادهٔ Staging به Production منتقل نمی‌شود. UT/DD کلاینت صف IndexedDB و intent تکمیل دارند؛ foreground از ارسال پس‌زمینه مستقل است. زمان v2 صرفاً حضور قابل مشاهده است و RT جدا باقی است. دریافت حجیم مدیریتی بعد از سکون 90ثانیه‌ای فعالیت اخیر DD/UT و یک‌به‌یک انجام می‌شود؛ API شرکت‌کننده در این صف نیست. snapshot لینک، ترتیب/شرط، امتیاز و تأخیرهای طراحی تغییر نکرده‌اند. منبع زنده immutable و در current-release.json ثبت است؛ راهنمای فعلی در ops/README_FINAL_NATIVE_FA.md و گزارش نهایی در docs/FINAL_RELEASE_RESULTS_2026-11-03_FA.md است.

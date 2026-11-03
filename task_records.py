@@ -9,6 +9,7 @@ DD_FIELDS = COMMON_FIELDS + [
     "left_stimulus", "right_stimulus", "user_choice_type", "user_pressed_key", "response_method",
     "reaction_time_ms", "trial_started_iso", "response_iso", "server_received_at", "visibility_hidden",
     "stimulus_parameters_json", "adaptive_path_json", "record_json", "raw_payload_json",
+    "workflow_module_code", "workflow_step_id",
 ]
 UT_FIELDS = COMMON_FIELDS + [
     "round_id", "phase", "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
@@ -30,7 +31,8 @@ def dd_record(context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any
         "schema_version": SCHEMA_VERSION,
         "identity": select(context, ("study_code", "participant_code", "condition_code", "run_id", "client_event_id")),
         "run": select(context, ("run_status", "attempt_number", "instrument_version", "run_started_at", "run_completed_at")),
-        "design": select(payload, ("task", "task_order", "block_name", "magnitude", "trial_in_block")),
+        "design": {**select(payload, ("task", "task_order", "block_name", "magnitude", "trial_in_block")),
+                   **select(context, ("workflow_module_code", "workflow_step_id"))},
         "stimulus": {"index": payload.get("index"),
                      "left": payload.get("left_stimulus", payload.get("left_image")),
                      "right": payload.get("right_stimulus", payload.get("right_image")),
