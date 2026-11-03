@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 import argparse, hashlib, json, os, shlex, shutil, subprocess, tarfile, time
 import urllib.request
+import urllib.parse
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
@@ -84,6 +85,20 @@ try:
     expected=manifest['files']
     for name,sha in expected.items():assert digest(SOURCE/name)==sha
     (SOURCE/'app/Stimuli').mkdir(exist_ok=True)
+    asset_source=ROOT/'repo/app/Stimuli'
+    if not staging:
+        stage_manifest=json.loads(Path('/home/myexperi/lifetrade-staging/current-release.json').read_text())
+        asset_source=Path(stage_manifest['runtime_source'])/'app/Stimuli'
+    if asset_source.is_dir():
+        assert not asset_source.is_symlink()
+        for path in sorted(asset_source.rglob('*')):
+            assert not path.is_symlink(), 'Public stimulus symlinks require explicit review'
+            if path.is_file():
+                relative='app/Stimuli/'+str(path.relative_to(asset_source))
+                target=SOURCE/relative;target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copy2(path,target);expected[relative]=digest(target)
+    result['runtime_file_count']=len(expected)
+    result['runtime_set_sha256']=hashlib.sha256(json.dumps(expected,sort_keys=True).encode()).hexdigest()
     backup=JOB/'backup';backup.mkdir(mode=0o700)
     for name,path in [('routing',ROUTING),('launcher',NATIVE/'launch_native.py'),('release',ROOT/'current-release.json'),('env',ROOT/'config/app.env')]:
         if path.exists():shutil.copy2(path,backup/name)
@@ -223,11 +238,18 @@ RewriteRule ^(.*)$ http://127.0.0.1:8767/$1 [P,L,E=Proxy-Host:my-experiment.ir]
         html=response.read().decode();assert 'barsan_clock_journal_v2_' in html and 'recoveryIsHeld' in html
     with urllib.request.urlopen(PUBLIC+'/assets/vazirmatn-v33.003.woff2',timeout=15) as response:
         assert hashlib.sha256(response.read()).hexdigest()==expected['app/fonts/vazirmatn-v33.003.woff2']
+    public_assets=[name for name in expected if name.startswith('app/Stimuli/') and name.lower().endswith(('.png','.jpg','.webp','.gif'))]
+    if public_assets:
+        asset=public_assets[0]
+        with urllib.request.urlopen(PUBLIC+'/Stimuli/'+urllib.parse.quote(asset[len('app/Stimuli/'):]),timeout=15) as response:
+            assert hashlib.sha256(response.read()).hexdigest()==expected[asset]
+    result['legacy_public_assets_verified']=bool(public_assets)
     request=urllib.request.Request(PUBLIC+'/api/admin/progress?scope=main&include_timing=false',headers={'X-Admin-Token':values['ADMIN_TOKEN']})
     with urllib.request.urlopen(request,timeout=20) as response:assert response.status==200
     mirrored=True
     for name in expected:
-        atomic(ROOT/'repo'/name,(SOURCE/name).read_bytes(),0o644)
+        if not (ROOT/'repo'/name).is_file() or digest(ROOT/'repo'/name)!=expected[name]:
+            atomic(ROOT/'repo'/name,(SOURCE/name).read_bytes(),0o644)
     release={'commit_sha':a.commit,'runtime_files':expected,'runtime_source':str(SOURCE),
              'runtime_mode':'uvicorn-via-litespeed-loopback-proxy','deployed_at':datetime.now(timezone.utc).isoformat(),
              'workers':2,'sync_threads_per_worker':8,'db_pool_max_per_worker':4,'loopback_port':PORT}
@@ -258,6 +280,6 @@ except Exception as error:
         result['rollback_health']=health(PUBLIC)
     except Exception as rollback_error:result['rollback_error_type']=type(rollback_error).__name__
     (JOB/'deployment-result.json').write_text(json.dumps(result,indent=2)+'\n')
-    print(json.dumps(result));raise SystemExit(2)
+    print(json.dumps({key:value for key,value in result.items() if key!="runtime_files"}));raise SystemExit(2)
 (JOB/'deployment-result.json').write_text(json.dumps(result,indent=2)+'\n')
-print(json.dumps(result))
+print(json.dumps({key:value for key,value in result.items() if key!="runtime_files"}))

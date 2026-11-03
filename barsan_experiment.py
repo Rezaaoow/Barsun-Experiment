@@ -4861,25 +4861,27 @@ def _ordered_task_export(module: str, scope: str):
         yield buffer.getvalue()
         cursor = ""
         while True:
-            params = (cursor,) if scope == "test" else (cursor, STUDY_CODE)
-            scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
+            params = (cursor,)
             with conn() as connection:
                 rows = connection.execute(
                     "SELECT trial.*,sp.study_code,p.participant_code,a.condition_code,"
                     "run.status AS run_status,run.started_at AS run_started_at,run.completed_at AS run_completed_at,"
                     "run.metadata AS run_metadata,version.version AS instrument_version "
-                    "FROM " + table + " AS trial "
+                    "FROM (SELECT * FROM " + table + " WHERE " + key + ">" + marker
+                    + " ORDER BY " + key + " LIMIT 200) AS trial "
                     "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
                     "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
                     "JOIN study_participations AS sp ON sp.participation_id=run.participation_id "
                     "JOIN participants AS p ON p.participant_id=sp.participant_id "
                     "LEFT JOIN experiment_assignments AS a ON a.participant_id=sp.participant_id AND a.study_code=sp.study_code "
-                    "WHERE trial." + key + ">" + marker + " AND " + scope_filter
-                    + " ORDER BY trial." + key + " LIMIT 200", params,
+                    "ORDER BY trial." + key, params,
                 ).fetchall()
             if not rows:
                 break
+            buffer.seek(0);buffer.truncate(0)
             for raw in rows:
+                if not (str(raw["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else raw["study_code"] == STUDY_CODE):
+                    continue
                 item = dict(raw)
                 payload = _json_value(item["payload"])
                 metadata = _json_value(item.pop("run_metadata"))
@@ -4899,9 +4901,10 @@ def _ordered_task_export(module: str, scope: str):
                                 events_json=encode(record["timing"]["events"]),
                                 model_json=encode(record["model"]),device_json=encode(record["device"]))
                 item.update(record_json=encode(record), raw_payload_json=encode(payload))
-                buffer.seek(0);buffer.truncate(0);writer.writerow(item)
-                yield buffer.getvalue()
+                writer.writerow(item)
             cursor = rows[-1][key]
+            if buffer.tell():
+                yield buffer.getvalue()
     return StreamingResponse(generate(),media_type="text/csv; charset=utf-8",headers={
         "Content-Disposition": 'attachment; filename="barsan_' + module + '_records_v2_' + scope + '.csv"',
         "Cache-Control": "no-store",
@@ -4933,22 +4936,23 @@ def export_client_time(x_admin_token: str | None = Header(default=None), scope: 
         yield buffer.getvalue()
         cursor = ("", 0)
         while True:
-            condition = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
-            params = (*cursor,) if scope == "test" else (*cursor, STUDY_CODE)
+            params = cursor
             with conn() as connection:
                 rows = connection.execute(
                     "SELECT c.*,t.clock_id,t.step_instance_id,t.stage_code,r.status AS run_status,"
-                    "sp.study_code,p.participant_code FROM experiment_client_clock_checkpoints c "
+                    "sp.study_code,p.participant_code FROM (SELECT * FROM experiment_client_clock_checkpoints "
+                    "WHERE (run_id,sequence)>(" + marker + "," + marker + ") ORDER BY run_id,sequence LIMIT 200) c "
                     "JOIN experiment_client_clocks t USING(run_id) JOIN instrument_runs r USING(run_id) "
                     "JOIN study_participations sp USING(participation_id) JOIN participants p USING(participant_id) "
-                    "WHERE (c.run_id,c.sequence)>(" + marker + "," + marker + ") AND " + condition
-                    + " ORDER BY c.run_id,c.sequence LIMIT 200", params).fetchall()
+                    "ORDER BY c.run_id,c.sequence", params).fetchall()
             if not rows:
                 break
             cursor = (rows[-1]["run_id"], rows[-1]["sequence"])
             buffer.seek(0); buffer.truncate(0)
-            writer.writerows({"schema_version": 2, **dict(row)} for row in rows)
-            yield buffer.getvalue()
+            writer.writerows({"schema_version": 2, **dict(row)} for row in rows
+                if (str(row["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else row["study_code"] == STUDY_CODE))
+            if buffer.tell():
+                yield buffer.getvalue()
     return StreamingResponse(generate(), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="barsan_time_checkpoints_v2.csv"', "Cache-Control": "no-store"})
 

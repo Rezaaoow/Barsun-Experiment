@@ -339,6 +339,8 @@ def main_test():
     print("PostgreSQL smoke, 24-participant and concurrent stage-start tests passed")
 
     with TestClient(main.app) as resilience_client:
+        from export_checks import check_filtered_export_pages
+        check_filtered_export_pages(resilience_client)
         from timing_checks import check_client_timing
         check_client_timing(resilience_client)
         check_dd_recovery(resilience_client)
