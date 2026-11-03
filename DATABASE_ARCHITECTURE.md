@@ -97,3 +97,11 @@ Environment variables:
 
 Keep database credentials and `ADMIN_TOKEN` out of GitHub and out of browser JavaScript.
 
+
+## زمان قابل مشاهدهٔ نسخهٔ ۲ — انتشار نهایی ۳ نوامبر
+
+`experiment_client_clocks` به ازای هر run یک clock و آخرین sequence، visible_ms، uncertain_ms، closed و received_at دارد؛ assignment و step/module برای ممیزی حفظ می‌شوند. `experiment_client_clock_checkpoints` با کلید (run_id,sequence) snapshotهای پذیرفته‌شده را نگه می‌دارد. replay دوباره جمع نمی‌شود؛ payload متغیر همان sequence و counters ناسازگار رد می‌شوند. run قفل و مالکیت دعوت/participation و metadata مرحله بررسی می‌شود؛ زمان دیررس تلاش superseded فقط در همان run ثبت می‌شود. زمان legacy، raw responseها و خروجی قبلی حذف نشده‌اند. شاخص received_at برای admission سبک خروجی استفاده می‌شود. CSV زمانی و نسخهٔ ۲ DD/UT ساختار خواندن‌اند، نه پاک‌سازی/انتقال داده. جزئیات و شواهد در docs/FINAL_RELEASE_RESULTS_2026-11-03_FA.md است.
+
+## Standalone DD and rest
+
+`dd_standalone` shares the lifetrade instrument/table but stores a frozen five-trial KT/100M design in run metadata; standalone exports append trusted workflow_module_code/workflow_step_id to distinguish repeated steps. No raw rows or old fields are removed. Completion validates the exact five trial positions through both endpoints. `intermission` has its own seeded instrument/version/run and workflow progress and v2 clock; the legacy three-stage CHECK table is unchanged. No schema rebuild or destructive migration is needed. See docs/STANDALONE_DD_AND_REST_FA.md.

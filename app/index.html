@@ -1213,6 +1213,7 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 }
 
 function showInstructionPage(taskKey, pageIndex){
+  const standalone=workflow.currentModuleCode==='dd_standalone';
   const title='بازی انتخاب';
 
   if(pageIndex===0){
@@ -1238,14 +1239,14 @@ function showInstructionPage(taskKey, pageIndex){
     const later=document.createElement('div');
     later.className='example-choice';
     later.innerHTML=taskKey==='KT'
-      ?'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>'
+      ?(standalone?'<strong>۱۰۰ میلیون تومان</strong><span>یک سال بعد</span>':'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>')
       :'<strong>۲ میلیون تومان</strong><span>در ازای ۱ سال از عمرتان</span>';
     const or=document.createElement('span');
     or.className='example-or';
     or.textContent='یا';
     const now=document.createElement('div');
     now.className='example-choice';
-    now.innerHTML='<strong>۱ میلیون تومان</strong><span>الان</span>';
+    now.innerHTML=standalone?'<strong>۵۰ میلیون تومان</strong><span>الان</span>':'<strong>۱ میلیون تومان</strong><span>الان</span>';
     choices.append(later,or,now);
     ex.appendChild(choices);
 
@@ -1557,7 +1558,7 @@ async function postStepTime(event,keepalive=false){
 async function startStepTimer(){
  if(!workflow.timeTrackingEnabled||!workflow.currentStepId||workflow.timerActive)return;
  workflow.timerActive=true;
- if(['dd_lifetrade','ultimatum'].includes(workflow.currentStage)&&workflow.assignmentId){
+ if(['dd_lifetrade','ultimatum','intermission'].includes(workflow.currentStage)&&workflow.assignmentId){
   try{if(!await BarsanClock.start(workflow.assignmentId,workflow.timerRunId,workflow.currentStepId,workflow.currentStage)){workflow.timerActive=false;return;}}
   catch(error){workflow.timerActive=false;throw error;}
   workflow.timerUsesClientClock=true;
@@ -1765,7 +1766,7 @@ function waitForChoice(start){
   window.addEventListener('keydown',handler);
  });
 }
-async function runTask(taskKey, taskNum){const task=DATA[taskKey];setStatus(`بخش ${taskNum} از ۲ · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ۲ · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
+async function runTask(taskKey, taskNum, design=null){const task=DATA[taskKey];const taskTotal=design?design.task_keys.length:2;setStatus(`بخش ${taskNum} از ${taskTotal} · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(design&&design.magnitude_keys?task.blocks.filter(block=>design.magnitude_keys.includes(block.magnitude)):task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ${taskTotal} · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={workflow_module_code:workflow.currentModuleCode||"dd_lifetrade",workflow_step_id:workflow.currentStepId,participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
 async function startLegacyExperiment(){
  const codeInput=$('participant-code-input');
  const codeError=$('participant-code-error');
@@ -2267,6 +2268,10 @@ async function chooseQuestionnaireAnswer(item,index,value){
  }
 }
 
+function canonicalWorkflowStage(moduleCode){
+ if(moduleCode==='dd_standalone')return 'dd_lifetrade';
+ return ['ultimatum_frame','ultimatum_control'].includes(moduleCode)?'ultimatum':moduleCode;
+}
 async function enterWorkflowStep(){
  const step=workflow.workflowSteps[workflow.workflowStepIndex];
  if(!step){
@@ -2276,8 +2281,9 @@ async function enterWorkflowStep(){
  }
  workflow.currentStepId=step.step_id;
  workflow.currentModuleCode=step.module_code;
- workflow.currentStage=(step.module_code==='ultimatum_frame'||step.module_code==='ultimatum_control')?'ultimatum':step.module_code;
+ workflow.currentStage=canonicalWorkflowStage(step.module_code);
  workflow.timerActive=false;
+ workflow.timerRunId=null;
  await startStepTimer();
  workflow.stageRunId=null;
  workflow.stagedRunId=null;
@@ -2288,12 +2294,60 @@ async function enterWorkflowStep(){
   workflow.questionnaireSavedAnswers={...workflow.questionnaireAnswers};
   workflow.questionIndex=Number.isInteger(draft.current_question_index)?Math.max(0,Math.min(QUESTIONNAIRE_ITEMS.length-1,draft.current_question_index)):0;
   showQuestionnaireIntro(0);
- }else if(step.module_code==='dd_lifetrade'){
+ }else if(step.module_code==='dd_lifetrade'||step.module_code==='dd_standalone'){
   await startAssignedDDStage();
+ }else if(step.module_code==='intermission'){
+   await startIntermission();
  }else if(step.module_code==='ultimatum'||step.module_code==='ultimatum_frame'||step.module_code==='ultimatum_control'){
   await startUltimatumInstructions();
  }
 }
+const GAME_MODULES=new Set(['dd_lifetrade','dd_standalone','ultimatum','ultimatum_frame','ultimatum_control']);
+function gameOrdinal(n){
+ const names=['اول','دوم','سوم','چهارم','پنجم','ششم','هفتم','هشتم','نهم','دهم'];
+ return names[n-1]||String(n).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+}
+function intermissionCopy(steps,index){
+ const previous=steps.slice(0,index).filter(step=>GAME_MODULES.has(step.module_code)).length;
+ const next=steps.slice(index+1).some(step=>GAME_MODULES.has(step.module_code));
+ const paragraphs=[previous?`بازی ${gameOrdinal(previous)} تمام شد.`:'پیش از ادامه کمی استراحت کنید.'];
+ paragraphs.push(next?`کمی استراحت کنید و هر وقت آماده بودید، به بازی ${gameOrdinal(previous+1)} بروید.`
+   :'کمی استراحت کنید و هر وقت آماده بودید، ادامه دهید.');
+ return {paragraphs,button:next?`ادامه به بازی ${gameOrdinal(previous+1)}`:'ادامه'};
+}
+async function startIntermission(){
+ await BarsanStore.acquire(workflow.participantCode);
+ await recoverOrphanedPendingQueues();
+ await recoverOrphanedUltimatumOutbox();
+ await recoverTaskCompletions();
+ const started=await startStageWithRecovery({invitation_token:workflow.invitationToken,
+  participant_code:workflow.participantCode,stage_code:'intermission',step_id:workflow.currentStepId});
+ if(started.already_completed){await advanceWorkflowStep();return;}
+ workflow.stageRunId=started.run_id;workflow.timerRunId=started.run_id;
+ await startStepTimer();show();setStatus('استراحت');
+ const copy=intermissionCopy(workflow.workflowSteps,workflow.workflowStepIndex);
+ showInfo('استراحت کوتاه',copy.paragraphs);
+ const button=stimulus.querySelector('.next-page');button.textContent=copy.button;
+ let completion=null;
+ const finishRest=()=>runCompletionOnce('rest:'+started.run_id,async()=>{
+  completionRetryAction=null;button.disabled=true;button.textContent='در حال ثبت ادامه…';
+  if(!completion)completion={invitation_token:workflow.invitationToken,participant_code:workflow.participantCode,
+   stage_code:'intermission',step_id:workflow.currentStepId,run_id:started.run_id,
+   final_payload:{continue_clicked_at:nowISO()}};
+  try{
+   await queueTaskCompletion('/api/experiment/stages/complete',completion);
+   await completeTaskDurably('/api/experiment/stages/complete',completion);
+   await finishStepTimer();await advanceWorkflowStep();
+  }catch(error){
+   completionRetryAction=finishRest;scheduleCompletionRetry(error);
+   setStatus(error.localStorageFailure?'ذخیرهٔ امن روی این دستگاه ممکن نشد؛ دوباره تلاش کنید.'
+    :'ادامه روی این دستگاه محفوظ است؛ منتظر اتصال هستیم.');
+   button.disabled=false;button.textContent='تلاش دوباره برای ادامه';
+  }
+ });
+ button.onclick=()=>{finishRest().catch(console.error);};
+}
+
 async function advanceWorkflowStep(){
  if(!workflow.workflowMode)return;
  workflow.workflowStepIndex+=1;
@@ -2601,12 +2655,13 @@ async function startAssignedDDStage(){
  try{
   show();
 
-  const taskOrder=shuffle(['LT','KT']);
+  const design=started.draft_payload&&started.draft_payload.dd_design;
+   const taskOrder=shuffle(design?design.task_keys:['LT','KT']);
   for(let i=0;i<taskOrder.length;i++){
    if(stopped)break;
-   await runTask(taskOrder[i],i+1);
+   await runTask(taskOrder[i],i+1,design);
    if(stopped)break;
-   if(i===0){
+   if(i<taskOrder.length-1){
     showRest();setStatus('استراحت · برای ادامه دکمهٔ ادامه را بزنید');
     await spaceToContinue();await wait(1500);
    }
@@ -2635,6 +2690,8 @@ function participantWorkflowTitle(moduleCode){
  const titles={
   questionnaire:'پرسشنامه',
   dd_lifetrade:'بازی انتخاب',
+  dd_standalone:'بازی انتخاب',
+  intermission:'استراحت',
   ultimatum:'بازی باشگاه رانندگان بارسان',
   ultimatum_frame:'بازی باشگاه رانندگان بارسان',
   ultimatum_control:'بازی باشگاه رانندگان بارسان'
@@ -2645,6 +2702,8 @@ function participantWorkflowDescription(moduleCode){
  const descriptions={
   questionnaire:'پاسخ به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری',
   dd_lifetrade:'انتخاب میان دریافت پاداش در زمان‌های متفاوت',
+  dd_standalone:'پنج انتخاب میان دریافت پاداش در زمان‌های متفاوت',
+  intermission:'فرصتی برای استراحت و ادامه با آمادگی شما',
   ultimatum:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
   ultimatum_frame:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
   ultimatum_control:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت'

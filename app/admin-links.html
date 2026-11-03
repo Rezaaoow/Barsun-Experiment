@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>@font-face{font-family:Vazirmatn;src:url('__BARSAN_FONT_URL__') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}</style>
 <title>پنل مدیریت آزمایش بارسان</title>
 <style>
 :root{font-family:"Vazirmatn",Tahoma,"Segoe UI",sans-serif;color:#182235;background:#f3f6fb;font-synthesis:none;font-kerning:normal;text-rendering:optimizeLegibility;--ink:#1e2d48;--muted:#627087;--line:#e1e7f0;--blue:#2857a6;--soft:#f5f8fe;--green:#177647;--red:#ab342a}
@@ -258,6 +256,8 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
  <div class="workflow-palette" aria-label="ماژول‌های قابل افزودن">
   <button type="button" class="workflow-module" draggable="true" data-add-module="questionnaire">پرسشنامه <span>+ افزودن</span></button>
   <button type="button" class="workflow-module" draggable="true" data-add-module="dd_lifetrade">DD / Life-Trade <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="dd_standalone">DD مستقل · ۵۰ / ۱۰۰ میلیون · ۵ دور <span>+ افزودن</span></button>
+  <button type="button" class="workflow-module" draggable="true" data-add-module="intermission">استراحت بین بازی‌ها <span>+ افزودن</span></button>
   <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum_frame">Ultimatum — Frame <span>+ افزودن</span></button>
   <button type="button" class="workflow-module" draggable="true" data-add-module="ultimatum_control">Ultimatum — Control <span>+ افزودن</span></button>
  </div>
@@ -486,6 +486,8 @@ function csvToTextarea(text){
 const workflowModuleLabels={
  questionnaire:"پرسشنامه",
  dd_lifetrade:"DD / Life-Trade",
+ dd_standalone:"DD مستقل · ۵۰ / ۱۰۰ میلیون · ۵ دور",
+ intermission:"استراحت بین بازی‌ها",
  ultimatum:"بازی Ultimatum",
  ultimatum_frame:"بازی Ultimatum — Frame",
  ultimatum_control:"بازی Ultimatum — Control"
@@ -792,7 +794,7 @@ async function downloadActiveAssignmentsCsv(){
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{button.disabled=false;}
 }
-function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",ultimatum:"Ultimatum",ultimatum_frame:"Ultimatum — Frame",ultimatum_control:"Ultimatum — Control"})[code]||code;}
+function stageLabel(code){return ({questionnaire:"پرسشنامه",dd_lifetrade:"DD / Life-Trade",dd_standalone:"DD مستقل · ۵ دور",intermission:"استراحت",ultimatum:"Ultimatum",ultimatum_frame:"Ultimatum — Frame",ultimatum_control:"Ultimatum — Control"})[code]||code;}
 function progressStateLabel(state){
  return ({not_started:"شروع نکرده",in_progress:"در حال انجام",stale_incomplete:"متوقف / پیگیری",completed:"کامل"})[state]||state||"نامشخص";
 }
