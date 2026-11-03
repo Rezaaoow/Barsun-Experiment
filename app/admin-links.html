@@ -366,6 +366,8 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
 <div class="export-grid">
 <button class="secondary" data-export="questionnaire" type="button">خروجی پرسشنامه CSV</button>
 <button class="secondary" data-export="lifetrade" type="button">خروجی Life-Trade CSV</button>
+<button type="button" class="btn secondary" data-export="dd_records">خروجی مرتب بازی انتخاب</button>
+<button type="button" class="btn secondary" data-export="ut_records">خروجی مرتب بازی باشگاه</button>
 <button class="secondary" data-export="ultimatum" type="button">خروجی Ultimatum CSV</button>
 <button data-export="all" type="button">خروجی کامل ZIP</button>
 </div>
@@ -942,7 +944,7 @@ $("createFullTestLinks").addEventListener("click",async()=>{
 });
 document.querySelectorAll("[data-export]").forEach(button=>button.addEventListener("click",async()=>{
  clearStatus("exportStatus");button.disabled=true;const scope=$("monitorScope").value,type=button.dataset.export;
- const paths={questionnaire:"/api/admin/questionnaire/export.csv",lifetrade:"/api/admin/export.csv",ultimatum:"/api/admin/ultimatum/export.csv",all:"/api/admin/export-all.zip"};
+ const paths={dd_records:"/api/admin/dd/records.csv",ut_records:"/api/admin/ultimatum/records.csv",questionnaire:"/api/admin/questionnaire/export.csv",lifetrade:"/api/admin/export.csv",ultimatum:"/api/admin/ultimatum/export.csv",all:"/api/admin/export-all.zip"};
  try{const filename=await downloadResponse(paths[type]+"?scope="+scope,(scope==="test"?"barsan_test_":"barsan_main_")+type+(type==="all"?".zip":".csv"));setStatus("exportStatus","دانلود آماده شد: "+filename,"success");}
  catch(e){setStatus("exportStatus",e.message,"error");}
  finally{button.disabled=false;}
@@ -978,3 +980,4 @@ $("resetData").addEventListener("click",async()=>{
 </script>
 </body>
 </html>
+

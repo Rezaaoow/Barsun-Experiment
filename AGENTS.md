@@ -1,6 +1,8 @@
 # AI Agent Instructions — BarSan Experiment
 
-## Current staging runtime — verified 2026-11-03
+## Last verified staging runtime — 2026-11-03
+
+This branch additionally contains UT/DD IndexedDB and request-reduction work documented in `docs/UT_DD_RESILIENCE_FA.md`; do not infer its deployment from branch contents. A later SSH attempt was closed before authentication. New runtime dependencies are `task_records.py`, `app/persistence.js` and the versioned local font plus its license. The candidate launcher/manifest pin the whole runtime set. Research payloads, old exports and attempt/restart rules must remain preserved. Full offline Ultimatum and questionnaire redesign are outside this change.
 
 Staging runs fixed PR #27 application source `7af183881410faf5d089efefe44d71d43781d8ce`: LiteSpeed loopback proxy to Uvicorn, two workers on port 8766, source `/home/myexperi/lifetrade-staging/repo`. Each worker has an opt-in limit of eight simultaneous sync handlers and a four-connection PostgreSQL pool. Production retains the Passenger paths below. Read `docs/CAPACITY_FIX_2026-11-03_FA.md` and `ops/README_CAPACITY_FA.md` first. Staging restart uses Supervisor; touching Passenger restart.txt does not restart Uvicorn. Runtime releases must include `request_metrics.py`; the launcher pins both runtime file hashes. Stop the service before replacing dependencies; wait for bounded readiness retries after start and verify public HTML/API.
 

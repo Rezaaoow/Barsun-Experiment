@@ -1,0 +1,16 @@
+{
+  "base_runtime_sha": "7af183881410faf5d089efefe44d71d43781d8ce",
+  "runtime_files": {
+    "barsan_experiment.py": "b1353278f7e95c676004246598b667ccec04363be02ec3611ff0e89b7c85adea",
+    "request_metrics.py": "53a447b0e1bf299283ef3296748abd22679a72b1291722d0e6c3b19e4dcbf046",
+    "task_records.py": "b9e735eafc8ae3e7e16c9ef16b4085959972829404e188ea8cb15d3d59ceb6ad",
+    "app/index.html": "7f9fe17b1ebbaeeb351ba620184b24598bf12ff010590850737a9349951aa449",
+    "app/persistence.js": "83d1769c1c97e5fcf147a1f52a3705fd51f8e081c9d559cf9d13d94380981416",
+    "app/admin-links.html": "152f93010cc928ab118ceeb7b77eac93d398cf697aca4e9f738a12c8725d5d4c",
+    "app/fonts/vazirmatn-v33.003.woff2": "4e3fa217d38fdafc1fea4414ceb58ca5e662cf0ab5fa735a8c8c20e8b42cad92"
+  },
+  "additional_files": [
+    "app/fonts/OFL.txt"
+  ],
+  "deployment_status": "not deployed"
+}

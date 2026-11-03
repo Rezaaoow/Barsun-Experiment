@@ -1,5 +1,7 @@
 # عملیات ظرفیت Staging
 
+نسخهٔ آمادهٔ UT/DD در این شاخه هنوز روی هاست منتشر نشده است؛ اتصال SSH تازه پیش از احراز هویت بسته شد. manifest نامزد در `resilience-runtime-manifest.json` و launcher هماهنگ در همین پوشه است. مجموعهٔ فایل‌ها باید پس از CI همان SHA، با backup مستقل و به‌صورت هماهنگ روی Staging قرار گیرد؛ سرویس پیش از تعویض فایل‌ها متوقف و readiness عمومی پس از start با retry محدود بررسی شود. فایل‌های private env، کلیدها، bootstrap، مسیر proxy و Production نباید جایگزین شوند. نبود دسترسی مجوز deploy ناقص یا حذف guard hash نیست. جزئیات قابلیت‌ها و محدودیت‌ها در `docs/UT_DD_RESILIENCE_FA.md` است.
+
 این پوشه snapshot ابزارهای واقعاً استفاده‌شده در آزمون ۳ نوامبر ۲۰۲۶ است. هدف‌ها به Staging همین پروژه و loopback همان runtime محدودند؛ Production هدف هیچ workload نیست.
 
 - کد فعال: `7af183881410faf5d089efefe44d71d43781d8ce`؛ تغییرات پس از آن در این پوشه/گزارش‌ها، انتشار خودکار runtime نیستند.

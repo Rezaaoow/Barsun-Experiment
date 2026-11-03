@@ -27,7 +27,21 @@ let timerId = 0;
 let failing = true;
 let requests = 0;
 const sent = [];
+const entries=new Map();
+const BarsanStore={
+ scope:(...parts)=>JSON.stringify(parts),
+ async put(scope,key,value,mode='immutable'){
+  const id=JSON.stringify([scope,key]),previous=entries.get(id);
+  let merged=previous&&mode==='immutable'?previous.value:value;
+  if(previous&&mode==='events')merged={...previous.value,...value,payload:{...previous.value.payload,...value.payload,event_timestamps:{...value.payload.event_timestamps,...previous.value.payload.event_timestamps}}};
+  const entry={id,scope,key,revision:(previous?.revision||0)+1,value:merged};entries.set(id,entry);return entry;
+ },
+ async list(scope){return [...entries.values()].filter(entry=>scope===undefined||entry.scope===scope);},
+ async ack(sent){for(const entry of sent)if(entries.get(entry.id)?.revision===entry.revision)entries.delete(entry.id);},
+ async initialize(){},async acquire(){},async migrate(){},
+};
 const context = vm.createContext({
+ BarsanStore,BarsanTransport:{run:work=>work()},
   console: { warn() {}, error() {} },
   localStorage, crypto: { randomUUID }, Date, Math, Set, Map, Number, JSON,
   AbortController,
@@ -59,17 +73,16 @@ vm.runInContext(sources.join('\n'), context);
 async function run(code) { return vm.runInContext(`(async()=>{${code}})()`, context); }
 
 await run(`await saveTrial({client_event_id:'dd-event-1',reaction_time_ms:500});`);
-assert.equal(JSON.parse(values['lifetrade_pending_dd-1']).length, 1);
+assert.equal(await run('return (await readPending()).length;'),1);
 await run(`await saveTrial({client_event_id:'dd-event-1',reaction_time_ms:500});`);
-assert.equal(JSON.parse(values['lifetrade_pending_dd-1']).length, 1);
+assert.equal(await run('return (await readPending()).length;'),1);
 let before = requests;
-assert.equal(await run('return await flushPending();'), 1);
-assert.equal(requests - before, 3);
-assert.equal(JSON.parse(values['lifetrade_pending_dd-1']).length, 1);
-failing = false;
-assert.equal(await run('return await flushPending();'), 0);
-assert.equal(values['lifetrade_pending_dd-1'], undefined);
-console.log('PASS Life-Trade: local persistence, duplicate suppression, 3-attempt cap, and recovery');
+assert.equal(await run('return await flushPending();'),1);
+assert.equal(requests-before,3);
+assert.equal(await run('return (await readPending()).length;'),1);
+failing=false;
+assert.equal(await run('return await flushPending();'),0);
+console.log('PASS DD: store-before-send, duplicate suppression, 3-attempt cap, recovery');
 
 await run(`queueQuestionnaireAnswer({code:'B1'},0,'1','step-q'); queueQuestionnaireAnswer({code:'B1'},0,'2','step-q');`);
 const qKey = 'barsan_questionnaire_pending_SYNTHETIC_questionnaire-1';
@@ -98,16 +111,15 @@ assert.equal(values[tKey], undefined);
 assert.deepEqual(sent.slice(-2).map(row => row.payload.event_id), timeIds);
 console.log('PASS time tracking: failed sends persist and recovery preserves event IDs');
 
-await run(`utQueueOutboxItem('ut-1',{kind:'resolve',item_id:'round-1',payload:{run_id:'ut-1',round_id:'round-1',invitation_token:'synthetic-test-token',participant_code:'SYNTHETIC',participant_decision:'accept'}});`);
-const uKey = 'barsan_ultimatum_pending_SYNTHETIC_ut-1';
-assert.equal(JSON.parse(values[uKey])[0].payload.invitation_token, undefined);
-failing = true;
-await assert.rejects(run(`return await utSendOutboxItem('ut-1',utReadOutboxKey(utOutboxKey('ut-1'))[0]);`));
-assert.equal(JSON.parse(values[uKey]).length, 1);
-failing = false;
-await run(`return await utSendOutboxItem('ut-1',utReadOutboxKey(utOutboxKey('ut-1'))[0]);`);
-assert.equal(values[uKey], undefined);
-await run(`utQueueOutboxItem('ut-1',{kind:'events',item_id:'round-1',payload:{event_timestamps:{advance_clicked_at:'2026-11-02T10:00:00Z'}}});utQueueOutboxItem('ut-1',{kind:'events',item_id:'round-1',payload:{event_timestamps:{advance_clicked_at:'2026-11-02T10:00:05Z'}}});`);
-assert.equal(JSON.parse(values[uKey])[0].payload.event_timestamps.advance_clicked_at, '2026-11-02T10:00:00Z');
-console.log('PASS Ultimatum: persisted decisions survive failure; acknowledged decisions clear; auxiliary event timestamps keep the first value');
+await run(`await utQueueOutboxItem('ut-1',{kind:'resolve',item_id:'round-1',payload:{run_id:'ut-1',round_id:'round-1',invitation_token:'synthetic-test-token',participant_code:'SYNTHETIC',participant_decision:'accept'}});`);
+assert.equal(await run(`return (await utReadOutboxKey(utOutboxKey('ut-1')))[0].payload.invitation_token;`),undefined);
+failing=true;
+await assert.rejects(run(`return await utSendOutboxItem('ut-1',(await utReadOutboxKey(utOutboxKey('ut-1')))[0]);`));
+assert.equal(await run(`return (await utReadOutboxKey(utOutboxKey('ut-1'))).length;`),1);
+failing=false;
+await run(`return await utSendOutboxItem('ut-1',(await utReadOutboxKey(utOutboxKey('ut-1')))[0]);`);
+assert.equal(await run(`return (await utReadOutboxKey(utOutboxKey('ut-1'))).length;`),0);
+await run(`await utQueueOutboxItem('ut-1',{kind:'events',item_id:'round-1',payload:{event_timestamps:{advance_clicked_at:'2026-11-03T10:00:00Z'}}});await utQueueOutboxItem('ut-1',{kind:'events',item_id:'round-1',payload:{event_timestamps:{advance_clicked_at:'2026-11-03T10:00:05Z'}}});`);
+assert.equal(await run(`return (await utReadOutboxKey(utOutboxKey('ut-1')))[0].payload.event_timestamps.advance_clicked_at;`),'2026-11-03T10:00:00Z');
+console.log('PASS Ultimatum: credentials omitted, failures persist, acknowledgements clear, timestamps keep first value');
 console.log('ALL_CLIENT_QUEUE_FAULT_CHECKS_PASSED');

@@ -1,5 +1,9 @@
 # BarSan Experiment — workflow architecture
 
+## UT/DD resilience update — 2026-11-03
+
+The participant DD and Ultimatum response queues now use transactional IndexedDB; questionnaire persistence remains unchanged. Prescribed stimulus/opponent delays and server-owned random outcomes are unchanged. Ultimatum resolve starts during the proposer wait, can return the next permitted prepared round, and can acknowledge auxiliary events from previous rounds. Post-result navigation awaits a local commit, never the telemetry network request. Completion intents survive reload and are retried with the original run ID; replaying old decisions precedes creating a new attempt. This does not provide full offline Ultimatum execution: an authoritative server result is still required. See `docs/UT_DD_RESILIENCE_FA.md` for validation and deployment status.
+
 ## Scope and current implementation status
 
 The repo contains the shared participant, assignment, consent and stage-resume foundation; the welcome/ethics pages, 25-item questionnaire, DD/Life-Trade task, and an initial Ultimatum UI/API/data model are implemented in GitHub. The AI response parameters remain provisional, and the code has not been deployed to or end-to-end tested on cPanel. This document describes the repository state, not the hosted site.
@@ -155,3 +159,4 @@ Body: `invitation_token`, `participant_code`, `stage_code`, `run_id`; questionna
 - Ensure the opponent-display manipulation and debrief are covered by the approved ethics protocol.
 - Test refresh at every stage, browser close/reopen, dropped network, duplicate submission, wrong code/link combination, fixed condition, all 22 Ultimatum rows, and complete-vs-incomplete stage routing on the hosted PostgreSQL database.
 - Deploy only after automated tests, a pilot on the actual cPanel/PostgreSQL database, and review of data exports.
+

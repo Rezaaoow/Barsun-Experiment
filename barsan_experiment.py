@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import math
 import os
 import random
@@ -18,10 +19,11 @@ from typing import Any, Iterator, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from request_metrics import RequestMetricsMiddleware, observed_connection
+from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
@@ -898,11 +900,18 @@ class QuestionnaireAnswersBatchIn(ExperimentIdentityIn):
     answers: list[QuestionnaireAnswerBatchItem] = Field(min_length=1, max_length=10)
 
 
+class UltimatumEventItem(BaseModel):
+    round_id: str = Field(min_length=1, max_length=100)
+    event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
+    wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+
+
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
     final_payload: dict[str, Any] | None = None
+    auxiliary_events: list[UltimatumEventItem] = Field(default_factory=list, max_length=25)
 
 
 class ExperimentTimeIn(ExperimentIdentityIn):
@@ -934,6 +943,9 @@ class UltimatumResolveIn(ExperimentIdentityIn):
     responded_at: str | None = Field(default=None, max_length=80)
     reaction_time_ms: float | None = Field(default=None, ge=0, le=3600000)
     wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    planned_wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
+    prepare_next: bool = False
+    auxiliary_events: list[UltimatumEventItem] = Field(default_factory=list, max_length=25)
     client_metadata: dict[str, Any] = Field(default_factory=dict)
     client_event_timestamps: dict[str, str] = Field(default_factory=dict)
 
@@ -942,6 +954,11 @@ class UltimatumEventsIn(ExperimentIdentityIn):
     run_id: str = Field(min_length=1, max_length=100)
     round_id: str = Field(min_length=1, max_length=100)
     event_timestamps: dict[str, str] = Field(min_length=1, max_length=10)
+
+
+class UltimatumEventsBatchIn(ExperimentIdentityIn):
+    run_id: str = Field(min_length=1, max_length=100)
+    events: list[UltimatumEventItem] = Field(min_length=1, max_length=25)
 
 
 def _ensure_participant_and_run(data: SessionIn) -> tuple[str, str]:
@@ -3474,8 +3491,7 @@ def _ultimatum_score_totals(connection: Any, run_id: str, block_code: str) -> tu
     return {"score": total_score, "lost": total_lost}, selected_block
 
 
-@app.post("/api/experiment/ultimatum/resolve")
-def resolve_ultimatum_round(data: UltimatumResolveIn):
+def _resolve_ultimatum_round(data: UltimatumResolveIn):
     """Resolve participant choice, generate AI responses server-side, and persist trial-level data."""
     _validate_event_timestamps(data.client_event_timestamps, ULTIMATUM_PRE_RESOLVE_EVENT_FIELDS)
     with conn() as connection:
@@ -3568,6 +3584,7 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
             "potential_points_lost": potential_points_lost,
             "reaction_time_ms": reaction_time,
             "wait_duration_ms": wait_duration,
+            "planned_wait_duration_ms": data.planned_wait_duration_ms,
             "decision_screen_shown_at": data.decision_screen_shown_at,
             "responded_at": responded_at,
             "client_metadata_resolve": data.client_metadata,
@@ -3635,48 +3652,133 @@ def resolve_ultimatum_round(data: UltimatumResolveIn):
         return result
 
 
+def _next_ultimatum_request(data: UltimatumResolveIn, result: dict[str, Any]) -> dict[str, Any] | None:
+    if result["phase"] == "practice" and result["block_code"] == "practice_proposer_agent":
+        return {"phase": "practice", "block_code": "practice_responder_coworker", "block_order": 0,
+                "trial_in_block": 1, "trial_sequence": 0}
+    if result["phase"] == "main" and result["trial_in_block"] < ULTIMATUM_MAIN_BLOCK_TRIALS:
+        trial = result["trial_in_block"] + 1
+        order = result["block_order"]
+        return {"phase": "main", "block_code": result["block_code"], "block_order": order,
+                "trial_in_block": trial, "trial_sequence": (order - 1) * 5 + trial}
+    if result["phase"] == "main" and result["block_order"] == ULTIMATUM_MAIN_BLOCK_COUNT:
+        return None
+    with conn() as connection:
+        _assignment, state = _lookup_active_ultimatum_stage(
+            connection, data.invitation_token, data.participant_code, data.run_id
+        )
+        order_list = _json_value(state["draft_payload"])["block_order"]
+    order = 1 if result["phase"] == "practice" else result["block_order"] + 1
+    return {"phase": "main", "block_code": order_list[order - 1], "block_order": order,
+            "trial_in_block": 1, "trial_sequence": (order - 1) * 5 + 1}
+
+
+@app.post("/api/experiment/ultimatum/resolve")
+def resolve_ultimatum_round(data: UltimatumResolveIn):
+    result = _resolve_ultimatum_round(data)
+    if data.auxiliary_events:
+        result = dict(result)
+        result["acknowledged_event_round_ids"] = _append_auxiliary_events(data, data.auxiliary_events)
+    if not data.prepare_next:
+        return result
+    # The choice is committed before optional prefetch. A prefetch failure must not
+    # turn a successfully persisted response into a failed resolve.
+    result = dict(result)
+    result["next_round"] = None
+    result["next_round_request"] = None
+    try:
+        request = _next_ultimatum_request(data, result)
+        if request:
+            result["next_round"] = prepare_ultimatum_round(UltimatumPrepareIn(
+                invitation_token=data.invitation_token, participant_code=data.participant_code,
+                run_id=data.run_id, client_metadata=data.client_metadata, **request
+            ))
+            result["next_round_request"] = request
+    except HTTPException as exc:
+        if exc.status_code not in {409, 503}:
+            raise
+        result["prefetch_deferred"] = True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Round prefetch deferred: %s", type(exc).__name__)
+        result["prefetch_deferred"] = True
+    return result
+
+
+def _record_round_events(connection: Any, assignment: dict[str, Any], run_id: str,
+                         item: UltimatumEventItem, extended: bool = False) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    row = connection.execute(
+        "SELECT trial.status,trial.payload FROM ultimatum_trials AS trial "
+        "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+        "JOIN instrument_versions AS instrument "
+        "ON instrument.instrument_version_id=run.instrument_version_id "
+        "WHERE trial.round_id=" + marker + " AND trial.run_id=" + marker
+        + " AND run.participation_id=" + marker + " AND instrument.instrument_code='ultimatum'"
+        + (" FOR UPDATE OF trial" if DATABASE_URL else ""),
+        (item.round_id, run_id, assignment["participation_id"]),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "دور اولتیماتوم برای این شرکت‌کننده پیدا نشد.")
+    if row["status"] != "completed":
+        raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
+    payload = _json_value(row["payload"])
+    timestamps = payload.get("client_event_timestamps") or {}
+    first_wait_end = "waiting_ended_at" not in timestamps
+    for event_name, event_time in item.event_timestamps.items():
+        timestamps.setdefault(event_name, event_time)
+    payload["client_event_timestamps"] = timestamps
+    payload.setdefault("client_event_server_received_at", now())
+    update_wait = (extended and first_wait_end and "waiting_ended_at" in item.event_timestamps
+                   and item.wait_duration_ms is not None and payload.get("wait_duration_ms") is None)
+    if update_wait:
+        payload["wait_duration_ms"] = item.wait_duration_ms
+    connection.execute(
+        "UPDATE ultimatum_trials SET payload=" + marker
+        + (",wait_duration_ms=" + marker if update_wait else "")
+        + " WHERE round_id=" + marker + " AND run_id=" + marker,
+        ((_json_param(payload), item.wait_duration_ms, item.round_id, run_id) if update_wait
+         else (_json_param(payload), item.round_id, run_id)),
+    )
+
+
 @app.post("/api/experiment/ultimatum/events")
 def record_ultimatum_events(data: UltimatumEventsIn):
-    """Append idempotent post-decision timestamps even after a task attempt has ended."""
+    """Compatibility endpoint; preserve first-write timestamps, including old attempts."""
     _validate_event_timestamps(data.event_timestamps, ULTIMATUM_POST_RESOLVE_EVENT_FIELDS)
-    marker = "%s" if DATABASE_URL else "?"
     with conn() as connection:
-        assignment = _lookup_assignment(
-            connection, data.invitation_token, data.participant_code, require_consent=True
-        )
-        # Auxiliary timestamps may arrive after the participant has moved on or
-        # restarted the task. Validate ownership of the run and round without
-        # requiring that run to remain the current active attempt.
-        row = connection.execute(
-            "SELECT trial.status,trial.payload FROM ultimatum_trials AS trial "
-            "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
-            "JOIN instrument_versions AS instrument "
-            "ON instrument.instrument_version_id=run.instrument_version_id "
-            "WHERE trial.round_id=" + marker + " AND trial.run_id=" + marker
-            + " AND run.participation_id=" + marker
-            + " AND instrument.instrument_code='ultimatum'",
-            (data.round_id, data.run_id, assignment["participation_id"]),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "دور اولتیماتوم برای این شرکت‌کننده پیدا نشد.")
-        if row["status"] != "completed":
-            raise HTTPException(409, "رخدادهای پس از نتیجه فقط برای دور تکمیل‌شده ثبت می‌شوند.")
-        payload = _json_value(row["payload"])
-        timestamps = payload.get("client_event_timestamps") or {}
-        # Keep first-write timestamps so retries remain idempotent and auditable.
-        for event_name, event_time in data.event_timestamps.items():
-            timestamps.setdefault(event_name, event_time)
-        payload["client_event_timestamps"] = timestamps
-        payload["client_event_server_received_at"] = now()
-        connection.execute(
-            "UPDATE ultimatum_trials SET payload=" + marker + " WHERE round_id=" + marker + " AND run_id=" + marker,
-            (_json_param(payload), data.round_id, data.run_id),
-        )
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        item = UltimatumEventItem(round_id=data.round_id, event_timestamps=data.event_timestamps)
+        _record_round_events(connection, assignment, data.run_id, item)
+        marker = "%s" if DATABASE_URL else "?"
+        saved = connection.execute("SELECT payload FROM ultimatum_trials WHERE round_id=" + marker,
+                                   (data.round_id,)).fetchone()
+        timestamps = _json_value(saved["payload"])["client_event_timestamps"]
     return {"round_id": data.round_id, "saved": True, "event_timestamps": timestamps}
 
 
-@app.post("/api/experiment/stages/complete")
-def complete_experiment_stage(data: StageCompleteIn):
+@app.post("/api/experiment/ultimatum/events/batch")
+def record_ultimatum_event_batch(data: UltimatumEventsBatchIn):
+    """One bounded atomic upload for non-critical events; no changed random outcomes."""
+    allowed = ULTIMATUM_POST_RESOLVE_EVENT_FIELDS | {"waiting_ended_at"}
+    if len({item.round_id for item in data.events}) != len(data.events):
+        raise HTTPException(422, "هر دور فقط یک‌بار در بستهٔ زمان‌ها مجاز است.")
+    for item in data.events:
+        _validate_event_timestamps(item.event_timestamps, allowed)
+        if item.wait_duration_ms is not None and "waiting_ended_at" not in item.event_timestamps:
+            raise HTTPException(422, "مدت انتظار باید همراه زمان پایان انتظار باشد.")
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        # Stable lock order avoids deadlocks between overlapping batches.
+        for item in sorted(data.events, key=lambda item: item.round_id):
+            _record_round_events(connection, assignment, data.run_id, item, extended=True)
+    return {"saved": True, "round_ids": [item.round_id for item in data.events]}
+
+
+def _complete_experiment_stage(data: StageCompleteIn):
     """Mark a module complete only for its currently active attempt."""
     with conn() as connection:
         assignment = _lookup_assignment(
@@ -3817,6 +3919,50 @@ def complete_experiment_stage(data: StageCompleteIn):
         )
     return {"completed": True, "already_completed": False, "stage_code": data.stage_code, "step_id": data.step_id}
 
+
+
+def _append_auxiliary_events(identity: Any, events: list[UltimatumEventItem]) -> list[str]:
+    try:
+        response = record_ultimatum_event_batch(UltimatumEventsBatchIn(
+            invitation_token=identity.invitation_token, participant_code=identity.participant_code,
+            run_id=identity.run_id, events=events,
+        ))
+        return response["round_ids"]
+    except HTTPException:
+        # A bad auxiliary item never invalidates an already committed choice.
+        # No ack is returned; the local rows remain available for recovery.
+        return []
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Auxiliary timing upload deferred: %s", type(exc).__name__)
+        return []
+
+
+@app.post("/api/experiment/stages/complete")
+def complete_experiment_stage(data: StageCompleteIn):
+    result = _complete_experiment_stage(data)
+    if data.stage_code == "ultimatum" and data.auxiliary_events:
+        result["acknowledged_event_round_ids"] = _append_auxiliary_events(data, data.auxiliary_events)
+    return result
+
+
+@app.post("/api/experiment/dd/complete")
+def complete_dd_task(data: StageCompleteIn):
+    if data.stage_code != "dd_lifetrade":
+        raise HTTPException(422, "این مسیر فقط برای بازی انتخاب است.")
+    marker = "%s" if DATABASE_URL else "?"
+    with conn() as connection:
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        count = connection.execute(
+            "SELECT COUNT(*) AS n FROM lifetrade_trials AS trial "
+            "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+            "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
+            "WHERE trial.run_id=" + marker + " AND run.participation_id=" + marker
+            + " AND version.instrument_code='lifetrade'",
+            (data.run_id, assignment["participation_id"]),
+        ).fetchone()
+        if count["n"] != 30:
+            raise HTTPException(422, "همهٔ ۳۰ پاسخ بازی انتخاب هنوز ثبت نشده‌اند.")
+    return complete_experiment_stage(data)
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -4654,6 +4800,79 @@ async def _read_streaming_response(response: StreamingResponse) -> bytes:
     return b"".join(chunks)
 
 
+def _ordered_task_export(module: str, scope: str):
+    """Bounded keyset reads release the DB connection before yielding to a slow client."""
+    marker = "%s" if DATABASE_URL else "?"
+    table, key = (("lifetrade_trials", "client_event_id") if module == "dd" else ("ultimatum_trials", "round_id"))
+    fields = DD_FIELDS if module == "dd" else UT_FIELDS
+    def encode(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    def generate():
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        cursor = ""
+        while True:
+            params = (cursor,) if scope == "test" else (cursor, STUDY_CODE)
+            scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
+            with conn() as connection:
+                rows = connection.execute(
+                    "SELECT trial.*,sp.study_code,p.participant_code,a.condition_code,"
+                    "run.status AS run_status,run.started_at AS run_started_at,run.completed_at AS run_completed_at,"
+                    "run.metadata AS run_metadata,version.version AS instrument_version "
+                    "FROM " + table + " AS trial "
+                    "JOIN instrument_runs AS run ON run.run_id=trial.run_id "
+                    "JOIN instrument_versions AS version ON version.instrument_version_id=run.instrument_version_id "
+                    "JOIN study_participations AS sp ON sp.participation_id=run.participation_id "
+                    "JOIN participants AS p ON p.participant_id=sp.participant_id "
+                    "LEFT JOIN experiment_assignments AS a ON a.participant_id=sp.participant_id AND a.study_code=sp.study_code "
+                    "WHERE trial." + key + ">" + marker + " AND " + scope_filter
+                    + " ORDER BY trial." + key + " LIMIT 200", params,
+                ).fetchall()
+            if not rows:
+                break
+            for raw in rows:
+                item = dict(raw)
+                payload = _json_value(item["payload"])
+                metadata = _json_value(item.pop("run_metadata"))
+                item.update(schema_version=2, attempt_number=metadata.get("attempt_number", 1),
+                            server_received_at=item.get("received_at"))
+                if module == "dd":
+                    record = dd_record(item, payload)
+                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at"}})
+                    item.update(stimulus_index=payload.get("index"),
+                                left_stimulus=record["stimulus"]["left"],right_stimulus=record["stimulus"]["right"],
+                                stimulus_parameters_json=encode(record["stimulus"]["parameters"]),
+                                adaptive_path_json=encode(record["adaptive_path"]))
+                else:
+                    item["round_status"] = item["status"]
+                    record = ultimatum_record(item, payload)
+                    item.update(planned_wait_duration_ms=payload.get("planned_wait_duration_ms"),
+                                events_json=encode(record["timing"]["events"]),
+                                model_json=encode(record["model"]),device_json=encode(record["device"]))
+                item.update(record_json=encode(record), raw_payload_json=encode(payload))
+                buffer.seek(0);buffer.truncate(0);writer.writerow(item)
+                yield buffer.getvalue()
+            cursor = rows[-1][key]
+    return StreamingResponse(generate(),media_type="text/csv; charset=utf-8",headers={
+        "Content-Disposition": 'attachment; filename="barsan_' + module + '_records_v2_' + scope + '.csv"',
+        "Cache-Control": "no-store",
+    })
+
+
+@app.get("/api/admin/dd/records.csv")
+def export_dd_records(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    return _ordered_task_export("dd", scope)
+
+
+@app.get("/api/admin/ultimatum/records.csv")
+def export_ultimatum_records(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    return _ordered_task_export("ultimatum", scope)
+
+
 @app.get("/api/admin/export-all.zip")
 def export_all_modules_zip(
     x_admin_token: str | None = Header(default=None),
@@ -4706,7 +4925,10 @@ app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")
 @lru_cache(maxsize=1)
 def load_homepage() -> str:
     with open(os.path.join(ROOT, "app", "index.html"), encoding="utf-8") as file:
-        return file.read()
+        html = file.read()
+    with open(os.path.join(ROOT, "app", "persistence.js"), encoding="utf-8") as file:
+        persistence = file.read()
+    return html.replace("<!-- BARSAN_PERSISTENCE -->", "<script>" + persistence + "</script>", 1)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -4721,6 +4943,13 @@ def admin_links_page():
         raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 
 
+@app.get("/assets/vazirmatn-v33.003.woff2")
+def task_font():
+    return FileResponse(os.path.join(ROOT, "app", "fonts", "vazirmatn-v33.003.woff2"),
+                        media_type="font/woff2", headers={"Cache-Control": "public,max-age=31536000,immutable"})
+
+
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return load_homepage()
+def home(request: Request):
+    root_path = request.scope.get("root_path", "").rstrip("/")
+    return load_homepage().replace("__BARSAN_FONT_URL__", root_path + "/assets/vazirmatn-v33.003.woff2")

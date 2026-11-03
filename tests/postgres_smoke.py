@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import barsan_experiment as main
 from stage_start_checks import check_concurrent_starts
+from resilience_checks import check_dd_recovery, check_ultimatum_recovery
 
 
 def main_test():
@@ -336,6 +337,12 @@ def main_test():
     with TestClient(main.app) as client:
         check_concurrent_starts(main, client, "ci-admin-token")
     print("PostgreSQL smoke, 24-participant and concurrent stage-start tests passed")
+
+    with TestClient(main.app) as resilience_client:
+        check_dd_recovery(resilience_client)
+        check_ultimatum_recovery(resilience_client, "A")
+        check_ultimatum_recovery(resilience_client, "B")
+    print("PostgreSQL task recovery: DD + both Ultimatum variants passed")
 
 
 if __name__ == "__main__":
