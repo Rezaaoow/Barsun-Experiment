@@ -17,8 +17,8 @@ from resilience_checks import setup_module_run
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture
-def browser_env(tmp_path, monkeypatch):
+@pytest.fixture(params=['chromium', 'webkit'])
+def browser_env(tmp_path, monkeypatch, request):
     monkeypatch.setattr(main, "DB_PATH", str(tmp_path / "browser.sqlite3"))
     monkeypatch.setattr(main, "ADMIN_TOKEN", "browser-synthetic-admin")
     monkeypatch.setattr(main, "INVITATION_TOKEN_KEY_FILE", str(tmp_path / "test.key"))
@@ -42,8 +42,9 @@ def browser_env(tmp_path, monkeypatch):
             raise AssertionError("Disposable browser server did not become ready")
         with sync_playwright() as pw:
             executable = os.environ.get("BARSAN_BROWSER_EXECUTABLE")
-            browser = pw.chromium.launch(headless=True, executable_path=executable or None)
-            context = browser.new_context()
+            browser_type = getattr(pw, request.param)
+            browser = browser_type.launch(headless=True, **({'executable_path': executable} if executable and request.param == 'chromium' else {}))
+            context = browser.new_context(**(pw.devices['iPhone 13'] if request.param == 'webkit' else {}))
             # The test does not depend on external fonts/network availability.
             context.route("https://cdn.jsdelivr.net/**", lambda route: route.abort())
             page = context.new_page()

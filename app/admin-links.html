@@ -834,6 +834,8 @@ function renderProgress(){
    const order=document.createElement("span");order.className="progress-step-order";order.textContent=Number(step.step_order).toLocaleString("fa-IR");
    const label=document.createElement("span");label.className="progress-step-label";label.textContent=step.module_label||stageLabel(step.module_code);
    const statusText=document.createElement("span");statusText.className="progress-step-status";statusText.textContent=step.status==="completed"?"کامل":step.status==="in_progress"?"در حال انجام":"شروع نشده";
+   chip.title=formatDuration(step.active_seconds)+(step.time_source==="client_visible_v2"?"؛ زمان حضور در صفحه":"؛ زمان تقریبی سرور")
+    +(Number(step.uncertain_seconds)>0?"؛ وقفهٔ نامطمئن: "+formatDuration(step.uncertain_seconds):"");
    chip.append(order,label,statusText);chips.appendChild(chip);
   });
   progress.appendChild(chips);tr.appendChild(progress);

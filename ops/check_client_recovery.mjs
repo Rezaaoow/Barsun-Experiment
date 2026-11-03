@@ -41,6 +41,7 @@ const BarsanStore={
  async initialize(){},async acquire(){},async migrate(){},
 };
 const context = vm.createContext({
+ BarsanClock:{currentRun:()=>null,pending:async()=>[],acknowledge:async()=>{},flush:async()=>{}},
  BarsanStore,BarsanTransport:{run:work=>work()},
   console: { warn() {}, error() {} },
   localStorage, crypto: { randomUUID }, Date, Math, Set, Map, Number, JSON,

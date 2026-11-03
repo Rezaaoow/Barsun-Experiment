@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from request_metrics import RequestMetricsMiddleware, observed_connection
+from client_timing import TimingCheckpoint, initialize as initialize_client_timing, save as save_client_timing
 from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -701,6 +702,7 @@ else:
 
 def _seed_registry(connection: Any) -> None:
     """Idempotently register the study and all three planned experiment modules."""
+    initialize_client_timing(connection)
     instrument_rows = [
         ("lifetrade", INSTRUMENT_NAME),
         ("questionnaire", "BarSan questionnaire"),
@@ -906,12 +908,17 @@ class UltimatumEventItem(BaseModel):
     wait_duration_ms: int | None = Field(default=None, ge=0, le=60000)
 
 
+class ClientTimingIn(ExperimentIdentityIn):
+    checkpoints: list[TimingCheckpoint] = Field(min_length=1, max_length=25)
+
+
 class StageCompleteIn(ExperimentIdentityIn):
     stage_code: StageCode
     run_id: str = Field(min_length=1, max_length=100)
     step_id: str | None = Field(default=None, min_length=1, max_length=80)
     final_payload: dict[str, Any] | None = None
     auxiliary_events: list[UltimatumEventItem] = Field(default_factory=list, max_length=25)
+    timing_checkpoints: list[TimingCheckpoint] = Field(default_factory=list, max_length=25)
 
 
 class ExperimentTimeIn(ExperimentIdentityIn):
@@ -2515,6 +2522,7 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     current_step = next((step for step in public_steps if step["status"] != "completed"), None)
     return {
         "participant_code": assignment["participant_code"],
+        "assignment_id": assignment["assignment_id"],
         "condition_code": assignment["condition_code"],
         "study_code": assignment["study_code"],
         "test_module_only": module_only,
@@ -2523,6 +2531,16 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
         "workflow_steps": public_steps,
         "stages": states,
     }
+
+
+@app.post("/api/experiment/time/checkpoints")
+def track_client_time(data: ClientTimingIn):
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code, require_consent=True)
+        acknowledged = save_client_timing(connection, assignment, data.checkpoints, bool(DATABASE_URL), _json_value, now())
+    return {"saved": True, "acknowledged_checkpoints": acknowledged}
 
 
 @app.post("/api/experiment/time")
@@ -3940,6 +3958,13 @@ def _append_auxiliary_events(identity: Any, events: list[UltimatumEventItem]) ->
 @app.post("/api/experiment/stages/complete")
 def complete_experiment_stage(data: StageCompleteIn):
     result = _complete_experiment_stage(data)
+    if data.timing_checkpoints:
+        try:
+            result["acknowledged_checkpoints"] = track_client_time(ClientTimingIn(
+                invitation_token=data.invitation_token, participant_code=data.participant_code,
+                checkpoints=data.timing_checkpoints))["acknowledged_checkpoints"]
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Client timing deferred: %s", type(exc).__name__)
     if data.stage_code == "ultimatum" and data.auxiliary_events:
         result["acknowledged_event_round_ids"] = _append_auxiliary_events(data, data.auxiliary_events)
     return result
@@ -4214,6 +4239,12 @@ def reset_study_data(
     # The preview count and deletion occur within a single transaction; scoped child rows are
     # removed before their parent run/participation/assignment rows to respect foreign keys.
     with conn() as connection:
+        for table in ("experiment_client_clock_checkpoints", "experiment_client_clocks"):
+            cursor = connection.execute("DELETE FROM " + table + " WHERE run_id IN ("
+                "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp "
+                "ON sp.participation_id=ir.participation_id WHERE "
+                + condition.replace("study_code", "sp.study_code") + ")", params)
+            deleted[table] = max(0, int(cursor.rowcount or 0))
         for name, query in (
             ("questionnaire_responses",
              "DELETE FROM questionnaire_responses WHERE run_id IN (SELECT ir.run_id FROM instrument_runs ir "
@@ -4318,6 +4349,11 @@ def experiment_progress(
         workflow_rows = [dict(row) for row in connection.execute(workflow_query, params).fetchall()]
         stage_rows = [dict(row) for row in connection.execute(stage_query, params).fetchall()]
         time_rows = [dict(row) for row in connection.execute(time_query, params).fetchall()] if include_timing else []
+        client_times = [dict(row) for row in connection.execute(
+            "SELECT t.assignment_id,t.step_instance_id,SUM(t.visible_ms) AS visible_ms,"
+            "SUM(t.uncertain_ms) AS uncertain_ms,MAX(t.received_at) AS received_at "
+            "FROM experiment_client_clocks t JOIN experiment_assignments a ON a.assignment_id=t.assignment_id WHERE "
+            + condition + " AND a.active=1 GROUP BY t.assignment_id,t.step_instance_id", params).fetchall()] if include_timing else []
 
     workflow_by_assignment: dict[str, dict[str, dict[str, Any]]] = {}
     for saved in workflow_rows:
@@ -4343,6 +4379,14 @@ def experiment_progress(
             "active_seconds": round(seconds, 2),
             "last_seen_at": timed["last_seen_at"],
         }
+
+    for observed in client_times:
+        timing = time_by_assignment.setdefault(str(observed["assignment_id"]), {}).setdefault(str(observed["step_instance_id"]), {})
+        timing["legacy_active_seconds"] = timing.get("active_seconds", 0)
+        timing["active_seconds"] = round(observed["visible_ms"] / 1000, 2)
+        timing["uncertain_seconds"] = round(observed["uncertain_ms"] / 1000, 2)
+        timing["time_source"] = "client_visible_v2"
+        timing["last_seen_at"] = observed["received_at"]
 
     stale_cutoff = current_time.timestamp() - 24 * 60 * 60
 
@@ -4394,6 +4438,9 @@ def experiment_progress(
                 "completed_at": (saved or {}).get("completed_at"),
                 "updated_at": (saved or {}).get("updated_at"),
                 "active_seconds": round(seconds, 2) if include_timing else None,
+                "time_source": timing.get("time_source", "server_arrival_legacy") if include_timing else None,
+                "legacy_active_seconds": timing.get("legacy_active_seconds", seconds) if include_timing else None,
+                "uncertain_seconds": timing.get("uncertain_seconds", 0) if include_timing else None,
             })
             for field in ("started_at", "completed_at", "updated_at"):
                 last_activity_candidates.append(parse_time((saved or {}).get(field)))
@@ -4873,6 +4920,39 @@ def export_ultimatum_records(x_admin_token: str | None = Header(default=None), s
     return _ordered_task_export("ultimatum", scope)
 
 
+@app.get("/api/admin/time/checkpoints.csv")
+def export_client_time(x_admin_token: str | None = Header(default=None), scope: Literal["main", "test"] = "main"):
+    authorize(x_admin_token)
+    marker = "%s" if DATABASE_URL else "?"
+    def generate():
+        fields = ["schema_version", "study_code", "participant_code", "run_id", "run_status", "step_instance_id",
+                  "stage_code", "clock_id", "sequence", "visible_ms", "uncertain_ms", "closed", "received_at"]
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        cursor = ("", 0)
+        while True:
+            condition = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
+            params = (*cursor,) if scope == "test" else (*cursor, STUDY_CODE)
+            with conn() as connection:
+                rows = connection.execute(
+                    "SELECT c.*,t.clock_id,t.step_instance_id,t.stage_code,r.status AS run_status,"
+                    "sp.study_code,p.participant_code FROM experiment_client_clock_checkpoints c "
+                    "JOIN experiment_client_clocks t USING(run_id) JOIN instrument_runs r USING(run_id) "
+                    "JOIN study_participations sp USING(participation_id) JOIN participants p USING(participant_id) "
+                    "WHERE (c.run_id,c.sequence)>(" + marker + "," + marker + ") AND " + condition
+                    + " ORDER BY c.run_id,c.sequence LIMIT 200", params).fetchall()
+            if not rows:
+                break
+            cursor = (rows[-1]["run_id"], rows[-1]["sequence"])
+            buffer.seek(0); buffer.truncate(0)
+            writer.writerows({"schema_version": 2, **dict(row)} for row in rows)
+            yield buffer.getvalue()
+    return StreamingResponse(generate(), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="barsan_time_checkpoints_v2.csv"', "Cache-Control": "no-store"})
+
+
 @app.get("/api/admin/export-all.zip")
 def export_all_modules_zip(
     x_admin_token: str | None = Header(default=None),
@@ -4885,6 +4965,7 @@ def export_all_modules_zip(
         ("questionnaire.csv", export_questionnaire_csv(x_admin_token, scope)),
         ("lifetrade.csv", export_csv(x_admin_token, scope)),
         ("ultimatum.csv", export_ultimatum_csv(x_admin_token, scope)),
+        ("time_checkpoints_v2.csv", export_client_time(x_admin_token, scope)),
     ]
     archive_buffer = io.BytesIO()
     with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -4928,7 +5009,9 @@ def load_homepage() -> str:
         html = file.read()
     with open(os.path.join(ROOT, "app", "persistence.js"), encoding="utf-8") as file:
         persistence = file.read()
-    return html.replace("<!-- BARSAN_PERSISTENCE -->", "<script>" + persistence + "</script>", 1)
+    with open(os.path.join(ROOT, "app", "task_timing.js"), encoding="utf-8") as file:
+        timing = file.read()
+    return html.replace("<!-- BARSAN_PERSISTENCE -->", "<script>" + persistence + "</script><script>" + timing + "</script>", 1)
 
 
 @app.get("/admin", response_class=HTMLResponse)

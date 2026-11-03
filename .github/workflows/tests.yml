@@ -36,7 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Install disposable test browser
-        run: python -m playwright install --with-deps chromium
+        run: python -m playwright install --with-deps chromium webkit
       - name: Check browser JavaScript syntax
         run: |
           python - <<'PY'
@@ -52,6 +52,7 @@ jobs:
           Path("/tmp/admin-links-inline.js").write_text("\n".join(admin_scripts), encoding="utf-8")
           PY
           node --check app/persistence.js
+          node --check app/task_timing.js
           node --check /tmp/lifetrade-inline.js
           node --check /tmp/admin-links-inline.js
       - name: Validate staging load-test scripts

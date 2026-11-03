@@ -1,5 +1,10 @@
 # BarSan Experiment — راهنمای جامع انتقال دانش و عملیات
 
+## Current authorized release work — 2026-11-03
+
+The user authorized final Staging fault/stability acceptance followed by Production promotion of the identical tested runtime. See `docs/FINAL_RELEASE_FA.md`. New runtime files include `client_timing.py` and `app/task_timing.js`; include them in pinned manifests. Native launchers will use immutable `deployments/final-<sha>/runtime` sources; `/repo` is mirrored after verification for legacy compatibility. Production remains unchanged until Staging acceptance is complete. Separate Production env/database/invitation key must be preserved. Never run load/fault tests on Production; only release verification. Two synthetic browser invitation fixtures are specifically authorized for the private Mac directory `/Users/rezaaoow/barsan-loadtest/final-release-20261103/`; no other fixture export is authorized by that approval. Actual release results supersede this in-progress note when recorded.
+
+
 ## وضعیت عملیاتی به‌روز — ۳ نوامبر ۲۰۲۶
 
 Staging نسخهٔ ثابت `7af183881410faf5d089efefe44d71d43781d8ce` از PR #27 را با LiteSpeed proxy → Uvicorn دو worker → PostgreSQL مستقل اجرا می‌کند. در هر worker حداکثر هشت handler هم‌زمان sync و چهار اتصال pool داریم. کد، workflow، سؤال‌ها، randomization و UI پژوهش تغییر معنایی نکرده‌اند؛ PR #25 recovery/outbox در همین شاخه حضور دارد. فرایندهای قدیمی Passenger مربوط به Staging متوقف شده‌اند؛ restart این محیط با Supervisor است، نه restart.txt مربوط به Passenger.

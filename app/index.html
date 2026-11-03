@@ -1431,9 +1431,8 @@ function scheduleWorkflowHeartbeat(){
  workflowTimerHeartbeat=window.setTimeout(async()=>{
   workflowTimerHeartbeat=null;
   if(!workflow.timerActive)return;
-  try{await postStepTime('heartbeat');}
-  catch(error){console.warn('Time heartbeat failed',error);}
   if(workflow.timerActive)scheduleWorkflowHeartbeat();
+  postStepTime('heartbeat').catch(error=>console.warn('Time heartbeat failed',error));
  },delay);
 }
 const LEGACY_STEP_IDS={
@@ -1558,6 +1557,10 @@ async function postStepTime(event,keepalive=false){
 async function startStepTimer(){
  if(!workflow.timeTrackingEnabled||!workflow.currentStepId||workflow.timerActive)return;
  workflow.timerActive=true;
+ if(['dd_lifetrade','ultimatum'].includes(workflow.currentStage)&&workflow.assignmentId){
+  try{if(!await BarsanClock.start(workflow.assignmentId,workflow.timerRunId,workflow.currentStepId,workflow.currentStage)){workflow.timerActive=false;return;}}
+  catch(error){workflow.timerActive=false;throw error;}
+ }
  try{postStepTime('start').catch(error=>console.warn('Time start deferred',error));}
  catch(error){workflow.timerActive=false;console.warn('Time tracking start failed',error);return;}
  scheduleWorkflowHeartbeat();
@@ -1566,12 +1569,14 @@ async function pauseStepTimer(){
  if(!workflow.timerActive)return;
  workflow.timerActive=false;
  stopWorkflowHeartbeat();
+ await BarsanClock.pause();
  try{postStepTime('pause').catch(error=>console.warn('Time pause deferred',error));}catch(error){console.warn('Time tracking pause failed',error);}
 }
 async function finishStepTimer(){
  if(!workflow.timeTrackingEnabled||!workflow.currentStepId)return;
  workflow.timerActive=false;
  stopWorkflowHeartbeat();
+ await BarsanClock.close();
  try{postStepTime('complete').catch(error=>console.warn('Time completion deferred',error));}catch(error){console.warn('Time tracking completion failed',error);}
 }
 document.addEventListener('visibilitychange',()=>{
@@ -2519,6 +2524,7 @@ async function beginParticipantFlow(){
     attempts:5,baseDelayMs:600,maxDelayMs:8000,timeoutMs:12000
    });
    workflow.participantCode=identity.participant_code;
+  workflow.assignmentId=identity.assignment_id||null;
   workflow.conditionCode=identity.condition_code;
   workflow.testModuleOnly=identity.test_module_only||null;
   workflow.currentStage=identity.current_stage;
@@ -2582,6 +2588,7 @@ async function startAssignedDDStage(){
   return;
  }
  workflow.stagedRunId=started.run_id;
+ workflow.timerRunId=started.run_id;
  sessionId=started.run_id;
  participantCode=workflow.participantCode;
  participant={participant:participantCode,session:sessionId,date:nowISO()};
@@ -3020,7 +3027,7 @@ async function utQueueOutboxItem(runId,item){
  if(!workflow.participantCode||!runId)throw new Error('شناسهٔ اجرای بازی برای ذخیرهٔ محلی موجود نیست.');
  const payload={...item.payload};delete payload.invitation_token;delete payload.participant_code;
  const entry=await BarsanStore.put(utOutboxKey(runId),item.kind+':'+item.item_id,{
-  kind:item.kind,item_id:item.item_id,payload,meta:item.meta||{},queued_at:nowISO()
+  kind:item.kind,item_id:item.item_id,payload,meta:item.meta||{},assignment_id:workflow.assignmentId||null,queued_at:nowISO()
  },item.kind==='events'?'events':'immutable');
  return {...entry.value,__entry:entry};
 }
@@ -3081,15 +3088,31 @@ async function flushUtEvents(){
    const events=rows.filter(entry=>entry.value.kind==='events'&&!unresolved.has(entry.value.payload.round_id));
    for(let offset=0;offset<events.length;offset+=25){
     const batch=events.slice(offset,offset+25);
-    await apiWithRetry('/api/experiment/ultimatum/events/batch',{
+    if(!batch.every(queueBelongsToCurrentLink))continue;
+    try{await apiWithRetry('/api/experiment/ultimatum/events/batch',{
      invitation_token:workflow.invitationToken,participant_code:workflow.participantCode,
      run_id:JSON.parse(scope)[2],events:batch.map(entry=>entry.value.payload)
     },{attempts:3,timeoutMs:10000,baseDelayMs:600,maxDelayMs:7000,priority:'telemetry'});
     await BarsanStore.ack(batch);
+    }catch(error){for(const entry of batch)await retainInaccessibleRecovery(entry,error);}
    }
   }
  })();
  try{return await utEventsFlushPromise;}finally{utEventsFlushPromise=null;}
+}
+function queueBelongsToCurrentLink(entry){
+ return !entry.value.assignment_id||!workflow.assignmentId||entry.value.assignment_id===workflow.assignmentId;
+}
+async function recoveryIsHeld(entry){
+ if(!queueBelongsToCurrentLink(entry))return true;
+ const scope=BarsanStore.scope('recovery-hold',workflow.assignmentId||workflow.participantCode);
+ return (await BarsanStore.list(scope)).some(row=>row.key===entry.id&&row.value.revision===entry.revision);
+}
+async function retainInaccessibleRecovery(entry,error){
+ if(![403,404,409].includes(Number(error.status)))throw error;
+ await BarsanStore.put(BarsanStore.scope('recovery-hold',workflow.assignmentId||workflow.participantCode),entry.id,
+  {revision:entry.revision,status:Number(error.status),retained_at:nowISO()},'replace');
+ console.warn('An earlier attempt remains stored on this device and could not be synchronized with this link.');
 }
 let utOutboxRecoveryPromise=null;
 async function recoverOrphanedUltimatumOutbox(){
@@ -3102,13 +3125,16 @@ async function recoverOrphanedUltimatumOutbox(){
   });
   let recovered=0;
   for(const entry of all.filter(entry=>entry.value.kind==='resolve')){
+   if(await recoveryIsHeld(entry))continue;
    const runId=JSON.parse(entry.scope)[2],item={...entry.value,__entry:entry};
+   try{
    if(ultimatumState?.runId===runId&&!ultimatumState.results.some(row=>row.round_id===item.payload.round_id)){
     if(ultimatumState.proposalSubmitting)continue;
     const meta=item.meta||{};
     await utPostResolve(item.payload,Boolean(meta.isPractice),meta.blockCode,meta.blockOrder,meta.trial);
    }else await utSendOutboxItem(runId,item);
    recovered++;
+   }catch(error){if(ultimatumState?.runId===runId)throw error;await retainInaccessibleRecovery(entry,error);}
   }
   // Old decision rows may have been saved during the prescribed waiting period.
   // Their missing end timestamp stays unknown; recovery must not invent one.
@@ -3141,17 +3167,21 @@ function scheduleCompletionRetry(error){
 async function queueTaskCompletion(path,payload){
  const body={...payload};delete body.invitation_token;delete body.participant_code;
  const scope=BarsanStore.scope('completion',workflow.participantCode,payload.run_id);
- const entry=await BarsanStore.put(scope,'complete',{path,payload:body});
+ const entry=await BarsanStore.put(scope,'complete',{path,payload:body,assignment_id:workflow.assignmentId||null});
  return entry;
 }
 async function completeTaskDurably(path,payload){
+ if(BarsanClock.currentRun()===payload.run_id)await finishStepTimer();
+ const timing=workflow.assignmentId?await BarsanClock.pending(workflow.assignmentId):[];
  const entry=await queueTaskCompletion(path,payload);
  const events=payload.stage_code==='ultimatum'?(await utReadOutboxKey(utOutboxKey(payload.run_id))).filter(row=>row.kind==='events').slice(0,25):[];
  const result=await apiWithRetry(entry.value.path,{
   ...entry.value.payload,invitation_token:workflow.invitationToken,participant_code:workflow.participantCode,
-  auxiliary_events:events.map(row=>row.payload)
+  auxiliary_events:events.map(row=>row.payload),timing_checkpoints:timing.map(entry=>BarsanClock.body(entry.value))
  },{attempts:3,timeoutMs:12000,baseDelayMs:700,maxDelayMs:7000});
  if(!result.completed)throw new Error('ثبت نهایی هنوز تأیید نشده است.');
+ await BarsanClock.acknowledge(timing,result);
+ BarsanClock.flush().catch(()=>{});
  await BarsanStore.ack([entry]);
  const acknowledged=new Set(result.acknowledged_event_round_ids||[]);
  await BarsanStore.ack(events.filter(row=>acknowledged.has(row.payload.round_id)).map(row=>row.__entry));
@@ -3162,7 +3192,9 @@ async function recoverTaskCompletions(){
  for(const entry of await BarsanStore.list()){
   const parts=JSON.parse(entry.scope);
   if(parts[0]!=='completion'||parts[1]!==workflow.participantCode)continue;
-  await completeTaskDurably(entry.value.path,{...entry.value.payload,run_id:parts[2]});
+  if(await recoveryIsHeld(entry))continue;
+  try{await completeTaskDurably(entry.value.path,{...entry.value.payload,run_id:parts[2]});}
+  catch(error){await retainInaccessibleRecovery(entry,error);}
  }
 }
 async function startUltimatumInstructions() {
@@ -3184,6 +3216,7 @@ async function startUltimatumInstructions() {
    workflowMessage("بازی قبلاً تکمیل شده است","طبق سوابق ثبت‌شده، این بخش از روند آزمایش قبلاً کامل شده است.","بازگشت");
    return;
   }
+  workflow.timerRunId=started.run_id;
   await startStepTimer();
   ultimatumState={
    runId:started.run_id,
