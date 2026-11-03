@@ -1,10 +1,13 @@
 # عملیات ظرفیت Staging
 
-نسخهٔ آمادهٔ UT/DD در این شاخه هنوز روی هاست منتشر نشده است؛ اتصال SSH تازه پیش از احراز هویت بسته شد. manifest نامزد در `resilience-runtime-manifest.json` و launcher هماهنگ در همین پوشه است. مجموعهٔ فایل‌ها باید پس از CI همان SHA، با backup مستقل و به‌صورت هماهنگ روی Staging قرار گیرد؛ سرویس پیش از تعویض فایل‌ها متوقف و readiness عمومی پس از start با retry محدود بررسی شود. فایل‌های private env، کلیدها، bootstrap، مسیر proxy و Production نباید جایگزین شوند. نبود دسترسی مجوز deploy ناقص یا حذف guard hash نیست. جزئیات قابلیت‌ها و محدودیت‌ها در `docs/UT_DD_RESILIENCE_FA.md` است.
+نسخهٔ UT/DD با سورس `68d22169` روی Staging منتشر و تأیید شد. ابزارهای واقعاً اجراشدهٔ این نوبت `k6-ut-dd-resilience.js`، `run-ut-dd-resilience.py` و `deploy-ut-dd-resilience.py` هستند؛ مسیرهای آن‌ها snapshot یک اجرای پایان‌یافته و یک‌بارمصرف‌اند. برای آزمون تازه باید پوشه و cohort تازه ساخته شود؛ فایل fixture قبلی یا اسکریپت deploy یک‌باره را بی‌بررسی تکرار نکنید. fixtureها فقط در پوشهٔ خصوصی هاست، با mode 0600 باقی می‌مانند. manifest و launcher به مجموعهٔ runtime هماهنگ مقیدند. کد/تنظیمات Production تغییر نکرده‌اند. جزئیات و شواهد تجمیعی در `docs/UT_DD_RESILIENCE_FA.md` و `artifacts/ut-dd-resilience-20261103/` است.
+
+پیش از انتشار از فایل‌ها و دیتابیس Staging پشتیبان خصوصی گرفته شد و فهرست pg_restore بررسی شد. توقف/تعویض هماهنگ/شروع/readiness/HTML/فونت/hashها موفق بود. یک مقدار قدیمی ADMIN_TOKEN در فایل محیط با همان توکن از قبل فعال، پس از احراز موفق و backup خصوصی، هماهنگ شد؛ مقدار فعال عوض یا افشا نشد. پیکربندی محرمانه و backup دیتابیس وارد GitHub یا Mac نشدند. لاگ خصوصی را چاپ نکنید؛ فقط schema مشخص و فهرست سفید شمارنده‌های عددی/boolean آزمون را صادر کنید.
+
 
 این پوشه snapshot ابزارهای واقعاً استفاده‌شده در آزمون ۳ نوامبر ۲۰۲۶ است. هدف‌ها به Staging همین پروژه و loopback همان runtime محدودند؛ Production هدف هیچ workload نیست.
 
-- کد فعال: `7af183881410faf5d089efefe44d71d43781d8ce`؛ تغییرات پس از آن در این پوشه/گزارش‌ها، انتشار خودکار runtime نیستند.
+- کد فعال: `68d22169d8d599d4fe6bc2034873c6a58ab7f593`؛ تغییرات پس از آن در این پوشه/گزارش‌ها، انتشار خودکار runtime نیستند.
 - مدیریت سرویس در `/home/myexperi/lifetrade-staging/native-asgi-trial-20261102/`؛ دادهٔ آزمون در `/home/myexperi/lifetrade-staging/test-runs/capacity-fix-20261103/`.
 - `native_asgi_launcher.py` باید به نام `launch_native.py` در پوشهٔ مدیریت قرار گیرد. به hash هر دو فایل `barsan_experiment.py` و `request_metrics.py` مقید است؛ هنگام تغییر کد، guard و بسته باید هماهنگ و پس از CI همان SHA منتشر شوند.
 - دو worker، حداکثر هشت handler هم‌زمان sync در هر worker، pool حداکثر چهار اتصال در هر worker. `BARSAN_SYNC_THREADS=0` یا unset رفتار قبلی limiter را حفظ می‌کند؛ تنظیم هشت‌تایی فقط در launcher Staging فعال است.

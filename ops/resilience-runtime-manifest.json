@@ -12,5 +12,6 @@
   "additional_files": [
     "app/fonts/OFL.txt"
   ],
-  "deployment_status": "not deployed"
+  "deployment_status": "deployed and verified on staging",
+  "source_commit": "68d22169d8d599d4fe6bc2034873c6a58ab7f593"
 }

@@ -6,7 +6,7 @@ The participant DD and Ultimatum response queues now use transactional IndexedDB
 
 ## Scope and current implementation status
 
-The repo contains the shared participant, assignment, consent and stage-resume foundation; the welcome/ethics pages, 25-item questionnaire, DD/Life-Trade task, and an initial Ultimatum UI/API/data model are implemented in GitHub. The AI response parameters remain provisional, and the code has not been deployed to or end-to-end tested on cPanel. This document describes the repository state, not the hosted site.
+The repo contains the shared participant, assignment, consent and stage-resume foundation; the welcome/ethics pages, 25-item questionnaire, DD/Life-Trade task, and an initial Ultimatum UI/API/data model are implemented in GitHub. The AI response parameters remain provisional. Current Staging deployment and API/browser validation are recorded in docs/UT_DD_RESILIENCE_FA.md; Production has not received this runtime update.
 
 ## Participant journey
 

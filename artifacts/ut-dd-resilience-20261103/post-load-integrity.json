@@ -1,0 +1,73 @@
+{
+  "active_commit_verified": true,
+  "runtime_hashes_verified": true,
+  "production_hashes_unchanged": true,
+  "supervisor_running": true,
+  "temporary_runner_alive": false,
+  "env_file_private": true,
+  "probes": [
+    {
+      "surface": "staging_loopback",
+      "probe": 1,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.007
+    },
+    {
+      "surface": "staging_public",
+      "probe": 1,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0068
+    },
+    {
+      "surface": "production_public",
+      "probe": 1,
+      "http": 200,
+      "ok": true,
+      "seconds": 1.8457
+    },
+    {
+      "surface": "staging_loopback",
+      "probe": 2,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0033
+    },
+    {
+      "surface": "staging_public",
+      "probe": 2,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0029
+    },
+    {
+      "surface": "production_public",
+      "probe": 2,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0052
+    },
+    {
+      "surface": "staging_loopback",
+      "probe": 3,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0032
+    },
+    {
+      "surface": "staging_public",
+      "probe": 3,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0029
+    },
+    {
+      "surface": "production_public",
+      "probe": 3,
+      "http": 200,
+      "ok": true,
+      "seconds": 0.0048
+    }
+  ]
+}

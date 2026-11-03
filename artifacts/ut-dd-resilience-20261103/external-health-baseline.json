@@ -1,0 +1,10 @@
+{
+  "origin": "user Mac, one internet connection",
+  "samples": 24,
+  "failures": 0,
+  "first_request_ms": 125.826,
+  "median_ms": 79.2915,
+  "p95_ms": 146.856,
+  "max_ms": 199.086,
+  "note": "Small health-API baseline during the on-host test; not 600 external participants."
+}
