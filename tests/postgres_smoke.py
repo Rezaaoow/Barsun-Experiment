@@ -357,6 +357,8 @@ def main_test():
         check_ultimatum_recovery(resilience_client, "B")
         from module_extension_checks import check_module_flow
         check_module_flow(resilience_client)
+        from inactive_link_checks import check_inactive_link_deletion
+        check_inactive_link_deletion(resilience_client)
     print("PostgreSQL task recovery: DD + both Ultimatum variants passed")
 
 
