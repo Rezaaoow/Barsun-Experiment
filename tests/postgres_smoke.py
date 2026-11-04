@@ -355,6 +355,8 @@ def main_test():
         check_dd_recovery(resilience_client)
         check_ultimatum_recovery(resilience_client, "A")
         check_ultimatum_recovery(resilience_client, "B")
+        from cumulative_score_checks import check_cumulative_exports
+        check_cumulative_exports(resilience_client)
         from module_extension_checks import check_module_flow
         check_module_flow(resilience_client)
         from admin_maintenance_checks import check_admin_maintenance

@@ -1,3 +1,7 @@
+# Current cumulative-score correction — 2026-11-05
+
+User confirms final_score must be the running sum through that main round. Exclude practice, keep runs separate, retain a distinct run_total_score. Compute historical exports from stored rounds without modifying raw research data. Equal unadorned share labels. Publish GitHub, Staging, then identical Production. Focused SQLite/PostgreSQL/export regressions and public health; no load or Production synthetic tests.
+
 # AI Agent Instructions — BarSan Experiment
 
 ## Current typography follow-up — 2026-11-05

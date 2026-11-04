@@ -1048,7 +1048,12 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     assert all(row["run_id"] == run_id for row in csv_rows)
     assert all(row["feedback_group"] == "Frame" for row in csv_rows)
     assert all(row["opponent_actual_type"] == "computer" for row in csv_rows)
-    assert all(row["final_score"] == str(final_score) for row in csv_rows)
+    running = 0
+    for row in sorted(csv_rows, key=lambda r: (r["phase"] != "practice", int(r["block_order"]), int(r["trial_sequence"]))):
+        if row["phase"] == "main":
+            running += int(row["points_earned"])
+        assert int(row["final_score"]) == running
+        assert int(row["run_total_score"]) == final_score
     headers = exported.text.lstrip("\ufeff").splitlines()[0].split(",")
     assert len(headers) == len(set(headers))
     assert {
@@ -1060,3 +1065,4 @@ def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     assert any(row["binomial_n"] == "10" for row in csv_rows if row["role"] == "proposer")
     assert any("offer_model" in row["payload_json"] for row in csv_rows if row["role"] == "responder")
     assert any("decision_model" in row["payload_json"] for row in csv_rows if row["role"] == "proposer")
+
