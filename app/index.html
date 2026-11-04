@@ -1,47 +1,5 @@
 <!doctype html>
 <html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>@font-face{font-family:Vazirmatn;src:url('__BARSAN_FONT_URL__') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
-/* Participant readability: retain existing RTL layout; scroll instead of shrinking controls. */
-#screen .panel:not(.questionnaire-screen) h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:900}
-#screen .panel>p,#screen .welcome-summary,#screen .field label,#screen .consent-row{font-size:clamp(1.15rem,2vw,1.35rem)!important;line-height:1.85!important}
-#screen .btn:not(.questionnaire-actions .btn),#screen .ut-btn{min-height:60px;font-size:clamp(1.2rem,2vw,1.4rem)!important;font-weight:850}
-#screen{align-items:center}
-#screen #stimulus{align-items:center;justify-content:center}
-#screen .trial-stage{justify-content:center;justify-content:safe center}
-#screen .interstitial-screen{overflow-y:auto;justify-content:center;justify-content:safe center}
-#screen .interstitial-screen .instruction-main{flex:0 0 auto;overflow:visible}
-#screen .interstitial-screen .instruction-content{flex:0 0 auto;overflow:visible}
-#screen .instruction-heading{font-size:clamp(2.1rem,4.5vw,3rem)!important;font-weight:950;line-height:1.4}
-#screen .instruction-content>p{font-size:clamp(1.2rem,2.2vw,1.45rem)!important;line-height:1.85!important}
-#screen .interstitial-screen.dd-guide{width:min(940px,100%);height:auto;max-height:calc(100dvh - 40px);padding:clamp(18px,2.8vw,30px)}
-#screen .dd-guide .instruction-main{flex:0 0 auto}
-#screen .dd-guide .instruction-heading{font-size:clamp(2.7rem,6vw,4rem)!important;margin-bottom:18px}
-#screen .dd-guide .instruction-content{gap:16px}
-#screen .dd-guide .example-box{width:100%;padding:18px;flex:none}
-#screen .dd-guide .example-title{font-size:clamp(1.2rem,2.4vw,1.5rem)!important;font-weight:850}
-#screen .dd-guide .example-choice,#screen .dd-guide .example-choice strong{font-size:clamp(1.15rem,2.3vw,1.5rem)!important;line-height:1.6!important}
-#screen .dd-guide .example-choice{min-height:100px;padding:16px 10px}
-#screen .dd-guide .example-note{font-size:1.05rem!important;line-height:1.7!important}
-#screen .trial-question{font-size:clamp(1.65rem,3.6vw,2.5rem)!important;font-weight:950}
-#screen .choice-amount{font-size:clamp(1.65rem,4.5vw,3.2rem)!important}
-#screen .choice-detail{font-size:clamp(1.2rem,2.6vw,1.7rem)!important;line-height:1.6}
-#screen .ut-card .ut-title{font-size:clamp(1.8rem,3.6vw,2.5rem)!important;line-height:1.5}
-#screen .ut-card .ut-copy,#screen .ut-card .ut-copy.small{font-size:clamp(1.15rem,2.1vw,1.4rem)!important;line-height:1.85!important}
-#screen .ut-card .ut-question,#screen .ut-card .ut-rolebox strong{font-size:clamp(1.3rem,2.5vw,1.7rem)!important;font-weight:900}
-#screen .ut-card .ut-rolebox .ut-opponent-statement{font-size:clamp(1.45rem,3vw,2rem)!important;font-weight:950;line-height:1.7!important;padding:8px 10px;border-radius:12px}
-#screen .ut-opponent-statement.is-agent{color:#6933a1;background:#f2eafa}
-#screen .ut-opponent-statement.is-coworker{color:#075f68;background:#e4f5f3}
-#screen .ut-card .ut-metric-label,#screen .ut-card .ut-proposer-total{font-size:clamp(1.2rem,2.4vw,1.6rem)!important;font-weight:850;line-height:1.6}
-#screen .ut-card .ut-body{gap:16px}
-#screen .ut-card .ut-main{justify-content:center;justify-content:safe center;overscroll-behavior-y:contain}
-#screen .ut-card .ut-metric-card{padding:16px 12px}
-@media(max-width:680px){
- #screen .dd-guide .example-choices{grid-template-columns:minmax(0,1fr);gap:8px}
- #screen .dd-guide .example-or{justify-self:center}
- #screen .dd-guide .example-choice{min-height:80px}
- #screen .ut-card .ut-shares{grid-template-columns:minmax(0,1fr);gap:10px}
- #screen .ut-card .ut-rolebox,#screen .ut-card .ut-proposer-control{padding:14px 10px}
- #screen .ut-card .ut-main{scroll-padding-block:16px;padding-bottom:8px}
-}
 </style><title>آزمایش بارسان | سامانهٔ پژوهشی</title>
 <style>
 :root{
@@ -999,10 +957,131 @@ h2 {
  .screen.trial-screen .trial-stage{height:100%;min-height:100%;justify-content:center;gap:16px;padding:18px 6px}
 }
 #welcome .welcome-summary{max-width:42rem;margin:20px auto 24px;text-align:center;line-height:1.95;font-size:clamp(1rem,2vw,1.15rem);}
-</style></head><body><main class="screen" id="screen">
+</style><style id="barsan-research-ui">
+/* Shared participant UI: neutral research presentation, mobile first. */
+:root{--research-ink:#202020;--research-line:#d5d5d5;--research-body:clamp(1.125rem,1.04rem + .35vw,1.3rem);--research-title:clamp(1.7rem,1.4rem + 1.2vw,2.35rem);--research-space:clamp(16px,2.4vw,28px);--research-agent:#6933a1;--research-coworker:#075f68;--research-accept:#198754;--research-reject:#c62828}
+html,body{height:auto;min-height:100%;background:#fff}
+body{display:block}
+#screen,#screen.trial-screen{width:100%;height:auto;min-height:100svh;max-height:none;overflow:visible;display:flex;align-items:center;justify-content:center;padding:16px 12px max(16px,env(safe-area-inset-bottom));color:var(--research-ink);background:#fff}
+#screen #stimulus{position:relative;inset:auto;width:100%;min-height:calc(100svh - 32px);padding:0;overflow:visible;display:flex;align-items:center;justify-content:center}
+#screen .panel,#screen .interstitial-screen,#screen .instruction-screen,#screen .ut-card{width:min(900px,100%);height:auto;max-height:none;min-width:0;overflow:visible;padding:var(--research-space);border:1px solid var(--research-line);border-radius:14px;background:#fff;background-image:none;box-shadow:none}
+#screen .panel{margin-block:auto}
+#screen .panel h1,#screen .panel h2,#screen .instruction-heading,#screen .ut-card .ut-title{font-size:var(--research-title)!important;line-height:1.55!important;font-weight:850!important;letter-spacing:normal;margin:0 0 20px;text-align:center!important}
+#screen .panel p,#screen .panel .welcome-summary,#screen .instruction-content>p,#screen .ut-card .ut-copy,#screen .ut-card .ut-copy.small{font-size:var(--research-body)!important;line-height:1.9!important;font-weight:550;color:var(--research-ink);margin:0}
+#screen .panel>p{margin-bottom:20px}
+#screen #welcome .welcome-summary{max-width:64ch;margin:20px auto 24px;font-weight:650;text-align:center}
+#screen #ethics>p{max-width:65ch;margin:0 auto 24px;text-align:start!important}
+#screen .btn,#screen .ut-card .ut-btn{min-height:56px;padding:13px 20px;border:2px solid #202020;border-radius:9px;font-size:1.2rem!important;font-weight:800;line-height:1.5!important;background:#202020;color:#fff;box-shadow:none;transform:none;touch-action:manipulation;scroll-margin-block:20px}
+#screen .btn.btn-secondary{background:#fff;color:#202020;border-color:#888}
+#screen .btn:focus-visible,#screen .ut-btn:focus-visible,#screen .choice-card:focus-visible{outline:3px solid #555;outline-offset:4px}
+#screen .btn:hover,#screen .choice-card:hover,#screen .ut-btn:hover{transform:none;box-shadow:none}
+#screen .btn:active,#screen .ut-btn:active{transform:none;filter:brightness(.9)}
+#screen .btn:disabled,#screen .ut-btn:disabled{cursor:default}
+#screen .finish-actions,#screen .page-actions{display:flex;flex-wrap:wrap;gap:12px;width:100%;margin-top:24px;padding:0;flex:0 0 auto}
+#screen .page-actions .btn,#screen .finish-actions .btn,#screen #welcome-continue{width:100%}
+#screen #ethics .page-actions .btn{flex:1 1 180px;width:auto}
+#screen .field{gap:9px;margin-block:20px}
+#screen .field label,#screen .consent-row{font-size:var(--research-body)!important;line-height:1.8!important;font-weight:650}
+#screen .field input:not([type=checkbox]):not([type=radio]),#screen .field select{min-height:54px;font-size:1.125rem;padding:12px;border:1.5px solid #737373;border-radius:8px}
+#screen .consent-row{display:flex;align-items:flex-start;gap:12px;text-align:start!important}
+#screen .consent-row input{width:24px;height:24px;min-width:24px;margin-top:5px;accent-color:#202020}
+#screen .group-code-heading{justify-content:center}
+#screen .group-code-heading strong,#screen .group-code-card-copy strong{font-size:1.125rem;font-weight:800}
+#screen .group-code-heading small,#screen .group-code-card-copy small,#screen .group-code-footnote{font-size:1rem!important;line-height:1.8!important;color:#505050!important}
+#screen .group-code-heading-mark,#screen .group-code-card-icon{display:none}
+#screen .group-code-card-body{padding:16px;border:1.5px solid #999;border-radius:9px;background:#fff;box-shadow:none}
+#screen .group-code-card.is-selected .group-code-card-body{border:2px solid #202020;background:#fff;box-shadow:none}
+#screen .group-code-card.is-selected .group-code-card-check{background:#202020;border-color:#202020}
+#screen .group-code-card-check{min-width:24px;width:24px;height:24px}
+#screen .interstitial-screen{min-height:calc(100svh - 32px);justify-content:center;justify-content:safe center;gap:0}
+#screen .interstitial-screen .instruction-main{flex:0 0 auto;overflow:visible;gap:0}
+#screen .interstitial-screen .instruction-content{width:100%;flex:0 0 auto;overflow:visible;gap:20px}
+#screen .interstitial-screen .instruction-content>p{max-width:65ch}
+#screen .interstitial-screen.dd-guide{min-height:0}
+#screen .dd-guide .instruction-heading{font-size:clamp(2.6rem,5vw,3.3rem)!important;margin-bottom:20px}
+#screen .dd-guide .example-box{width:100%;margin:0;padding:16px 12px;border:2px dashed #999;border-radius:0;background:#fff;box-shadow:none}
+#screen .dd-guide .example-title{font-size:1.2rem!important;line-height:1.7!important;font-weight:850;margin-bottom:12px}
+#screen .dd-guide .example-note{font-size:clamp(1.2rem,2.2vw,1.4rem)!important;line-height:1.8!important;font-weight:900!important;color:#202020!important;margin:0 0 16px!important;padding-bottom:14px;border-bottom:1px solid var(--research-line)}
+#screen .dd-guide .example-choices{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;direction:rtl;align-items:stretch}
+#screen .dd-guide .example-choice{display:flex;flex-direction:column;justify-content:center;gap:8px;min-width:0;min-height:94px;margin:0;padding:8px 2px;border:0;border-radius:0;background:transparent;background-image:none;box-shadow:none;color:#202020;cursor:default;transform:none;user-select:text}
+#screen .dd-guide .example-choice,#screen .dd-guide .example-choice strong,#screen .dd-guide .example-choice span{font-size:clamp(1.1rem,2vw,1.4rem)!important;line-height:1.7!important;color:#202020!important}
+#screen .dd-guide .example-choice strong{font-weight:800}
+#screen .dd-guide .example-or{align-self:center;font-size:1.05rem!important;background:none;border:0;color:#555}
+#screen .trial-stage{width:100%;height:auto;min-height:calc(100svh - 32px);justify-content:center;justify-content:safe center;gap:24px;padding:16px 0}
+#screen .trial-question{font-size:clamp(1.6rem,3vw,2.15rem)!important;line-height:1.6;font-weight:850;margin:0}
+#screen .trial-layout{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:auto;min-height:0;height:auto;gap:8px;direction:ltr;align-items:stretch}
+#screen .trial-layout .choice-card{grid-column:auto;grid-row:auto;min-width:0;width:100%;min-height:220px;height:auto;max-height:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px 8px;border:2px solid #202020;border-radius:9px;background:#202020;color:#fff;box-shadow:none;transform:none}
+#screen .trial-layout .choice-card.is-pressed{background:#454545;border-color:#454545;transform:none}
+#screen .choice-amount{font-size:clamp(1.45rem,3.5vw,2.7rem)!important;line-height:1.6;font-weight:850}
+#screen .choice-detail{font-size:clamp(1.15rem,2.5vw,1.65rem)!important;line-height:1.7;font-weight:650}
+#screen .trial-layout .or-divider{grid-column:auto;grid-row:auto;align-self:center;justify-self:center;width:auto;height:auto;min-width:16px;margin:0;font-size:1rem;background:none;border:0;color:#555}
+#screen .ut-card{display:flex;flex-direction:column;min-height:calc(100svh - 32px)}
+#screen .ut-card .ut-main{flex:1 0 auto;min-height:0;overflow:visible;justify-content:center;justify-content:safe center;padding:8px 0}
+#screen .ut-card .ut-main>.ut-body{width:100%;flex:0 0 auto!important;min-height:0;overflow:visible!important;justify-content:center;gap:16px;padding:0}
+#screen .ut-card .ut-copy{max-width:65ch;margin-inline:auto;text-align:start!important}
+#screen .ut-card .ut-copy.ut-block-intro-copy{font-size:clamp(1.4rem,2.7vw,1.85rem)!important;font-weight:650;text-align:center!important;line-height:1.9!important}
+#screen .ut-card .ut-block-summary-intro{font-size:clamp(1.3rem,2.6vw,1.65rem)!important;font-weight:700;text-align:center!important}
+#screen .ut-card .ut-topbar{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
+#screen .ut-card .ut-score,#screen .ut-card .ut-opponent{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--research-line);border-radius:8px;background:#fff;box-shadow:none;color:#202020;font-size:1rem!important;line-height:1.5!important}
+#screen .ut-card .ut-score-label,#screen .ut-card .ut-opponent-label{font-size:1rem!important;font-weight:700;color:#404040}
+#screen .ut-card .ut-score-value{font-size:1.3rem!important;min-width:32px;min-height:32px;padding:0;border:0;background:none}
+#screen .ut-card .ut-opponent-icon{display:none}
+#screen .ut-card .ut-rolebox,#screen .ut-card .ut-proposer-control,#screen .ut-card .ut-metric-card,#screen .ut-card .ut-summary-box,#screen .ut-card .ut-summary-metric{width:100%;max-width:none;padding:16px 12px;border:1px solid var(--research-line);border-radius:9px;background:#fff;background-image:none;box-shadow:none}
+#screen .ut-card .ut-rolebox strong{font-size:clamp(1.25rem,2.5vw,1.6rem)!important;font-weight:850;margin:0 0 10px}
+#screen .ut-card .ut-rolebox .ut-opponent-statement{font-size:clamp(1.45rem,2.6vw,1.7rem)!important;font-weight:750;line-height:1.7!important;padding:0;background:none;border-radius:0}
+#screen .ut-opponent-statement.is-agent{color:var(--research-agent)}
+#screen .ut-opponent-statement.is-coworker{color:var(--research-coworker)}
+#screen .ut-card .ut-cue{display:inline!important;font-size:inherit!important;line-height:inherit!important;font-weight:850;color:inherit}
+#screen .ut-card .ut-cue-agent{color:var(--research-agent)}
+#screen .ut-card .ut-cue-coworker{color:var(--research-coworker)}
+#screen .ut-card .ut-cue-role,#screen .ut-card .ut-cue-opponent{font-weight:900;text-decoration:underline;text-decoration-color:#777;text-underline-offset:.2em;text-decoration-thickness:1px}
+#screen .ut-card .ut-cue-accept,#screen .ut-card .ut-cue-reject{display:inline-block!important;padding:0 .35em;border:1.5px solid currentColor;border-radius:5px;white-space:nowrap;background:#fff;color:var(--research-accept);cursor:default}
+#screen .ut-card .ut-cue-reject{color:var(--research-reject)}
+#screen .ut-card .ut-question{font-size:clamp(1.3rem,2.5vw,1.7rem)!important;line-height:1.8!important;font-weight:850;margin:0;text-align:center!important}
+#screen .ut-card .ut-proposer-control{gap:16px}
+#screen .ut-card .ut-proposer-total>span{font-size:inherit!important;line-height:inherit!important}
+#screen .ut-card .ut-proposer-total{font-size:var(--research-body)!important;line-height:1.7!important;font-weight:700;gap:12px;flex-wrap:wrap;margin:0}
+#screen .ut-card .ut-proposer-total strong{font-size:2.1rem!important;font-weight:850}
+#screen .ut-card .ut-slider-wrap{width:100%;max-width:none;padding:45px 14px 0}
+#screen .ut-card .ut-slider{height:64px;min-height:48px;width:100%;cursor:pointer}
+#screen .ut-card .ut-slider::-webkit-slider-thumb{width:34px;height:34px;margin-top:-11px}
+#screen .ut-card .ut-bubble{font-size:1.3rem!important;font-weight:800;min-width:48px;height:38px;box-shadow:none}
+#screen .ut-card .ut-ticks{font-size:1rem!important;line-height:1.6!important}
+#screen .ut-card .ut-shares{width:100%;max-width:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}
+#screen .ut-card .ut-metric-card{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;margin:0}
+#screen .ut-card .ut-metric-label,#screen .ut-card .ut-summary-metric-label{font-size:clamp(1.125rem,2vw,1.4rem)!important;line-height:1.7!important;font-weight:750;color:#333;text-align:center!important}
+#screen .ut-shares .ut-metric-label{min-height:3.4em;display:flex;align-items:center;justify-content:center}
+#screen .ut-card .ut-metric-value,#screen .ut-card .ut-summary-metric-value{min-height:48px;min-width:60px;padding:4px 12px;font-size:clamp(2.1rem,4vw,2.8rem)!important;line-height:1.3!important;font-weight:850!important;border:0;background:none;color:#202020;border-radius:0}
+#screen .ut-card .ut-actions{width:100%;max-width:none;display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 0;padding:0;flex:none}
+#screen .ut-card .ut-actions .ut-btn{flex:1 1 100px;min-width:0}
+#screen .ut-card .ut-btn.accept{background:var(--research-accept);border-color:var(--research-accept);color:#fff}
+#screen .ut-card .ut-btn.reject{background:var(--research-reject);border-color:var(--research-reject);color:#fff}
+#screen .ut-card .ut-result{flex:0 0 auto;gap:16px;width:100%}
+#screen .ut-card .ut-result-icon{background:none;border-radius:0;font-size:2rem;width:auto;height:auto}
+#screen .ut-card .ut-result-main{font-size:clamp(1.45rem,2.8vw,1.9rem)!important;line-height:1.8!important;font-weight:750}
+#screen .ut-card .ut-result-detail,#screen .ut-card .ut-result-note{font-size:var(--research-body)!important;line-height:1.8!important}
+#screen .ut-card .ut-summary-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#screen .ut-card .ut-final-score-box{min-height:180px;padding:24px 16px;margin:20px auto}
+#screen .ut-card .ut-final-score-box .ut-metric-card{min-height:140px;padding:0;border:0}
+#screen .ut-card .ut-final-score-box .ut-metric-value{min-height:100px;font-size:clamp(3.2rem,8vw,4.6rem)!important}
+#screen .questionnaire-screen{height:auto;max-height:none;min-height:calc(100svh - 32px);overflow:visible}
+#screen .questionnaire-question{overflow:visible}
+#screen .questionnaire-statement{font-size:clamp(1.3rem,2.8vw,1.7rem)!important;line-height:1.9!important}
+#screen .scale-option{min-height:88px;height:auto;max-height:none;padding:12px 5px;border:1px solid #888;background:#fff;border-radius:8px}
+#screen .scale-option .scale-label{font-size:1rem!important;line-height:1.7!important}
+#screen .scale-option .scale-number{font-size:1.3rem!important}
+#screen .scale-na{min-height:54px;padding:12px;border:1.5px solid #888;border-radius:8px;font-size:1.125rem}
+#screen .scale-option[aria-pressed=true] .scale-label,#screen .scale-option[aria-pressed=true] .scale-number{color:#fff!important}
+#screen .scale-option.selected,#screen .scale-option[aria-pressed=true]{background:#202020;color:#fff;border-color:#202020}
+@media(max-width:680px){#screen .questionnaire-screen .questionnaire-scale{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:10px}#screen .questionnaire-screen .scale-option{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:center;gap:12px;min-height:56px;padding:12px;text-align:start}#screen .questionnaire-screen .scale-option .scale-number{width:auto;height:auto;min-height:0;padding:0;border:0;background:none;font-size:1.3rem!important}#screen .questionnaire-screen .scale-option .scale-label{font-size:1.125rem!important;line-height:1.7!important;text-align:start;word-break:normal;overflow:visible}}
+@media(min-width:760px){#screen,#screen.trial-screen{padding:24px}#screen #stimulus{min-height:calc(100svh - 48px)}#screen .ut-card,#screen .interstitial-screen{min-height:min(760px,calc(100svh - 48px))}#screen .interstitial-screen.dd-guide{min-height:0}#screen .trial-stage{min-height:calc(100svh - 48px);max-width:1200px}#screen .trial-layout{gap:20px}#screen .trial-layout .choice-card{min-height:300px;padding:28px 20px}}
+@media(max-width:380px){#screen,#screen.trial-screen{padding-inline:8px}#screen .panel,#screen .interstitial-screen,#screen .ut-card{padding:16px 12px}#screen .ut-card .ut-score,#screen .ut-card .ut-opponent{padding:6px 8px}#screen .ut-card .ut-shares{gap:8px}#screen .ut-card .ut-metric-card{padding:12px 6px}#screen .trial-layout .choice-card{padding-inline:6px}#screen .dd-guide .example-choices{gap:5px}}
+
+</style>
+</head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <p class="welcome-summary">شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.</p>
+  <p class="welcome-summary">بارسانی عزیز، شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.</p>
   <button class="btn" id="welcome-continue" type="button">ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
@@ -1253,9 +1332,9 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 function showInstructionPage(taskKey, pageIndex){
   const standalone=workflow.currentModuleCode==='dd_standalone';
   const title='بازی '+gameOrdinal(currentGameNumber());
-  const example=document.createElement('div');
+  const example=document.createElement('figure');
   example.className='example-box';
-  const question=document.createElement('div');
+  const question=document.createElement('figcaption');
   question.className='example-title';
   question.textContent='مثال: کدام را انتخاب می‌کنید؟';
   const choices=document.createElement('div');
@@ -1271,7 +1350,7 @@ function showInstructionPage(taskKey, pageIndex){
   choices.append(later,or,now);
   const note=document.createElement('p');note.className='example-note';
   note.textContent='این فقط یک مثال است؛ انتخاب‌های شما در صفحهٔ بعد شروع می‌شود.';
-  example.append(question,choices,note);
+  example.append(question,note,choices);
   const explanation=taskKey==='KT'
     ?'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر پس از مدت مشخص، یکی را انتخاب کنید.'
     :'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر در ازای واگذاری بخشی از عمرتان، یکی را انتخاب کنید. زمان واگذارشده از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
@@ -2912,8 +2991,33 @@ function utNode(tag, className, value) {
  if(value!==undefined&&value!==null)el.textContent=String(value);
  return el;
 }
+const UT_COPY_CUES={
+  "هوش‌مصنوعی بارسان":"agent","هوش مصنوعی بارسان":"agent",
+  "یکی از همکاران شما در همین سالن":"coworker","یکی از همکاران حاضر در سالن":"coworker",
+  "پیشنهاد دهنده":"role","پاسخ دهنده":"role","بازیکن مقابل":"opponent",
+  "قبول":"accept","رد":"reject"
+ };
+const UT_COPY_PATTERN=new RegExp(Object.keys(UT_COPY_CUES).sort((a,b)=>b.length-a.length).join("|"),"g");
+function utEmphasizeCopy(element,text) {
+ const matches=Array.from(text.matchAll(UT_COPY_PATTERN));
+ if(!matches.length)return;
+ const boundary=char=>!char||/[\s،؛:().«»!؟]/.test(char);
+ let previous=0;
+ element.replaceChildren();
+ for(const match of matches) {
+  if(!boundary(text[match.index-1])||!boundary(text[match.index+match[0].length]))continue;
+  element.appendChild(document.createTextNode(text.slice(previous,match.index)));
+  const cue=document.createElement("span");
+  cue.className="ut-cue ut-cue-"+UT_COPY_CUES[match[0]];
+  cue.textContent=match[0];element.appendChild(cue);
+  previous=match.index+match[0].length;
+ }
+ element.appendChild(document.createTextNode(text.slice(previous)));
+}
 function utAddText(parent,tag,className,value) {
- const el=utNode(tag,className,value);parent.appendChild(el);return el;
+ const el=utNode(tag,className,value);
+ if(typeof value==="string" && ["p","span","strong","div"].includes(tag))utEmphasizeCopy(el,value);
+ parent.appendChild(el);return el;
 }
 function utMetricCard(parent,label,value,kind) {
  const card=utNode("div","ut-metric-card"+(kind?" "+kind:""));
@@ -3237,10 +3341,8 @@ async function startUltimatumInstructions() {
 function utRenderWelcome() {
  const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
-  "برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ بازیکن مقابل در هر مرحله معرفی می‌شود.",
-  "در هر دور ۱۰ امتیاز بین شما و بازیکن مقابل تقسیم می‌شود.",
-  "پیشنهاد دهنده تعیین می‌کند هر نفر چند امتیاز بگیرد؛ پاسخ دهنده پیشنهاد را قبول یا رد می‌کند. شما هر دو نقش را تجربه می‌کنید.",
-  "با قبول پیشنهاد، امتیازها طبق آن تقسیم می‌شوند؛ با رد پیشنهاد، هیچ‌کس امتیازی نمی‌گیرد."
+  "شما برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ در هر دور ۱۰ امتیاز بین شما و بازیکن مقابل تقسیم می‌شود.",
+  "این بازی دو نقش پیشنهاد دهنده و پاسخ دهنده دارد. پیشنهاد دهنده تعیین می‌کند هر نفر چند امتیاز بگیرد؛ پاسخ دهنده پیشنهاد را قبول یا رد می‌کند. با قبول پیشنهاد، امتیازها طبق آن تقسیم می‌شوند؛ با رد پیشنهاد، هیچ‌کس امتیازی نمی‌گیرد."
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
@@ -3416,7 +3518,7 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  const condition=utCondition(blockCode);
  const s=utMakeScreen({condition:condition});
  utAddRoleBox(s.body,"responder",condition);
- utMetricCard(s.body,"کل امتیاز این دور","۱۰","total-points");
+ utMetricCard(s.body,"امتیاز قابل تقسیم","۱۰","total-points");
  utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
  const shares=utNode("div","ut-shares");
  utMetricCard(shares,"سهم شما",utFa(round.participant_share),"mine");

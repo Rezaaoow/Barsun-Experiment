@@ -25,7 +25,7 @@ def function_body(source: str, start: str, end: str) -> str:
 def test_welcome_screen_shows_requested_copy_without_brand_or_stage_outline():
     welcome = section_by_id(HTML, "welcome")
     assert "<h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>" in welcome
-    assert 'شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.' in welcome
+    assert 'بارسانی عزیز، شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.' in welcome
     assert 'id="welcome-continue"' in welcome
     for removed in ('brand-mark', 'eyebrow', 'welcome-steps', 'welcome-plan-status'):
         assert removed not in welcome
