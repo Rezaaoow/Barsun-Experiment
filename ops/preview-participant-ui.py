@@ -18,6 +18,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   blockOrder:['proposer_agent','responder_coworker','proposer_coworker','responder_agent'],blockIndex:0,
   blockSummaries:{},results:[],lastResult:{block_score:14,block_potential_lost:9}};
  const screen=new URLSearchParams(location.search).get('screen')||'welcome';
+ const opponent=new URLSearchParams(location.search).get('opponent')==='coworker'?'coworker':'agent';
  const round={participant_share:5,opponent_share:5,round_id:'local-visual'};
  if(screen==='ethics')showPanel('ethics');
  else if(screen==='dd-guide'){show();showInstructionPage('KT',0);}
@@ -27,8 +28,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  else if(screen==='rest'){const copy=intermissionCopy(workflow.workflowSteps,1);show();showInfo('استراحت',copy.paragraphs);document.querySelector('.next-page').textContent=copy.button;}
  else if(screen==='ut-welcome')utRenderWelcome();
  else if(screen==='ut-practice')utRenderPracticeIntro();
- else if(screen==='ut-proposer')utRenderProposerOffer(false,'proposer_agent',1,1,round);
- else if(screen==='ut-responder')utRenderResponderDecision(false,'responder_coworker',2,1,round);
+ else if(screen==='ut-proposer')utRenderProposerOffer(false,'proposer_'+opponent,1,1,round);
+ else if(screen==='ut-responder')utRenderResponderDecision(false,'responder_'+opponent,2,1,round);
  else if(screen==='ut-block-agent')utRenderBlockIntro();
  else if(screen==='ut-block-coworker'){ultimatumState.blockIndex=1;utRenderBlockIntro();}
  else if(screen==='ut-wait')utRenderWaiting('coworker','لطفاً منتظر پیشنهاد بازیکن مقابل باشید…');
