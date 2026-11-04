@@ -955,27 +955,22 @@ h2 {
  .screen.trial-screen #stimulus{position:absolute;inset:0;width:100%;height:100%;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px 2px}
  .screen.trial-screen .trial-stage{height:100%;min-height:100%;justify-content:center;gap:16px;padding:18px 6px}
 }
+#welcome .welcome-summary{max-width:42rem;margin:20px auto 24px;text-align:center;line-height:1.95;font-size:clamp(1rem,2vw,1.15rem);}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
-  <div class="brand-mark" aria-hidden="true">B</div>
-  <p class="eyebrow">پژوهش میدانی بارسان</p>
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <ol class="welcome-steps" id="welcome-steps" aria-label="ترتیب مراحل برنامه"></ol>
-  <p class="welcome-note hidden" id="welcome-plan-status" role="status" aria-live="polite"></p>
+  <p class="welcome-summary">شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.</p>
   <button class="btn" id="welcome-continue" type="button">ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
-  <p class="eyebrow">پیش از شروع</p>
   <h1>توضیحات پژوهش و رضایت برای مشارکت</h1>
-  <p>این برنامه در چارچوب یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری، شرایط کاری و تصمیم‌گیری انجام می‌شود.</p>
-  <p>داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد.</p>
-  <p>اطلاعات فردی نباید بدون مجوز و حفاظت مناسب در اختیار افراد غیرمرتبط قرار گیرد.</p>
+  <p>این بازی‌ها یرای یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری و شرایط کاری شما در بارسان انجام می‌شود. داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد و در اختیار تیم پژوهشی می‌ماند.</p>
   <p id="participant-code-instruction">شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
   <div class="group-code-choice hidden" id="group-code-choice">
     <div class="group-code-heading">
       <span class="group-code-heading-mark" aria-hidden="true">ID</span>
       <span>
-        <strong>چطور می‌خواهید شناسایی شوید؟</strong>
+        <strong>کد خود را وارد کنید.</strong>
         <small>یکی از دو روش زیر را انتخاب کنید.</small>
       </span>
     </div>
@@ -1085,7 +1080,7 @@ if(workflow.groupInvitationToken){
  const choice=$('group-code-choice');
  if(choice)choice.classList.remove('hidden');
  const instruction=$('participant-code-instruction');
- if(instruction)instruction.textContent='این لینک برای یک گروه است. برای ثبت پاسخ‌ها، کد خودتان را وارد کنید یا دریافت کد تصادفی مستقل را انتخاب کنید.';
+ if(instruction)instruction.remove();
  document.querySelectorAll('input[name="group-code-mode"]').forEach(input=>input.addEventListener('change',updateGroupCodeMode));
  updateGroupCodeMode();
 }
@@ -1214,7 +1209,7 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 
 function showInstructionPage(taskKey, pageIndex){
   const standalone=workflow.currentModuleCode==='dd_standalone';
-  const title='بازی انتخاب';
+  const title='بازی '+gameOrdinal(currentGameNumber());
 
   if(pageIndex===0){
     showInfo(title, [], '', pageIndex);
@@ -2307,6 +2302,10 @@ function gameOrdinal(n){
  const names=['اول','دوم','سوم','چهارم','پنجم','ششم','هفتم','هشتم','نهم','دهم'];
  return names[n-1]||String(n).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 }
+function currentGameNumber(){
+ if(!workflow.workflowMode||workflow.workflowStepIndex<0)return 1;
+ return Math.max(1,workflow.workflowSteps.slice(0,workflow.workflowStepIndex+1).filter(step=>GAME_MODULES.has(step.module_code)).length);
+}
 function intermissionCopy(steps,index){
  const previous=steps.slice(0,index).filter(step=>GAME_MODULES.has(step.module_code)).length;
  const next=steps.slice(index+1).some(step=>GAME_MODULES.has(step.module_code));
@@ -2686,90 +2685,6 @@ async function startAssignedDDStage(){
 }
 
 
-function participantWorkflowTitle(moduleCode){
- const titles={
-  questionnaire:'پرسشنامه',
-  dd_lifetrade:'بازی انتخاب',
-  dd_standalone:'بازی انتخاب',
-  intermission:'استراحت',
-  ultimatum:'بازی باشگاه رانندگان بارسان',
-  ultimatum_frame:'بازی باشگاه رانندگان بارسان',
-  ultimatum_control:'بازی باشگاه رانندگان بارسان'
- };
- return titles[String(moduleCode||'')]||null;
-}
-function participantWorkflowDescription(moduleCode){
- const descriptions={
-  questionnaire:'پاسخ به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری',
-  dd_lifetrade:'انتخاب میان دریافت پاداش در زمان‌های متفاوت',
-  dd_standalone:'پنج انتخاب میان دریافت پاداش در زمان‌های متفاوت',
-  intermission:'فرصتی برای استراحت و ادامه با آمادگی شما',
-  ultimatum:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
-  ultimatum_frame:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
-  ultimatum_control:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت'
- };
- return descriptions[String(moduleCode||'')]||'';
-}
-
-async function loadWelcomeWorkflow(){
- const list=$('welcome-steps'),status=$('welcome-plan-status');
- if(!list)return;
- list.replaceChildren();
- if(status){status.textContent='';status.classList.add('hidden');}
- if(!workflow.invitationToken&&!workflow.groupInvitationToken)return;
-
- try{
-  const url=workflow.groupInvitationToken
-   ?APP_BASE_PATH+'/api/experiment/workflow?group='+encodeURIComponent(workflow.groupInvitationToken)
-   :APP_BASE_PATH+'/api/experiment/workflow?invite='+encodeURIComponent(workflow.invitationToken);
-  const response=await fetch(url,{method:'GET',cache:'no-store',headers:{'Accept':'application/json'}});
-  let payload={};
-  try{payload=await response.json();}catch(_){}
-  if(!response.ok)throw new Error(payload.detail||'Workflow unavailable');
-
-  const steps=Array.isArray(payload.steps)?payload.steps.slice():[];
-  const includesUltimatum=steps.some(step=>
-   ['ultimatum','ultimatum_frame','ultimatum_control'].includes(String(step&&step.module_code||''))
-  );
-  // The legacy route starts Ultimatum automatically after DD/Life-Trade,
-  // although the public legacy workflow outline contains only two persisted steps.
-  if(payload.legacy_default&&!includesUltimatum){
-   steps.push({module_code:'ultimatum'});
-  }
-
-  let visibleStageNumber=0;
-  steps.forEach(step=>{
-   const title=participantWorkflowTitle(step&&step.module_code);
-   if(!title)return;
-   visibleStageNumber+=1;
-   const item=document.createElement('li');
-   item.className='welcome-step';
-   const number=document.createElement('span');
-   number.textContent=String(visibleStageNumber).toLocaleString('fa-IR');
-   const copy=document.createElement('span');
-   copy.className='welcome-step-copy';
-   const label=document.createElement('strong');
-   label.textContent=title;
-   const description=document.createElement('small');
-   description.textContent=participantWorkflowDescription(step&&step.module_code);
-   copy.append(label,description);
-   item.append(number,copy);
-   list.appendChild(item);
-  });
-  if(!list.children.length&&status){
-   status.textContent='مراحل برنامه در دسترس نیستند.';
-   status.classList.remove('hidden');
-  }
- }catch(error){
-  console.warn('Could not load the participant workflow outline',error);
-  if(status){
-   status.textContent='مراحل برنامه در دسترس نیستند.';
-   status.classList.remove('hidden');
-  }
- }
-}
-
-loadWelcomeWorkflow();
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
 $('start').addEventListener('click',beginParticipantFlow);

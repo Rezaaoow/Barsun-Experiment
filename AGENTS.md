@@ -1,5 +1,9 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current UI annotation work — 2026-11-04
+
+Baseline PR #29 is merged at 912bec5643dcb34b44a88d209055323b8c9aa7a4; both environments were verified on source 83ae50134f1969d6fa3d3f594eb83ec263459b74. The current source edit applies the researcher browser annotations to welcome/explanation/DD title pages. Publish to Staging for continuing UI review and keep the review group link active. Do not reset participant state or transfer invitation fixtures for this copy check. Earlier stage-list instructions below are superseded by docs/PARTICIPANT_COPY_20261104_FA.md.
+
 ## Current baseline and inactive-link repair — 2026-11-04
 
 PR #28 is merged at main 2229add9b97b31998a8622bd34f42a6e7d3e0949; both environments were verified on source ff38088514aa2626412ab0e9e906b6e77ab2161c (standalone DD/intermissions). The dated PR27 status below is historical. The current repair targets only inactive-invitation FK cleanup; see docs/INACTIVE_LINK_DELETE_FIX_FA.md. Do not run bulk deletion of existing real or all Staging-test invitations to verify a fix. Use a guarded isolated synthetic study on Staging; retain research records. A separate active Staging group link for user UI review is user-facing and must remain open/active.
@@ -79,7 +83,7 @@ See `docs/AI_HANDOFF_FA.md` before writing any deploy command.
 
 - Modules: questionnaire, DD/Life-Trade, Ultimatum. Server owns identity, assignment, consent, workflow order, active attempts, scoring, and persistence.
 - Participant interface is Persian/RTL. Do not expose experiment internals, Frame/Control, block labels, or admin information on participant screens unless requested.
-- Welcome heading currently approved: «به برنامهٔ پژوهشی بارسان خوش آمدید». Its ordered stages must be fetched from `/api/experiment/workflow?invite=...` and mapped to participant-facing labels only: `questionnaire → پرسشنامه`, `dd_lifetrade → بازی انتخاب`, and all Ultimatum variants → `بازی باشگاه رانندگان بارسان`. Never expose module codes, Frame/Control names, or descriptions. For the legacy default flow, include the Ultimatum stage after questionnaire and DD/Life-Trade because the legacy participant journey starts it automatically after DD.
+- Welcome/consent copy follows docs/PARTICIPANT_COPY_20261104_FA.md and the researcher annotations. The welcome page uses the fixed two-game/club-points paragraph and no brand mark, eyebrow or stage list; do not restore the outline fetch. Keep invitation workflow enforcement server-side. DD introduction titles follow the game ordinal. Do not introduce payment integration as part of a text edit.
 - Ultimatum opponent parameters and the apparent-coworker manipulation are provisional; never claim ethics approval. Require investigator/ethics confirmation before changing protocol or representing it as production-approved.
 
 ## Runtime / CI
