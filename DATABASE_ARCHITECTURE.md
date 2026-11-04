@@ -1,5 +1,10 @@
 # BarSan Experiment — database architecture
 
+## ترمیم عملیات مدیریت — ۴ نوامبر ۲۰۲۶
+
+پاک‌سازی باید رسیدهای claim/start/time و workflowهای تست را پیش از والدهایشان حذف کند. غیرفعال‌سازی گروهی باید محدوده و شناسه‌ها را اعتبارسنجی کند و پنل نباید پاسخ کهنهٔ فهرست را روی محدودهٔ جدید نمایش دهد. حذف انتخابی لینک غیرفعال و حذف لینک گروهی افزوده می‌شود؛ حذف لینک گروهی URL عمومی را می‌بندد و از فهرست پنل کنار می‌گذارد؛ نسبت گروه و رسیدهای تخصیص برای ممیزی حفظ می‌شوند و لینک‌های اختصاصی صادرشده و پاسخ‌ها حفظ می‌شوند. بستن ورود جدید از غیرفعال‌کردن لینک‌های افراد قبلی جداست. تغییرات ابتدا روی داده‌های مصنوعیِ جدا در Staging بررسی و سپس همان runtime روی Production منتشر می‌شوند؛ هیچ دادهٔ واقعی برای بررسی حذف نمی‌شود.
+
+
 ## Inactive invitation removal
 
 Invitation deletion freezes the inactive target IDs under a transaction write/row lock, clears assignment-owned start/time deduplication receipts and progress/consent rows, and nulls the nullable group-claim assignment reference. The group-claim request ID/fingerprint remains as a tombstone: retrying a deleted allocation must return 409, never allocate another participant. Instrument runs, trial/answer rows, participants, participations, client clocks and raw time checkpoints remain intact. No schema change is needed. See docs/INACTIVE_LINK_DELETE_FIX_FA.md.

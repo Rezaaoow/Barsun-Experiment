@@ -1,5 +1,10 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current admin repair — 2026-11-04
+
+PR #30 is merged at 84a94a2f8ebf8b4ec16d33c30d4b50affbec67b6; both native environments run source 5ce05adef0872bdfc73018293469d33c2e189eb2. User authorizes admin cleanup/status/delete fixes and group-link deletion, deployed to Staging then Production. Verify destructive operations only against isolated synthetic study data. Deploying the feature does not authorize deleting existing real data. Preserve participant UI and storage/retry contracts.
+
+
 ## UI review pass 2 — 2026-11-04
 
 Researcher requests one concise DD guide page, larger task controls, shorter Ultimatum copy and removal of the practice-responder readiness page. Staging only. For presentation/copy edits, user explicitly requests focused checks only; do not rerun full suites or load tests. Preserve storage/retry/protocol and do not reset the open review participant.
