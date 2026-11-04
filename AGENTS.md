@@ -1,5 +1,10 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current typography follow-up — 2026-11-05
+
+Baseline main 24ba8141057ee588d43be9adb72d93b3ddb8639c, both environments source d1d225b9cf68c9b5439004f662f428fc645f8cdf. User requests larger points, explanations and DD option text, plus stronger emphasis on existing practice/exclusion words. Deploy to both environments; only focused visual/syntax/public-health checks, no full/load tests or participant data changes.
+
+
 ## Current research UI review — 2026-11-04
 
 Baseline main 55c2d76eeb04fb3f114bee93033a6ff3b8543fb7, both environments run source 69b7da1c8064d6c01f229ac97effec9ca768e28b. User authorizes the mobile-first research UI review and explicit copy annotations, committed and deployed to both environments. No unapproved participant text changes, new decorative imagery, persuasive colors, altered waits/trials/scoring/storage or full/load tests. Keep the review link active. Validate using isolated local renderer fixtures with POSTs blocked, syntax and public health; do not submit consent for a real participant.
