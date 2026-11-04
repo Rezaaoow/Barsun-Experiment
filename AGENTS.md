@@ -1,5 +1,9 @@
 # AI Agent Instructions — BarSan Experiment
 
+## UI review pass 2 — 2026-11-04
+
+Researcher requests one concise DD guide page, larger task controls, shorter Ultimatum copy and removal of the practice-responder readiness page. Staging only. For presentation/copy edits, user explicitly requests focused checks only; do not rerun full suites or load tests. Preserve storage/retry/protocol and do not reset the open review participant.
+
 ## Current UI annotation work — 2026-11-04
 
 Baseline PR #29 is merged at 912bec5643dcb34b44a88d209055323b8c9aa7a4; both environments were verified on source 83ae50134f1969d6fa3d3f594eb83ec263459b74. The current source edit applies the researcher browser annotations to welcome/explanation/DD title pages. Publish to Staging for continuing UI review and keep the review group link active. Do not reset participant state or transfer invitation fixtures for this copy check. Earlier stage-list instructions below are superseded by docs/PARTICIPANT_COPY_20261104_FA.md.

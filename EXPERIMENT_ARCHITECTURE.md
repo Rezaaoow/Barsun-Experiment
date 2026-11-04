@@ -1,5 +1,10 @@
 # BarSan Experiment — workflow architecture
 
+## بازبینی دوم رابط شرکت‌کننده — ۴ نوامبر ۲۰۲۶
+
+راهنمای DD به یک صفحهٔ کوتاه با عنوان شمارهٔ بازی و مثال بزرگ تبدیل می‌شود. متن‌ها، دکمه‌ها و برچسب‌های DD/اولتیماتوم خواناتر می‌شوند؛ تمرین پاسخ‌دهنده همان مسیر انتظار/پیشنهاد بازی اصلی را بدون صفحهٔ اضافی «آماده‌ام» دارد. مقصد فقط Staging است. بررسی به syntax و نمایش/گذار مرتبط محدود است؛ تست کامل و بار برای ویرایش ظاهری تکرار نمی‌شود. تعداد دورها، الگوریتم، ثبت پاسخ/زمان، IndexedDB و retry حفظ می‌شوند.
+
+
 ## Participant copy revision — 2026-11-04
 
 The researcher replaces the welcome outline with fixed two-game/club-points copy, removes decorative marks and merges the explanation text. The welcome page no longer fetches/render the public stage outline; server-side invitation snapshots and sequencing remain authoritative and unchanged. Code entry/random-code selection and consent gating remain intact. DD intro uses its game ordinal. Details: docs/PARTICIPANT_COPY_20261104_FA.md.
