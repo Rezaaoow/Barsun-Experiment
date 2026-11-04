@@ -1,3 +1,7 @@
+# Current decision-screen spacing — 2026-11-05
+
+User requests compact Ultimatum proposer/responder screens only, including practice. Remove wasted space so normal mobile/desktop viewports show all choices without scrolling, preserve readable text/points and natural scrolling for zoom/small viewports. No content, protocol, scoring or persistence changes. Merge and deploy the cumulative-score baseline plus this appearance change to Staging then Production. Only focused layout/syntax/public-health checks; no full CI or load tests for CSS changes.
+
 # Current cumulative-score correction — 2026-11-05
 
 User confirms final_score must be the running sum through that main round. Exclude practice, keep runs separate, retain a distinct run_total_score. Compute historical exports from stored rounds without modifying raw research data. Equal unadorned share labels. Publish GitHub, Staging, then identical Production. Focused SQLite/PostgreSQL/export regressions and public health; no load or Production synthetic tests.
