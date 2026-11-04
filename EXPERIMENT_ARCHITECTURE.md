@@ -1,5 +1,14 @@
 # BarSan Experiment — workflow architecture
 
+## بازبینی دوم رابط شرکت‌کننده — ۴ نوامبر ۲۰۲۶
+
+راهنمای DD به یک صفحهٔ کوتاه با عنوان شمارهٔ بازی و مثال بزرگ تبدیل می‌شود. متن‌ها، دکمه‌ها و برچسب‌های DD/اولتیماتوم خواناتر می‌شوند؛ تمرین پاسخ‌دهنده همان مسیر انتظار/پیشنهاد بازی اصلی را بدون صفحهٔ اضافی «آماده‌ام» دارد. مقصد فقط Staging است. بررسی به syntax و نمایش/گذار مرتبط محدود است؛ تست کامل و بار برای ویرایش ظاهری تکرار نمی‌شود. تعداد دورها، الگوریتم، ثبت پاسخ/زمان، IndexedDB و retry حفظ می‌شوند.
+
+
+## Participant copy revision — 2026-11-04
+
+The researcher replaces the welcome outline with fixed two-game/club-points copy, removes decorative marks and merges the explanation text. The welcome page no longer fetches/render the public stage outline; server-side invitation snapshots and sequencing remain authoritative and unchanged. Code entry/random-code selection and consent gating remain intact. DD intro uses its game ordinal. Details: docs/PARTICIPANT_COPY_20261104_FA.md.
+
 ## Standalone DD and intermission extension
 
 See docs/STANDALONE_DD_AND_REST_FA.md. `dd_standalone` is a workflow variant of canonical `dd_lifetrade` with a frozen five-response KT/100M design; it reuses the exact task/outbox/timing/completion pipeline. `intermission` is workflow-only with its own instrument/run and v2 visible-time clock, persisted completion and predecessor checks. It is never inserted into the three-stage legacy progress table. Existing assignment snapshots and default workflows are preserved.

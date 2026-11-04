@@ -33,9 +33,9 @@ def test_standalone_dd_and_rest_use_real_durable_pipeline(browser_env):
       window.__flowError=null;enterWorkflowStep().catch(error=>window.__flowError=error.message);
     }''', dict(identity=identity, info=info))
     for game in range(2):
-        for instruction in range(4):
-            page.wait_for_function('n=>document.querySelector(".instruction-progress .step-count")?.textContent.includes(String(n))', arg=instruction+1)
-            page.locator('.next-page').click()
+        page.locator('.dd-guide .start-task-button').wait_for(state='visible')
+        assert page.locator('.dd-guide .instruction-heading').inner_text() == ('بازی اول' if game == 0 else 'بازی دوم')
+        page.locator('.dd-guide .start-task-button').click()
         for trial in range(5):
             choice = page.locator('.choice-card').first
             choice.wait_for(state='visible')
@@ -53,10 +53,10 @@ def test_standalone_dd_and_rest_use_real_durable_pipeline(browser_env):
             if trial < 4:
                 page.wait_for_function('()=>!document.querySelector(".choice-card")', timeout=5000)
         if game == 0:
-            page.get_by_role('button', name='ادامه به بازی دوم', exact=True).wait_for(timeout=20000)
+            page.get_by_role('button', name='بازی دوم', exact=True).wait_for(timeout=20000)
             assert 'بازی اول تمام شد.' in page.locator('#stimulus').inner_text()
             context.set_offline(True)
-            page.get_by_role('button', name='ادامه به بازی دوم', exact=True).click()
+            page.get_by_role('button', name='بازی دوم', exact=True).click()
             page.wait_for_function('''async()=> (await BarsanStore.list()).some(entry=>{
               const parts=JSON.parse(entry.scope);return parts[0]==='completion'&&entry.value.payload.stage_code==='intermission';
             })''')
@@ -79,8 +79,8 @@ def test_rest_numbering_excludes_questionnaires_and_repeated_rests(browser_env):
     modules=['questionnaire','intermission','dd_standalone','intermission','questionnaire','intermission','ultimatum_control','intermission','dd_lifetrade','intermission']
     copies=page.evaluate('modules=>modules.map((m,i)=>intermissionCopy(modules.map(module_code=>({module_code})),i))', modules)
     assert 'پیش از ادامه' in copies[1]['paragraphs'][0]
-    assert copies[1]['button'] == 'ادامه به بازی اول'
+    assert copies[1]['button'] == 'بازی اول'
     assert copies[3]['paragraphs'][0] == 'بازی اول تمام شد.'
-    assert copies[5]['button'] == 'ادامه به بازی دوم'
-    assert copies[7]['button'] == 'ادامه به بازی سوم'
+    assert copies[5]['button'] == 'بازی دوم'
+    assert copies[7]['button'] == 'بازی سوم'
     assert copies[9]['paragraphs'][0] == 'بازی سوم تمام شد.' and copies[9]['button'] == 'ادامه'

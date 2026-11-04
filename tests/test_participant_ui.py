@@ -22,52 +22,25 @@ def function_body(source: str, start: str, end: str) -> str:
     return source[start_at:end_at]
 
 
-def test_welcome_screen_shows_public_heading_and_ordered_step_list_only():
+def test_welcome_screen_shows_requested_copy_without_brand_or_stage_outline():
     welcome = section_by_id(HTML, "welcome")
     assert "<h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>" in welcome
-    assert '<ol class="welcome-steps" id="welcome-steps"' in welcome
+    assert 'شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.' in welcome
     assert 'id="welcome-continue"' in welcome
-    assert 'id="welcome-plan-status"' in welcome
-    # The status node is hidden except for a loading/error condition; there is no prose description.
-    assert 'class="welcome-note hidden"' in welcome
-    assert "بخش‌های برنامهٔ شما در ادامه" not in welcome
-    for forbidden in (
-        "اولتیماتوم",
-        "Ultimatum",
-        "Frame",
-        "Control",
-        "dd_lifetrade",
-        "ultimatum_frame",
-        "ultimatum_control",
-    ):
-        assert forbidden not in welcome
+    for removed in ('brand-mark', 'eyebrow', 'welcome-steps', 'welcome-plan-status'):
+        assert removed not in welcome
+    assert 'loadWelcomeWorkflow' not in HTML
 
 
-def test_public_workflow_labels_hide_internal_module_names_and_descriptions():
-    labels = function_body(
-        HTML,
-        "function participantWorkflowTitle(moduleCode){",
-        "async function loadWelcomeWorkflow(){",
-    )
-    assert "questionnaire:'پرسشنامه'" in labels
-    assert "dd_lifetrade:'بازی انتخاب'" in labels
-    assert "ultimatum:'بازی باشگاه رانندگان بارسان'" in labels
-    assert "ultimatum_frame:'بازی باشگاه رانندگان بارسان'" in labels
-    assert "ultimatum_control:'بازی باشگاه رانندگان بارسان'" in labels
-
-    loader = function_body(
-        HTML,
-        "async function loadWelcomeWorkflow(){",
-        "loadWelcomeWorkflow();",
-    )
-    assert "/api/experiment/workflow?invite=" in loader
-    assert "/api/experiment/workflow?group=" in loader
-    assert "encodeURIComponent(workflow.invitationToken)" in loader
-    assert "encodeURIComponent(workflow.groupInvitationToken)" in loader
-    assert "step.description" not in loader
-    assert "step.title" not in loader
-    assert "if(payload.legacy_default&&!includesUltimatum)" in loader
-    assert "steps.push({module_code:'ultimatum'})" in loader
+def test_research_explanation_is_merged_and_group_instruction_does_not_return():
+    ethics = section_by_id(HTML, "ethics")
+    assert 'eyebrow' not in ethics
+    assert ethics.count('داده‌های گردآوری‌شده') == 1
+    assert 'این بازی‌ها یرای یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری و شرایط کاری شما در بارسان انجام می‌شود.' in ethics
+    assert 'و در اختیار تیم پژوهشی می‌ماند.' in ethics
+    assert 'اطلاعات فردی نباید' not in ethics
+    assert 'این لینک برای یک گروه است.' not in HTML
+    assert '<strong>کد خود را وارد کنید.</strong>' in ethics
 
 
 def test_dd_and_life_trade_instruction_title_is_participant_facing():
@@ -76,7 +49,7 @@ def test_dd_and_life_trade_instruction_title_is_participant_facing():
         "function showInstructionPage(taskKey, pageIndex){",
         "function showFixation(){",
     )
-    assert "const title='بازی انتخاب';" in intro
+    assert "const title='بازی '+gameOrdinal(currentGameNumber());" in intro
     assert "5-Trial DD Task" not in intro
     assert "Life-Trade Reward" not in intro
 
@@ -98,15 +71,8 @@ def test_role_labels_use_separated_words():
 
 
 def test_participant_game_and_practice_copy():
-    assert (
-        "شما در این بازی برای کسب امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید."
-        in HTML
-    )
-    assert (
-        "قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود اما امتیازها و داده‌های "
-        "این دو دور در امتیاز نهایی و برنامه پژوهشی لحاظ نمی‌شوند."
-        in HTML
-    )
+    assert "برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان" in HTML
+    assert "قبل از شروع بازی اصلی دو دور تمرینی انجام می‌شود که در نتیجه‌ی نهایی تاثیر ندارد." in HTML
     assert "دور‌های تمرینی به پایان رسید. الان بازی اصلی شروع می‌شود." in HTML
 
 
@@ -197,4 +163,5 @@ def test_questionnaire_answer_persists_custom_workflow_draft_without_forward_dra
         "async function beginParticipantFlow(){",
     )
     assert "saveQuestionnairePosition(" not in completion
+
 

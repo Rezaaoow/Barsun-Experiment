@@ -1,5 +1,48 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>@font-face{font-family:Vazirmatn;src:url('__BARSAN_FONT_URL__') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}</style><title>آزمایش بارسان | سامانهٔ پژوهشی</title>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>@font-face{font-family:Vazirmatn;src:url('__BARSAN_FONT_URL__') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+/* Participant readability: retain existing RTL layout; scroll instead of shrinking controls. */
+#screen .panel:not(.questionnaire-screen) h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:900}
+#screen .panel>p,#screen .welcome-summary,#screen .field label,#screen .consent-row{font-size:clamp(1.15rem,2vw,1.35rem)!important;line-height:1.85!important}
+#screen .btn:not(.questionnaire-actions .btn),#screen .ut-btn{min-height:60px;font-size:clamp(1.2rem,2vw,1.4rem)!important;font-weight:850}
+#screen{align-items:center}
+#screen #stimulus{align-items:center;justify-content:center}
+#screen .trial-stage{justify-content:center;justify-content:safe center}
+#screen .interstitial-screen{overflow-y:auto;justify-content:center;justify-content:safe center}
+#screen .interstitial-screen .instruction-main{flex:0 0 auto;overflow:visible}
+#screen .interstitial-screen .instruction-content{flex:0 0 auto;overflow:visible}
+#screen .instruction-heading{font-size:clamp(2.1rem,4.5vw,3rem)!important;font-weight:950;line-height:1.4}
+#screen .instruction-content>p{font-size:clamp(1.2rem,2.2vw,1.45rem)!important;line-height:1.85!important}
+#screen .interstitial-screen.dd-guide{width:min(940px,100%);height:auto;max-height:calc(100dvh - 40px);padding:clamp(18px,2.8vw,30px)}
+#screen .dd-guide .instruction-main{flex:0 0 auto}
+#screen .dd-guide .instruction-heading{font-size:clamp(2.7rem,6vw,4rem)!important;margin-bottom:18px}
+#screen .dd-guide .instruction-content{gap:16px}
+#screen .dd-guide .example-box{width:100%;padding:18px;flex:none}
+#screen .dd-guide .example-title{font-size:clamp(1.2rem,2.4vw,1.5rem)!important;font-weight:850}
+#screen .dd-guide .example-choice,#screen .dd-guide .example-choice strong{font-size:clamp(1.15rem,2.3vw,1.5rem)!important;line-height:1.6!important}
+#screen .dd-guide .example-choice{min-height:100px;padding:16px 10px}
+#screen .dd-guide .example-note{font-size:1.05rem!important;line-height:1.7!important}
+#screen .trial-question{font-size:clamp(1.65rem,3.6vw,2.5rem)!important;font-weight:950}
+#screen .choice-amount{font-size:clamp(1.65rem,4.5vw,3.2rem)!important}
+#screen .choice-detail{font-size:clamp(1.2rem,2.6vw,1.7rem)!important;line-height:1.6}
+#screen .ut-card .ut-title{font-size:clamp(1.8rem,3.6vw,2.5rem)!important;line-height:1.5}
+#screen .ut-card .ut-copy,#screen .ut-card .ut-copy.small{font-size:clamp(1.15rem,2.1vw,1.4rem)!important;line-height:1.85!important}
+#screen .ut-card .ut-question,#screen .ut-card .ut-rolebox strong{font-size:clamp(1.3rem,2.5vw,1.7rem)!important;font-weight:900}
+#screen .ut-card .ut-rolebox .ut-opponent-statement{font-size:clamp(1.45rem,3vw,2rem)!important;font-weight:950;line-height:1.7!important;padding:8px 10px;border-radius:12px}
+#screen .ut-opponent-statement.is-agent{color:#6933a1;background:#f2eafa}
+#screen .ut-opponent-statement.is-coworker{color:#075f68;background:#e4f5f3}
+#screen .ut-card .ut-metric-label,#screen .ut-card .ut-proposer-total{font-size:clamp(1.2rem,2.4vw,1.6rem)!important;font-weight:850;line-height:1.6}
+#screen .ut-card .ut-body{gap:16px}
+#screen .ut-card .ut-main{justify-content:center;justify-content:safe center;overscroll-behavior-y:contain}
+#screen .ut-card .ut-metric-card{padding:16px 12px}
+@media(max-width:680px){
+ #screen .dd-guide .example-choices{grid-template-columns:minmax(0,1fr);gap:8px}
+ #screen .dd-guide .example-or{justify-self:center}
+ #screen .dd-guide .example-choice{min-height:80px}
+ #screen .ut-card .ut-shares{grid-template-columns:minmax(0,1fr);gap:10px}
+ #screen .ut-card .ut-rolebox,#screen .ut-card .ut-proposer-control{padding:14px 10px}
+ #screen .ut-card .ut-main{scroll-padding-block:16px;padding-bottom:8px}
+}
+</style><title>آزمایش بارسان | سامانهٔ پژوهشی</title>
 <style>
 :root{
   color-scheme:light;
@@ -955,27 +998,22 @@ h2 {
  .screen.trial-screen #stimulus{position:absolute;inset:0;width:100%;height:100%;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px 2px}
  .screen.trial-screen .trial-stage{height:100%;min-height:100%;justify-content:center;gap:16px;padding:18px 6px}
 }
+#welcome .welcome-summary{max-width:42rem;margin:20px auto 24px;text-align:center;line-height:1.95;font-size:clamp(1rem,2vw,1.15rem);}
 </style></head><body><main class="screen" id="screen">
 <section class="panel welcome-panel" id="welcome" dir="rtl">
-  <div class="brand-mark" aria-hidden="true">B</div>
-  <p class="eyebrow">پژوهش میدانی بارسان</p>
   <h1>به برنامهٔ پژوهشی بارسان خوش آمدید</h1>
-  <ol class="welcome-steps" id="welcome-steps" aria-label="ترتیب مراحل برنامه"></ol>
-  <p class="welcome-note hidden" id="welcome-plan-status" role="status" aria-live="polite"></p>
+  <p class="welcome-summary">شما در این برنامه دو بازی انجام می‌دهید و امتیاز به دست آمده شما در پایان بازی دوم به حساب شما در باشگاه رانندگان واریز می‌شود.</p>
   <button class="btn" id="welcome-continue" type="button">ادامه</button>
 </section>
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
-  <p class="eyebrow">پیش از شروع</p>
   <h1>توضیحات پژوهش و رضایت برای مشارکت</h1>
-  <p>این برنامه در چارچوب یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری، شرایط کاری و تصمیم‌گیری انجام می‌شود.</p>
-  <p>داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد.</p>
-  <p>اطلاعات فردی نباید بدون مجوز و حفاظت مناسب در اختیار افراد غیرمرتبط قرار گیرد.</p>
+  <p>این بازی‌ها یرای یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری و شرایط کاری شما در بارسان انجام می‌شود. داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد و در اختیار تیم پژوهشی می‌ماند.</p>
   <p id="participant-code-instruction">شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
   <div class="group-code-choice hidden" id="group-code-choice">
     <div class="group-code-heading">
       <span class="group-code-heading-mark" aria-hidden="true">ID</span>
       <span>
-        <strong>چطور می‌خواهید شناسایی شوید؟</strong>
+        <strong>کد خود را وارد کنید.</strong>
         <small>یکی از دو روش زیر را انتخاب کنید.</small>
       </span>
     </div>
@@ -1085,7 +1123,7 @@ if(workflow.groupInvitationToken){
  const choice=$('group-code-choice');
  if(choice)choice.classList.remove('hidden');
  const instruction=$('participant-code-instruction');
- if(instruction)instruction.textContent='این لینک برای یک گروه است. برای ثبت پاسخ‌ها، کد خودتان را وارد کنید یا دریافت کد تصادفی مستقل را انتخاب کنید.';
+ if(instruction)instruction.remove();
  document.querySelectorAll('input[name="group-code-mode"]').forEach(input=>input.addEventListener('change',updateGroupCodeMode));
  updateGroupCodeMode();
 }
@@ -1133,7 +1171,7 @@ function showPanel(which){
  finish.classList.toggle('hidden',which!=='finish');
 }
 function setStatus(text){status.textContent=text}
-const INSTRUCTION_PAGE_COUNT = 4;
+const INSTRUCTION_PAGE_COUNT = 1;
 function showInfo(title, paragraphs=[], note='', progressIndex=null){
   $('screen').classList.remove('trial-screen');
   stimulus.innerHTML='';
@@ -1214,72 +1252,35 @@ function showInfo(title, paragraphs=[], note='', progressIndex=null){
 
 function showInstructionPage(taskKey, pageIndex){
   const standalone=workflow.currentModuleCode==='dd_standalone';
-  const title='بازی انتخاب';
-
-  if(pageIndex===0){
-    showInfo(title, [], '', pageIndex);
-    return;
-  }
-
-  if(pageIndex===1){
-    const paras=[];
-    paras.push('در هر مرحله دو گزینهٔ فرضی با مبالغ متفاوت می‌بینید. گزینه‌ای را انتخاب کنید که ترجیح می‌دهید.');
-
-    const ex=document.createElement('div');
-    ex.className='example-box';
-    ex.dir='rtl';
-
-    const exTitle=document.createElement('div');
-    exTitle.className='example-title';
-    exTitle.textContent='به عنوان مثال: کدام گزینه را ترجیح می‌دهید؟';
-    ex.appendChild(exTitle);
-
-    const choices=document.createElement('div');
-    choices.className='example-choices';
-    const later=document.createElement('div');
-    later.className='example-choice';
-    later.innerHTML=taskKey==='KT'
-      ?(standalone?'<strong>۱۰۰ میلیون تومان</strong><span>یک سال بعد</span>':'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>')
-      :'<strong>۲ میلیون تومان</strong><span>در ازای ۱ سال از عمرتان</span>';
-    const or=document.createElement('span');
-    or.className='example-or';
-    or.textContent='یا';
-    const now=document.createElement('div');
-    now.className='example-choice';
-    now.innerHTML=standalone?'<strong>۵۰ میلیون تومان</strong><span>الان</span>':'<strong>۱ میلیون تومان</strong><span>الان</span>';
-    choices.append(later,or,now);
-    ex.appendChild(choices);
-
-    const notice=document.createElement('p');
-    notice.className='example-note';
-    notice.textContent='این گزینه‌ها فقط برای مثال هستند و قابل انتخاب نیستند.';
-    ex.appendChild(notice);
-    paras.push(ex);
-
-    const explanation=document.createElement('p');
-    explanation.className='instruction-explanation';
-    explanation.textContent=taskKey==='KT'
-      ?'در این مثال، گزینهٔ سمت چپ به این معناست که شما مبلغ اعلام شده را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست به این معناست که باید یک سال صبر کنید تا مبلغ اعلام شده را دریافت کنید.'
-      :'در این مثال، گزینهٔ سمت چپ به این معناست که شما مبلغ اعلام‌شده را همین الان دریافت می‌کنید؛ اما گزینهٔ سمت راست به این معناست که باید یک سال از عمرتان را واگذار کنید تا مبلغ اعلام شده را دریافت کنید. یعنی شما از الان یک سال به جلو برده می‌شوید، آن یک سال از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
-    paras.push(explanation);
-
-    showInfo('راهنمای انتخاب', paras, '', pageIndex);
-    return;
-  }
-
-  if(pageIndex===2){
-    showInfo('نکته دربارهٔ مبالغ', [
-      'مبالغ فرضی‌اند و هیچ پرداخت واقعی انجام نمی‌شود. هنگام انتخاب، تصور کنید در زندگی واقعی با چنین تصمیمی روبه‌رو شده‌اید.'
-    ], '', pageIndex);
-    return;
-  }
-
-  showInfo('آمادهٔ شروع هستید؟', [
-    'اگر آماده‌اید، دکمهٔ «شروع تکلیف» را بزنید.'
-  ], '', pageIndex);
-  const btn=stimulus.querySelector('.next-page');
-  btn.textContent='شروع تکلیف';
-  btn.classList.add('start-task-button');
+  const title='بازی '+gameOrdinal(currentGameNumber());
+  const example=document.createElement('div');
+  example.className='example-box';
+  const question=document.createElement('div');
+  question.className='example-title';
+  question.textContent='مثال: کدام را انتخاب می‌کنید؟';
+  const choices=document.createElement('div');
+  choices.className='example-choices';
+  const later=document.createElement('div');
+  later.className='example-choice';
+  later.innerHTML=taskKey==='KT'
+    ?(standalone?'<strong>۱۰۰ میلیون تومان</strong><span>یک سال بعد</span>':'<strong>۲ میلیون تومان</strong><span>یک سال بعد</span>')
+    :'<strong>۲ میلیون تومان</strong><span>در ازای ۱ سال از عمرتان</span>';
+  const or=document.createElement('span');or.className='example-or';or.textContent='یا';
+  const now=document.createElement('div');now.className='example-choice';
+  now.innerHTML=standalone?'<strong>۵۰ میلیون تومان</strong><span>الان</span>':'<strong>۱ میلیون تومان</strong><span>الان</span>';
+  choices.append(later,or,now);
+  const note=document.createElement('p');note.className='example-note';
+  note.textContent='این فقط یک مثال است؛ انتخاب‌های شما در صفحهٔ بعد شروع می‌شود.';
+  example.append(question,choices,note);
+  const explanation=taskKey==='KT'
+    ?'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر پس از مدت مشخص، یکی را انتخاب کنید.'
+    :'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر در ازای واگذاری بخشی از عمرتان، یکی را انتخاب کنید. زمان واگذارشده از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
+  const box=showInfo(title,[explanation,example,
+    'مبالغ فرضی‌اند و پرداخت واقعی ندارند. طوری انتخاب کنید که انگار تصمیمی واقعی است.']);
+  box.classList.add('dd-guide');
+  const button=box.querySelector('.next-page');
+  button.textContent='شروع بازی';
+  button.classList.add('start-task-button');
 }
 
 function showFixation(){ $('screen').classList.add('trial-screen');stimulus.innerHTML='';const d=document.createElement('div');d.className='fixation';d.textContent='+';d.setAttribute('aria-hidden','true');stimulus.appendChild(d)}
@@ -1720,7 +1721,7 @@ function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
  const layout=document.createElement('div');layout.className='trial-layout';layout.setAttribute('role','group');layout.setAttribute('aria-label','دو گزینه برای انتخاب');
  const left=optionText(taskKey,magnitude,trialData,nowLeft),right=optionText(taskKey,magnitude,trialData,!nowLeft);
  function card(info,side){
-  const b=document.createElement('button');b.type='button';b.className='choice-card';b.dataset.choiceSide=side;b.setAttribute('aria-label',`کدام گزینه را ترجیح می‌دهید؟ ${side==='left'?'گزینهٔ چپ':'گزینهٔ راست'}: ${info.amount}، ${info.detail}`);
+  const b=document.createElement('button');b.type='button';b.className='choice-card';b.dataset.choiceSide=side;b.setAttribute('aria-label',`کدام را انتخاب می‌کنید؟ ${side==='left'?'گزینهٔ چپ':'گزینهٔ راست'}: ${info.amount}، ${info.detail}`);
 
   const label=document.createElement('span');label.className='choice-label';label.textContent=info.label;
   const amount=document.createElement('span');amount.className='choice-amount';amount.textContent=info.amount;
@@ -1731,7 +1732,7 @@ function makeTrialScreen(taskKey,magnitude,trialData,nowLeft){
  const or=document.createElement('div');or.className='or-divider';or.textContent='یا';or.setAttribute('aria-hidden','true');
  layout.append(leftCard,or,rightCard);
  const stage=document.createElement('div');stage.className='trial-stage';
- const question=document.createElement('h1');question.className='trial-question';question.textContent='کدام گزینه را ترجیح می‌دهید؟';
+ const question=document.createElement('h1');question.className='trial-question';question.textContent='کدام را انتخاب می‌کنید؟';
  stage.append(question,layout);stimulus.appendChild(stage);
 }
 function resolveChoice(key){
@@ -2307,13 +2308,17 @@ function gameOrdinal(n){
  const names=['اول','دوم','سوم','چهارم','پنجم','ششم','هفتم','هشتم','نهم','دهم'];
  return names[n-1]||String(n).replace(/[0-9]/g,d=>'۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
 }
+function currentGameNumber(){
+ if(!workflow.workflowMode||workflow.workflowStepIndex<0)return 1;
+ return Math.max(1,workflow.workflowSteps.slice(0,workflow.workflowStepIndex+1).filter(step=>GAME_MODULES.has(step.module_code)).length);
+}
 function intermissionCopy(steps,index){
  const previous=steps.slice(0,index).filter(step=>GAME_MODULES.has(step.module_code)).length;
  const next=steps.slice(index+1).some(step=>GAME_MODULES.has(step.module_code));
  const paragraphs=[previous?`بازی ${gameOrdinal(previous)} تمام شد.`:'پیش از ادامه کمی استراحت کنید.'];
  paragraphs.push(next?`کمی استراحت کنید و هر وقت آماده بودید، به بازی ${gameOrdinal(previous+1)} بروید.`
    :'کمی استراحت کنید و هر وقت آماده بودید، ادامه دهید.');
- return {paragraphs,button:next?`ادامه به بازی ${gameOrdinal(previous+1)}`:'ادامه'};
+ return {paragraphs,button:next?`بازی ${gameOrdinal(previous+1)}`:'ادامه'};
 }
 async function startIntermission(){
  await BarsanStore.acquire(workflow.participantCode);
@@ -2686,90 +2691,6 @@ async function startAssignedDDStage(){
 }
 
 
-function participantWorkflowTitle(moduleCode){
- const titles={
-  questionnaire:'پرسشنامه',
-  dd_lifetrade:'بازی انتخاب',
-  dd_standalone:'بازی انتخاب',
-  intermission:'استراحت',
-  ultimatum:'بازی باشگاه رانندگان بارسان',
-  ultimatum_frame:'بازی باشگاه رانندگان بارسان',
-  ultimatum_control:'بازی باشگاه رانندگان بارسان'
- };
- return titles[String(moduleCode||'')]||null;
-}
-function participantWorkflowDescription(moduleCode){
- const descriptions={
-  questionnaire:'پاسخ به چند پرسش دربارهٔ تجربهٔ همکاری و شرایط کاری',
-  dd_lifetrade:'انتخاب میان دریافت پاداش در زمان‌های متفاوت',
-  dd_standalone:'پنج انتخاب میان دریافت پاداش در زمان‌های متفاوت',
-  intermission:'فرصتی برای استراحت و ادامه با آمادگی شما',
-  ultimatum:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
-  ultimatum_frame:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت',
-  ultimatum_control:'تصمیم‌گیری دربارهٔ تقسیم امتیاز در چند موقعیت'
- };
- return descriptions[String(moduleCode||'')]||'';
-}
-
-async function loadWelcomeWorkflow(){
- const list=$('welcome-steps'),status=$('welcome-plan-status');
- if(!list)return;
- list.replaceChildren();
- if(status){status.textContent='';status.classList.add('hidden');}
- if(!workflow.invitationToken&&!workflow.groupInvitationToken)return;
-
- try{
-  const url=workflow.groupInvitationToken
-   ?APP_BASE_PATH+'/api/experiment/workflow?group='+encodeURIComponent(workflow.groupInvitationToken)
-   :APP_BASE_PATH+'/api/experiment/workflow?invite='+encodeURIComponent(workflow.invitationToken);
-  const response=await fetch(url,{method:'GET',cache:'no-store',headers:{'Accept':'application/json'}});
-  let payload={};
-  try{payload=await response.json();}catch(_){}
-  if(!response.ok)throw new Error(payload.detail||'Workflow unavailable');
-
-  const steps=Array.isArray(payload.steps)?payload.steps.slice():[];
-  const includesUltimatum=steps.some(step=>
-   ['ultimatum','ultimatum_frame','ultimatum_control'].includes(String(step&&step.module_code||''))
-  );
-  // The legacy route starts Ultimatum automatically after DD/Life-Trade,
-  // although the public legacy workflow outline contains only two persisted steps.
-  if(payload.legacy_default&&!includesUltimatum){
-   steps.push({module_code:'ultimatum'});
-  }
-
-  let visibleStageNumber=0;
-  steps.forEach(step=>{
-   const title=participantWorkflowTitle(step&&step.module_code);
-   if(!title)return;
-   visibleStageNumber+=1;
-   const item=document.createElement('li');
-   item.className='welcome-step';
-   const number=document.createElement('span');
-   number.textContent=String(visibleStageNumber).toLocaleString('fa-IR');
-   const copy=document.createElement('span');
-   copy.className='welcome-step-copy';
-   const label=document.createElement('strong');
-   label.textContent=title;
-   const description=document.createElement('small');
-   description.textContent=participantWorkflowDescription(step&&step.module_code);
-   copy.append(label,description);
-   item.append(number,copy);
-   list.appendChild(item);
-  });
-  if(!list.children.length&&status){
-   status.textContent='مراحل برنامه در دسترس نیستند.';
-   status.classList.remove('hidden');
-  }
- }catch(error){
-  console.warn('Could not load the participant workflow outline',error);
-  if(status){
-   status.textContent='مراحل برنامه در دسترس نیستند.';
-   status.classList.remove('hidden');
-  }
- }
-}
-
-loadWelcomeWorkflow();
 $('welcome-continue').addEventListener('click',()=>showPanel('ethics'));
 $('ethics-back').addEventListener('click',()=>showPanel('welcome'));
 $('start').addEventListener('click',beginParticipantFlow);
@@ -3047,7 +2968,7 @@ function utMakeScreen(options) {
 function utAddRoleBox(body,role,condition) {
  const box=utNode("div","ut-rolebox");
  utAddText(box,"strong","",role==="proposer"?"شما پیشنهاد دهنده هستید":"شما پاسخ دهنده هستید");
- utAddText(box,"span","",utOpponentText(condition));
+ utAddText(box,"span","ut-opponent-statement "+(condition==="agent"?"is-agent":"is-coworker"),utOpponentText(condition));
  body.appendChild(box);
 }
 function utWaitMs(condition) {
@@ -3316,19 +3237,18 @@ async function startUltimatumInstructions() {
 function utRenderWelcome() {
  const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
-  "شما در این بازی برای کسب امتیاز باشگاه رانندگان با یک بازیکن دیگر بازی می‌کنید. در حین بازی بازیکن مقابل شما ممکن است هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در همین سالن باشد که به شما اطلاع داده خواهد شد.",
-  "در هر دور ۱۰ امتیاز وجود دارد که باید بین شما و بازیکن مقابل تقسیم شود. دو نقش در بازی وجود دارد: پیشنهاد دهنده و پاسخ دهنده.",
-  "اگر شما در نقش پیشنهاد دهنده باشید، باید به بازیکن مقابل پیشنهاد بدهید که چه مقدار از امتیاز را به او بدهید و چه مقدار را برای خود نگه دارید. بازیکن مقابل می‌تواند پیشنهاد شما را قبول یا رد کند. اگر پیشنهاد قبول شود، امتیاز طبق پیشنهاد تقسیم می‌شود؛ اگر رد شود، هیچ‌کس امتیازی دریافت نمی‌کند.",
-  "اگر در نقش پاسخ دهنده باشید، باید منتظر پیشنهاد بازیکن مقابل بمانید. پس از دریافت پیشنهاد، می‌توانید آن را قبول یا رد کنید. در صورت قبول، امتیاز طبق پیشنهاد تقسیم می‌شود و در صورت رد، هیچ‌کس امتیازی دریافت نمی‌کند."
+  "برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ بازیکن مقابل در هر مرحله معرفی می‌شود.",
+  "در هر دور ۱۰ امتیاز بین شما و بازیکن مقابل تقسیم می‌شود.",
+  "پیشنهاد دهنده تعیین می‌کند هر نفر چند امتیاز بگیرد؛ پاسخ دهنده پیشنهاد را قبول یا رد می‌کند. شما هر دو نقش را تجربه می‌کنید.",
+  "با قبول پیشنهاد، امتیازها طبق آن تقسیم می‌شوند؛ با رد پیشنهاد، هیچ‌کس امتیازی نمی‌گیرد."
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
- const note=utAddText(s.body,"p","ut-copy small","در رابط بازی، قبول با رنگ سبز و رد با رنگ قرمز نمایش داده می‌شود.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
- utButton(actions,"فهمیدم، شروع کنیم",utRenderPracticeIntro,"");
+ utButton(actions,"شروع کنیم",utRenderPracticeIntro,"");
 }
 function utRenderPracticeIntro() {
  const s=utMakeScreen({header:false,scrollable:true});
- utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی، دو دور تمرینی اجرا می‌شود اما امتیازها و داده‌های این دو دور در امتیاز نهایی و برنامه پژوهشی لحاظ نمی‌شوند.");
+ utAddText(s.body,"p","ut-copy","قبل از شروع بازی اصلی دو دور تمرینی انجام می‌شود که در نتیجه‌ی نهایی تاثیر ندارد.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",function(){utStartPracticeProposer();},"");
 }
@@ -3352,10 +3272,10 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
 
  const control=utNode("div","ut-proposer-control");
  const total=utNode("p","ut-proposer-total");
- utAddText(total,"span","","مجموع امتیازهای قابل تقسیم:");
+ utAddText(total,"span","","امتیاز قابل تقسیم");
  utAddText(total,"strong","","۱۰");
  control.appendChild(total);
- utAddText(control,"p","ut-question","چند امتیاز به بازیکن مقابل پیشنهاد می‌دهید؟");
+ utAddText(control,"p","ut-question","حاضرید چند امتیاز به بازیکن مقابل بدهید؟");
 
  const wrap=utNode("div","ut-slider-wrap");
  const bubble=utNode("output","ut-bubble","۵");bubble.style.left="clamp(18px, 50%, calc(100% - 18px))";
@@ -3469,25 +3389,16 @@ function utRenderWaiting(condition,message) {
 }
 async function utStartPracticeResponder() {
  try {
-  const s=utMakeScreen({condition:"coworker"});
-  utAddRoleBox(s.body,"responder","coworker");
-  utAddText(s.body,"p","ut-copy","شما باید پیشنهاد بازیکن مقابل را قبول یا رد کنید.");
-  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
-  utButton(actions,"آماده‌ام",async function(){
-   try {
-    const round=await utPrepare("practice","practice_responder_coworker",0,1,0);
-    ultimatumState.currentRound=round;
-    ultimatumState.currentBlockCode="practice_responder_coworker";
-    ultimatumState.currentPhase="practice";
-    await utWaitThenResponder(true,"practice_responder_coworker",0,1,round);
-   } catch(error) {
-    console.error(error);utShowError("دریافت پیشنهاد تمرینی موفق نبود.",utStartPracticeResponder);
-   }
-  },"");
+  const round=await utPrepare("practice","practice_responder_coworker",0,1,0);
+  ultimatumState.currentRound=round;
+  ultimatumState.currentBlockCode="practice_responder_coworker";
+  ultimatumState.currentPhase="practice";
+  await utWaitThenResponder(true,"practice_responder_coworker",0,1,round);
  } catch(error) {
-  console.error(error);utShowError("صفحهٔ تمرین آماده نشد.",utStartPracticeResponder);
+  console.error(error);utShowError("دریافت پیشنهاد تمرینی موفق نبود.",utStartPracticeResponder);
  }
 }
+
 async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) {
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
@@ -3508,10 +3419,9 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  utMetricCard(s.body,"کل امتیاز این دور","۱۰","total-points");
  utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
  const shares=utNode("div","ut-shares");
- utMetricCard(shares,"سهمی که شما دریافت می‌کنید",utFa(round.participant_share),"mine");
- utMetricCard(shares,"سهمی که بازیکن مقابل دریافت می‌کند",utFa(round.opponent_share),"other");
+ utMetricCard(shares,"سهم شما",utFa(round.participant_share),"mine");
+ utMetricCard(shares,"سهم بازیکن مقابل",utFa(round.opponent_share),"other");
  s.body.appendChild(shares);
- utAddText(s.body,"p","ut-copy small","اگر رد کنید، هیچ‌کس امتیازی دریافت نخواهد کرد.");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"قبول",function(){utSubmitResponderDecision("accept",isPractice,blockCode,blockOrder,trial);},"accept");
  utButton(actions,"رد",function(){utSubmitResponderDecision("reject",isPractice,blockCode,blockOrder,trial);},"reject");

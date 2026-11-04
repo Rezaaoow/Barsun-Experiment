@@ -1,5 +1,21 @@
 # BarSan Experiment — راهنمای جامع انتقال دانش و عملیات
 
+## بازبینی دوم رابط شرکت‌کننده — ۴ نوامبر ۲۰۲۶
+
+راهنمای DD به یک صفحهٔ کوتاه با عنوان شمارهٔ بازی و مثال بزرگ تبدیل می‌شود. متن‌ها، دکمه‌ها و برچسب‌های DD/اولتیماتوم خواناتر می‌شوند؛ تمرین پاسخ‌دهنده همان مسیر انتظار/پیشنهاد بازی اصلی را بدون صفحهٔ اضافی «آماده‌ام» دارد. مقصد فقط Staging است. بررسی به syntax و نمایش/گذار مرتبط محدود است؛ تست کامل و بار برای ویرایش ظاهری تکرار نمی‌شود. تعداد دورها، الگوریتم، ثبت پاسخ/زمان، IndexedDB و retry حفظ می‌شوند.
+
+
+## ویرایش رابط شرکت‌کننده — ۴ نوامبر
+
+مبنای کار PR #29 و منبع منتشرشدهٔ 83ae50134f1969d6fa3d3f594eb83ec263459b74 است. کار جاری روی متن و نمایش خوش‌آمدگویی/توضیحات و عنوان DD است؛ فهرست مراحل و fetch مخصوص نمایش آن مطابق درخواست پژوهشگر حذف می‌شوند. راهنمای معتبر این ویرایش docs/PARTICIPANT_COPY_20261104_FA.md است. مقصد انتشار فعلی Staging برای ادامهٔ بازبینی رابط است. وضعیت‌های قدیمی زیر تاریخی‌اند و باید از current-release.json دوباره بررسی شوند.
+
+## وضعیت قطعی پس از انتشار — ۳ نوامبر ۲۰۲۶
+
+هر دو محیط اکنون منبع ثابت `8e4838c54e3fcc82a1d1a25af337293c57b98551` را با native ASGI اجرا می‌کنند. PR #27 ادغام و CI منبع و main موفق شده‌اند. تطبیق هر 217 فایل با Git و دو محیط، HTML عمومی و سلامت سرویس‌ها تأیید شد؛ داده، توکن و کلید Production مستقل و محفوظ‌اند. 600 جریان نهایی Staging با صفر شکست/retry و p95=230.23ms کامل شد؛ 128 تست و Chrome/WebKit موفق. روی Production فقط بررسی انتشار انجام شد، بدون تست بار/اختلال/شرکت‌کنندهٔ مصنوعی.
+
+مرجع تازه: [گزارش نهایی](FINAL_RELEASE_RESULTS_2026-11-03_FA.md) و [عملیات native](../ops/README_FINAL_NATIVE_FA.md). مسیر زنده از `runtime_source` در `current-release.json` هر محیط خوانده می‌شود؛ `/repo` آینه/ورودی fallback است. تنظیمات مؤثر در `config/app.env` خصوصی و launcher/Supervisor همان محیط‌اند؛ Application Manager/Passenger restart به‌تنهایی native را restart نمی‌کند. گزارش‌های قدیمیِ «Production هنوز Passenger» سابقهٔ پیش از این انتشارند.
+
+
 ## Current authorized release work — 2026-11-03
 
 The user authorized final Staging fault/stability acceptance followed by Production promotion of the identical tested runtime. See `docs/FINAL_RELEASE_FA.md`. New runtime files include `client_timing.py` and `app/task_timing.js`; include them in pinned manifests. Native launchers will use immutable `deployments/final-<sha>/runtime` sources; `/repo` is mirrored after verification for legacy compatibility. Production remains unchanged until Staging acceptance is complete. Separate Production env/database/invitation key must be preserved. Never run load/fault tests on Production; only release verification. Two synthetic browser invitation fixtures are specifically authorized for the private Mac directory `/Users/rezaaoow/barsan-loadtest/final-release-20261103/`; no other fixture export is authorized by that approval. Actual release results supersede this in-progress note when recorded.
