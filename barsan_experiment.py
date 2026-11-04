@@ -5060,14 +5060,15 @@ def _ordered_task_export(module: str, scope: str):
                     "LEFT JOIN experiment_assignments AS a ON a.participant_id=sp.participant_id AND a.study_code=sp.study_code "
                     "ORDER BY trial." + key, params,
                 ).fetchall()
-                scores = (_ultimatum_export_scores(connection, [row["run_id"] for row in rows])
+                visible_rows = [row for row in rows if (
+                    str(row["study_code"]).startswith(TEST_STUDY_PREFIX)
+                    if scope == "test" else row["study_code"] == STUDY_CODE)]
+                scores = (_ultimatum_export_scores(connection, [row["run_id"] for row in visible_rows])
                           if module == "ultimatum" else {})
             if not rows:
                 break
             buffer.seek(0);buffer.truncate(0)
-            for raw in rows:
-                if not (str(raw["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else raw["study_code"] == STUDY_CODE):
-                    continue
+            for raw in visible_rows:
                 item = dict(raw)
                 payload = _json_value(item["payload"])
                 metadata = _json_value(item.pop("run_metadata"))
