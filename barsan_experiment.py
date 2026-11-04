@@ -2131,38 +2131,41 @@ def delete_inactive_admin_assignments(
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
     with conn() as connection:
-        inactive_count = int(connection.execute(
-            "SELECT COUNT(*) AS n FROM experiment_assignments WHERE active=0 AND " + scope_condition,
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        targets = connection.execute(
+            "SELECT assignment_id FROM experiment_assignments WHERE active=0 AND "
+            + scope_condition + " ORDER BY assignment_id" + (" FOR UPDATE" if DATABASE_URL else ""),
             scope_params,
-        ).fetchone()["n"] or 0)
-        if not inactive_count:
+        ).fetchall()
+        if not targets:
             return {
                 "deleted_count": 0,
                 "scope": data.scope,
                 "message": "در محدودهٔ انتخاب‌شده لینک غیرفعالی برای حذف وجود ندارد.",
             }
-        # Remove assignment-owned progress/timing rows before the parent assignment.
-        # Instrument runs and collected responses/trials are intentionally retained.
-        connection.execute(
-            "DELETE FROM experiment_time_tracking WHERE assignment_id IN "
-            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
-            scope_params,
-        )
-        connection.execute(
-            "DELETE FROM experiment_workflow_progress WHERE assignment_id IN "
-            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
-            scope_params,
-        )
-        connection.execute(
-            "DELETE FROM experiment_consents WHERE assignment_id IN "
-            "(SELECT assignment_id FROM experiment_assignments WHERE active=0 AND " + scope_condition + ")",
-            scope_params,
-        )
-        cursor = connection.execute(
-            "DELETE FROM experiment_assignments WHERE active=0 AND " + scope_condition,
-            scope_params,
-        )
-        deleted_count = max(0, int(cursor.rowcount or 0))
+        deleted_count = 0
+        # Freeze the selected IDs: concurrent activation cannot change the target set
+        # between child cleanup and parent deletion. Research records stay intact.
+        for offset in range(0, len(targets), 200):
+            ids = tuple(row["assignment_id"] for row in targets[offset:offset + 200])
+            placeholders = ",".join([marker] * len(ids))
+            where = "assignment_id IN (" + placeholders + ")"
+            # Keep this request ID/fingerprint as a tombstone. Replaying an allocation
+            # whose invitation was deleted must fail instead of allocating a new code.
+            connection.execute(
+                "UPDATE experiment_group_claim_requests SET assignment_id=NULL WHERE " + where,
+                ids,
+            )
+            for table in (
+                "experiment_stage_start_requests", "experiment_time_event_requests",
+                "experiment_time_tracking", "experiment_workflow_progress", "experiment_consents",
+            ):
+                connection.execute("DELETE FROM " + table + " WHERE " + where, ids)
+            cursor = connection.execute(
+                "DELETE FROM experiment_assignments WHERE active=0 AND " + where, ids,
+            )
+            deleted_count += max(0, int(cursor.rowcount or 0))
     return {
         "deleted_count": deleted_count,
         "scope": data.scope,

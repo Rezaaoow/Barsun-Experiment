@@ -1,5 +1,9 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current baseline and inactive-link repair — 2026-11-04
+
+PR #28 is merged at main 2229add9b97b31998a8622bd34f42a6e7d3e0949; both environments were verified on source ff38088514aa2626412ab0e9e906b6e77ab2161c (standalone DD/intermissions). The dated PR27 status below is historical. The current repair targets only inactive-invitation FK cleanup; see docs/INACTIVE_LINK_DELETE_FIX_FA.md. Do not run bulk deletion of existing real or all Staging-test invitations to verify a fix. Use a guarded isolated synthetic study on Staging; retain research records. A separate active Staging group link for user UI review is user-facing and must remain open/active.
+
 ## وضعیت قطعی پس از انتشار — ۳ نوامبر ۲۰۲۶
 
 هر دو محیط اکنون منبع ثابت `8e4838c54e3fcc82a1d1a25af337293c57b98551` را با native ASGI اجرا می‌کنند. PR #27 ادغام و CI منبع و main موفق شده‌اند. تطبیق هر 217 فایل با Git و دو محیط، HTML عمومی و سلامت سرویس‌ها تأیید شد؛ داده، توکن و کلید Production مستقل و محفوظ‌اند. 600 جریان نهایی Staging با صفر شکست/retry و p95=230.23ms کامل شد؛ 128 تست و Chrome/WebKit موفق. روی Production فقط بررسی انتشار انجام شد، بدون تست بار/اختلال/شرکت‌کنندهٔ مصنوعی.

@@ -1,5 +1,9 @@
 # BarSan Experiment — database architecture
 
+## Inactive invitation removal
+
+Invitation deletion freezes the inactive target IDs under a transaction write/row lock, clears assignment-owned start/time deduplication receipts and progress/consent rows, and nulls the nullable group-claim assignment reference. The group-claim request ID/fingerprint remains as a tombstone: retrying a deleted allocation must return 409, never allocate another participant. Instrument runs, trial/answer rows, participants, participations, client clocks and raw time checkpoints remain intact. No schema change is needed. See docs/INACTIVE_LINK_DELETE_FIX_FA.md.
+
 ## Additive UT/DD record organization — 2026-11-03
 
 No research rows, raw payload fields, previous attempts or legacy exports are removed. `task_records.py` provides schema-version-2 read adapters with separate identity, run, design, stimulus/choice, timing, outcome, model and quality groups. `/api/admin/dd/records.csv` and `/api/admin/ultimatum/records.csv` expose stable ordered columns plus structured and original payload JSON. These exports include attempt status, including superseded attempts; filter it explicitly for analysis. Old export semantics remain unchanged. Normalization is performed on read, avoiding another copy of each research response in the database. Exports read at most 200 indexed IDs per page and release the DB connection before sending that page to a slow downloader.
