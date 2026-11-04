@@ -1,5 +1,10 @@
 # AI Agent Instructions — BarSan Experiment
 
+## Current research UI review — 2026-11-04
+
+Baseline main 55c2d76eeb04fb3f114bee93033a6ff3b8543fb7, both environments run source 69b7da1c8064d6c01f229ac97effec9ca768e28b. User authorizes the mobile-first research UI review and explicit copy annotations, committed and deployed to both environments. No unapproved participant text changes, new decorative imagery, persuasive colors, altered waits/trials/scoring/storage or full/load tests. Keep the review link active. Validate using isolated local renderer fixtures with POSTs blocked, syntax and public health; do not submit consent for a real participant.
+
+
 ## Current admin repair — 2026-11-04
 
 PR #30 is merged at 84a94a2f8ebf8b4ec16d33c30d4b50affbec67b6; both native environments run source 5ce05adef0872bdfc73018293469d33c2e189eb2. User authorizes admin cleanup/status/delete fixes and group-link deletion, deployed to Staging then Production. Verify destructive operations only against isolated synthetic study data. Deploying the feature does not authorize deleting existing real data. Preserve participant UI and storage/retry contracts.
