@@ -350,6 +350,7 @@ footer{font-size:.8rem;color:#7a8597;text-align:center;padding:10px}
   <option value="">عملیات گروهی روی انتخاب‌شده‌ها…</option>
   <option value="activate">فعال‌کردن</option>
   <option value="deactivate">غیرفعال‌کردن</option>
+  <option value="delete">حذف لینک‌های غیرفعال انتخاب‌شده</option>
   <option value="reissue">صدور مجدد URLهای غیرقابل‌بازیابی</option>
  </select>
  <button id="applyBulkLinkAction" class="secondary" type="button">اعمال عملیات</button>
@@ -651,7 +652,7 @@ function renderAssignmentManagement(data){
   return;
  }
  const table=document.createElement("table"),thead=document.createElement("thead"),headRow=document.createElement("tr");
- ["انتخاب","کد","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
+ ["انتخاب","کد","نوع Ultimatum","وضعیت لینک","URL","تاریخ ساخت","عملیات"].forEach(label=>{const th=document.createElement("th");th.textContent=label;headRow.appendChild(th);});
  thead.appendChild(headRow);table.appendChild(thead);
  const tbody=document.createElement("tbody");
  rows.forEach(item=>{
@@ -672,6 +673,13 @@ function renderAssignmentManagement(data){
   }
   tr.appendChild(urlCell);
   const dateCell=document.createElement("td");dateCell.textContent=item.assigned_at?new Date(item.assigned_at).toLocaleString("fa-IR"):"—";tr.appendChild(dateCell);
+  const actions=document.createElement("td");
+  const toggle=document.createElement("button");toggle.type="button";toggle.className=item.active?"danger":"secondary";toggle.textContent=item.active?"غیرفعال‌کردن":"فعال‌سازی";
+  toggle.addEventListener("click",()=>changeAssignmentStatuses([item.assignment_id],!item.active,data.scope));
+  const remove=document.createElement("button");remove.type="button";remove.className="danger";remove.textContent="حذف لینک";remove.disabled=item.active;remove.title=item.active?"ابتدا لینک را غیرفعال کنید":"فقط لینک حذف می‌شود؛ پاسخ‌ها حفظ می‌شوند";
+  remove.addEventListener("click",()=>deleteSelectedAssignments([item.assignment_id],data.scope));
+  actions.append(toggle,remove);tr.appendChild(actions);
+
   tbody.appendChild(tr);
  });
  table.appendChild(tbody);root.className="table-wrap link-mgmt-table";root.appendChild(table);
@@ -682,13 +690,15 @@ function renderAssignmentManagement(data){
   setStatus("linkManagementStatus",data.legacy_token_count+" لینک URL قابل بازیابی ندارند؛ ردیف‌هایشان را انتخاب کن و از منوی عملیات گروهی «صدور مجدد URLهای غیرقابل‌بازیابی» را اعمال کن. URL قبلی این لینک‌ها باطل می‌شود.","info");
  }
 }
+let assignmentLoadVersion=0,groupLoadVersion=0,assignmentRowsScope=null;
 async function refreshAssignments(){
  const button=$("refreshAssignments");if(button)button.disabled=true;
  try{
   const scope=$("monitorScope").value,status=$("linkStatusFilter").value,search=$("linkSearch").value.trim();
+  const version=++assignmentLoadVersion;
   const query="?scope="+encodeURIComponent(scope)+"&status="+encodeURIComponent(status)+"&search="+encodeURIComponent(search);
   const response=await adminFetch("/api/admin/assignments"+query,{method:"GET"});
-  const data=await response.json();assignmentRows=data.items||[];renderAssignmentManagement(data);
+  const data=await response.json();if(version!==assignmentLoadVersion||scope!==$("monitorScope").value||status!==$("linkStatusFilter").value||search!==$("linkSearch").value.trim())return;assignmentRowsScope=scope;assignmentRows=data.items||[];renderAssignmentManagement(data);
   if(!data.legacy_token_count)setStatus("linkManagementStatus","فهرست لینک‌ها به‌روز شد.","success");
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{if(button)button.disabled=false;}
@@ -740,31 +750,64 @@ function renderGroupLinks(data){
   else{const missing=document.createElement("span");missing.className="badge warn";missing.textContent="URL در دسترس نیست";url.appendChild(missing);}
   tr.appendChild(url);
   const action=document.createElement("td"),toggle=document.createElement("button");toggle.type="button";toggle.className=item.active?"danger":"secondary";toggle.textContent=item.active?"غیرفعال کردن":"فعال‌سازی";
-  toggle.addEventListener("click",async()=>{const next=!item.active;if(next&&!window.confirm("با فعال‌سازی، افراد جدید دوباره می‌توانند از این لینک گروهی استفاده کنند. ادامه می‌دهی؟"))return;if(!next&&!window.confirm("لینک گروهی غیرفعال شود؟ افرادی که قبلاً لینک اختصاصی گرفته‌اند همچنان می‌توانند ادامه دهند."))return;toggle.disabled=true;try{const response=await adminFetch("/api/admin/group-links/status",{method:"POST",body:JSON.stringify({scope:$("groupLinkScope").value,group_link_ids:[item.group_link_id],active:next})});const result=await response.json();setStatus("groupLinkStatus",result.updated_count+" لینک گروهی به‌روزرسانی شد. لینک‌های اختصاصی صادرشده برای افراد قبلی تغییر نمی‌کنند.","success");await refreshGroupLinks();}catch(e){setStatus("groupLinkStatus",e.message,"error");}finally{toggle.disabled=false;}});
-  action.appendChild(toggle);tr.appendChild(action);tbody.appendChild(tr);
+  toggle.textContent=item.active?"بستن ورود جدید":"بازکردن ورود جدید";
+  toggle.addEventListener("click",()=>changeGroupStatus(item,!item.active,false,data.scope));
+  const stopAll=document.createElement("button");stopAll.type="button";stopAll.className="danger";stopAll.textContent="غیرفعال‌کردن گروه و افراد";
+  stopAll.addEventListener("click",()=>changeGroupStatus(item,false,true,data.scope));
+  const remove=document.createElement("button");remove.type="button";remove.className="danger";remove.textContent="حذف لینک گروهی";
+  remove.addEventListener("click",()=>deleteGroupLink(item,data.scope));
+  action.append(toggle,stopAll,remove);tr.appendChild(action);tbody.appendChild(tr);
  });
  table.appendChild(tbody);root.className="table-wrap group-link-table";root.appendChild(table);
 }
 async function refreshGroupLinks(){
  const button=$("refreshGroupLinks");if(button)button.disabled=true;
  try{
-  const scope=$("groupLinkScope").value;
+  const scope=$("groupLinkScope").value,version=++groupLoadVersion;
   const response=await adminFetch("/api/admin/group-links?scope="+encodeURIComponent(scope),{method:"GET"});
-  const data=await response.json();renderGroupLinks(data);
+  const data=await response.json();if(version!==groupLoadVersion||scope!==$("groupLinkScope").value)return;renderGroupLinks(data);
  }catch(e){setStatus("groupLinkStatus",e.message,"error");}
  finally{if(button)button.disabled=false;}
+}
+async function changeGroupStatus(item,active,includeAssignments,scope){
+ const message=includeAssignments?"ورود جدید و همهٔ لینک‌های اختصاصی صادرشده از این گروه غیرفعال شوند؟ پاسخ‌ها حفظ می‌شوند.":(active?"ورود افراد جدید از این گروه فعال شود؟ لینک‌های اختصاصی غیرفعال تغییری نمی‌کنند.":"ورود افراد جدید بسته شود؟ افراد قبلی با لینک اختصاصی خود می‌توانند ادامه دهند.");
+ if(!window.confirm(message))return;
+ try{
+  const response=await adminFetch("/api/admin/group-links/status",{method:"POST",body:JSON.stringify({scope,group_link_ids:[item.group_link_id],active,include_assignments:includeAssignments})});
+  const result=await response.json();await refreshGroupLinks();if(includeAssignments)await refreshAssignments();
+  setStatus("groupLinkStatus",result.updated_count+" لینک گروهی به‌روزرسانی شد."+(includeAssignments?" "+result.assignments_deactivated+" لینک اختصاصی هم غیرفعال شد.":" لینک‌های اختصاصی قبلی تغییر نکردند."),"success");
+ }catch(e){setStatus("groupLinkStatus",e.message,"error");}
+}
+async function deleteGroupLink(item,scope){
+ const phrase=window.prompt("حذف لینک گروهی «"+item.label+"» دائمی است. لینک‌های اختصاصی و پاسخ‌های قبلی حفظ می‌شوند. برای حذف عبارت DELETE GROUP LINKS را وارد کنید:");
+ if(phrase!=="DELETE GROUP LINKS")return;
+ try{
+  const response=await adminFetch("/api/admin/group-links/delete",{method:"POST",body:JSON.stringify({scope,group_link_ids:[item.group_link_id],confirm_phrase:phrase})});
+  const result=await response.json();await refreshGroupLinks();$("groupLinkOutput").replaceChildren();
+  setStatus("groupLinkStatus",result.deleted_count+" لینک گروهی حذف شد؛ "+result.preserved_assignments+" لینک اختصاصی و پاسخ‌های قبلی حفظ شدند.","success");
+ }catch(e){setStatus("groupLinkStatus",e.message,"error");}
+}
+async function deleteSelectedAssignments(ids,scope){
+ if(!ids.length){setStatus("linkManagementStatus","ابتدا لینک‌ها را انتخاب کنید.","error");return;}
+ const phrase=window.prompt("فقط لینک‌های غیرفعال انتخاب‌شده حذف می‌شوند؛ پاسخ‌ها حفظ می‌شوند. عبارت DELETE INACTIVE LINKS را وارد کنید:");
+ if(phrase!=="DELETE INACTIVE LINKS")return;
+ try{
+  const response=await adminFetch("/api/admin/assignments/delete-inactive",{method:"POST",body:JSON.stringify({scope,assignment_ids:ids,confirm_phrase:phrase})});
+  const result=await response.json();await refreshAssignments();await refreshProgress();await refreshGroupLinks();
+  setStatus("linkManagementStatus",result.deleted_count+" لینک غیرفعال انتخاب‌شده حذف شد؛ لینک‌های فعال و پاسخ‌ها حفظ شدند.","success");
+ }catch(e){setStatus("linkManagementStatus",e.message,"error");}
 }
 function selectedAssignmentIds(){
  return Array.from(document.querySelectorAll(".assignment-select:checked")).map(el=>el.dataset.id).filter(Boolean);
 }
-async function changeAssignmentStatuses(ids,active){
+async function changeAssignmentStatuses(ids,active,scope=assignmentRowsScope){
+ if(!scope||scope!==$("monitorScope").value){setStatus("linkManagementStatus","ابتدا فهرست محدودهٔ فعلی را به‌روز کنید.","error");return;}
  if(!ids.length){setStatus("linkManagementStatus","ابتدا حداقل یک لینک را انتخاب کن.","error");return;}
  const action=active?"فعال‌کردن":"غیرفعال‌کردن";
  if(!window.confirm(action+" "+ids.length+" لینک در محدودهٔ فعلی انجام شود؟"))return;
  try{
-  const response=await adminFetch("/api/admin/assignments/status",{method:"POST",body:JSON.stringify({scope:$("monitorScope").value,assignment_ids:ids,active})});
-  const data=await response.json();setStatus("linkManagementStatus",data.updated_count+" لینک "+(active?"فعال":"غیرفعال")+" شد. داده‌های پژوهشی پاک نشده‌اند.","success");
-  await refreshAssignments();await refreshProgress();
+  const response=await adminFetch("/api/admin/assignments/status",{method:"POST",body:JSON.stringify({scope,assignment_ids:ids,active})});
+  const data=await response.json();await refreshAssignments();await refreshProgress();setStatus("linkManagementStatus",data.updated_count+" لینک "+(active?"فعال":"غیرفعال")+" شد. داده‌های پژوهشی پاک نشده‌اند.","success");
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
 }
 async function reissueAssignmentUrl(item){
@@ -869,7 +912,7 @@ async function refreshProgress(){
  }catch(e){setStatus("monitorStatusMessage",e.message,"error");setStatus("connectionStatus",e.message,"error");}
  finally{$("refreshButton").disabled=false;$("connectButton").disabled=false;}
 }
-$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();await refreshGroupLinks();});
+$("connectButton").addEventListener("click",async()=>{await refreshProgress();await loadWorkflow();await refreshAssignments();await refreshGroupLinks();});
 $("refreshButton").addEventListener("click",refreshProgress);
 $("monitorScope").addEventListener("change",()=>{$("groupLinkScope").value=$("monitorScope").value;refreshProgress();refreshAssignments();refreshGroupLinks();});
 $("groupLinkScope").addEventListener("change",refreshGroupLinks);
@@ -916,6 +959,7 @@ $("applyBulkLinkAction").addEventListener("click",async()=>{
  if(!action){setStatus("linkManagementStatus","یک عملیات گروهی انتخاب کن.","info");return;}
  if(action==="activate"){await changeAssignmentStatuses(ids,true);return;}
  if(action==="deactivate"){await changeAssignmentStatuses(ids,false);return;}
+ if(action==="delete"){await deleteSelectedAssignments(ids,assignmentRowsScope);return;}
  if(action==="reissue"){
   if(!window.confirm("فقط از میان لینک‌های انتخاب‌شده URLهای غیرقابل‌بازیابی دوباره صادر می‌شوند. لینک قبلی این موارد باطل خواهد شد. ادامه می‌دهی؟"))return;
   const button=$("applyBulkLinkAction");button.disabled=true;
@@ -941,7 +985,7 @@ $("deleteInactiveLinks").addEventListener("click",async()=>{
  try{
   const response=await adminFetch("/api/admin/assignments/delete-inactive",{method:"POST",body:JSON.stringify({scope,confirm_phrase:phrase})});
   const data=await response.json();setStatus("linkManagementStatus",data.deleted_count+" لینک غیرفعال حذف شد. داده‌های پژوهشی قبلی دست‌نخورده‌اند.","success");
-  await refreshAssignments();await refreshProgress();
+  await refreshAssignments();await refreshProgress();await refreshGroupLinks();
  }catch(e){setStatus("linkManagementStatus",e.message,"error");}
  finally{button.disabled=false;}
 });
@@ -985,7 +1029,7 @@ $("resetData").addEventListener("click",async()=>{
   const response=await adminFetch("/api/admin/maintenance/reset",{method:"POST",body:JSON.stringify({scope,confirm_phrase:expected})});
   const data=await response.json();$("confirmPhrase").value="";$("maintenancePreview").hidden=true;
   setStatus("maintenanceStatus","پاک‌سازی انجام شد. ردیف‌های حذف‌شده:\n"+Object.entries(data.deleted_rows).map(([k,v])=>k+": "+v).join("\n")+"\nبرای شروع دوباره لینک‌های جدید بساز.","success");
-  await refreshProgress();await refreshAssignments();
+  await refreshProgress();await refreshAssignments();await refreshGroupLinks();$("groupLinkOutput").replaceChildren();
  }catch(e){setStatus("maintenanceStatus",e.message,"error");}
  finally{button.disabled=false;}
 });

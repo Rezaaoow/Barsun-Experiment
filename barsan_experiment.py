@@ -330,8 +330,12 @@ if DATABASE_URL:
                 "group_link_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "label TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
                 "invitation_token_encrypted TEXT NOT NULL, condition_code TEXT NOT NULL, workflow_json TEXT NOT NULL, "
-                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, deleted_at TEXT)"
             )
+            if DATABASE_URL:
+                connection.execute("ALTER TABLE experiment_group_links ADD COLUMN IF NOT EXISTS deleted_at TEXT")
+            elif "deleted_at" not in {row["name"] for row in connection.execute("PRAGMA table_info(experiment_group_links)").fetchall()}:
+                connection.execute("ALTER TABLE experiment_group_links ADD COLUMN deleted_at TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
                 "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
@@ -564,8 +568,12 @@ else:
                 "group_link_id TEXT PRIMARY KEY, study_code TEXT NOT NULL REFERENCES studies(study_code), "
                 "label TEXT NOT NULL, invitation_token_hash TEXT UNIQUE NOT NULL, "
                 "invitation_token_encrypted TEXT NOT NULL, condition_code TEXT NOT NULL, workflow_json TEXT NOT NULL, "
-                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)"
+                "active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, deleted_at TEXT)"
             )
+            if DATABASE_URL:
+                connection.execute("ALTER TABLE experiment_group_links ADD COLUMN IF NOT EXISTS deleted_at TEXT")
+            elif "deleted_at" not in {row["name"] for row in connection.execute("PRAGMA table_info(experiment_group_links)").fetchall()}:
+                connection.execute("ALTER TABLE experiment_group_links ADD COLUMN deleted_at TEXT")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS experiment_group_claim_requests ("
                 "request_id TEXT PRIMARY KEY, group_link_id TEXT NOT NULL REFERENCES experiment_group_links(group_link_id), "
@@ -838,6 +846,13 @@ class GroupLinkStatusBatchIn(BaseModel):
     scope: Literal["main", "test"] = "main"
     group_link_ids: list[str] = Field(min_length=1, max_length=5000)
     active: bool
+    include_assignments: bool = False
+
+
+class GroupLinkDeleteIn(BaseModel):
+    scope: Literal["main", "test"]
+    group_link_ids: list[str] = Field(min_length=1, max_length=5000)
+    confirm_phrase: str = Field(min_length=1, max_length=40)
 
 
 class GroupClaimIn(BaseModel):
@@ -867,6 +882,7 @@ class AssignmentReissueIn(BaseModel):
 class InactiveAssignmentDeleteIn(BaseModel):
     scope: Literal["main", "test"]
     confirm_phrase: str = Field(min_length=1, max_length=40)
+    assignment_ids: list[str] | None = Field(default=None, min_length=1, max_length=5000)
 
 
 class ModuleTestLinkIn(BaseModel):
@@ -1780,7 +1796,7 @@ def list_admin_group_links(
             "gl.workflow_json,gl.active,gl.created_at,COUNT(ea.assignment_id) AS claimed_count "
             "FROM experiment_group_links gl "
             "LEFT JOIN experiment_assignments ea ON ea.group_link_id=gl.group_link_id "
-            "WHERE " + where + " "
+            "WHERE " + where + " AND gl.deleted_at IS NULL "
             "GROUP BY gl.group_link_id,gl.study_code,gl.label,gl.invitation_token_encrypted,"
             "gl.workflow_json,gl.active,gl.created_at "
             "ORDER BY gl.created_at DESC",
@@ -1809,29 +1825,74 @@ def list_admin_group_links(
     return {"scope": scope, "total": len(items), "items": items}
 
 
-@app.post("/api/admin/group-links/status")
-def set_admin_group_links_status(
-    data: GroupLinkStatusBatchIn,
-    x_admin_token: str | None = Header(default=None),
-):
-    authorize(x_admin_token)
+def _lock_admin_ids(connection, table, id_column, ids, scope):
+    """Validate the entire scoped selection before any mutation; stable lock order."""
+    if len(set(ids)) != len(ids):
+        raise HTTPException(422, "شناسه‌های انتخاب‌شده نباید تکراری باشند.")
     marker = "%s" if DATABASE_URL else "?"
-    if data.scope == "main":
-        scope_sql = " AND study_code=" + marker
-        scope_value = STUDY_CODE
-    else:
-        scope_sql = " AND study_code LIKE " + marker
-        scope_value = TEST_STUDY_PREFIX + "%"
-    updated_count = 0
+    condition, scope_params = _scope_filter(scope, "study_code", marker)
+    if table == "experiment_group_links":
+        condition += " AND deleted_at IS NULL"
+    selected = []
+    ordered = sorted(ids)
+    for start in range(0, len(ordered), 200):
+        batch = ordered[start:start + 200]
+        rows = connection.execute(
+            "SELECT " + id_column + " FROM " + table + " WHERE " + condition
+            + " AND " + id_column + " IN (" + ",".join([marker] * len(batch)) + ")"
+            + " ORDER BY " + id_column + (" FOR UPDATE" if DATABASE_URL else ""),
+            (*scope_params, *batch),
+        ).fetchall()
+        selected.extend(row[id_column] for row in rows)
+    if len(selected) != len(ids):
+        raise HTTPException(404, "بعضی لینک‌ها حذف شده‌اند یا در محدودهٔ انتخاب‌شده نیستند؛ فهرست را به‌روز کنید.")
+    return selected
+
+
+@app.post("/api/admin/group-links/status")
+def set_admin_group_links_status(data: GroupLinkStatusBatchIn, x_admin_token: str | None = Header(default=None)):
+    authorize(x_admin_token)
+    if data.active and data.include_assignments:
+        raise HTTPException(422, "فعال‌سازی لینک‌های افراد باید جداگانه انجام شود.")
+    marker = "%s" if DATABASE_URL else "?"
+    assignment_count = 0
     with conn() as connection:
-        for group_link_id in data.group_link_ids:
-            cursor = connection.execute(
-                "UPDATE experiment_group_links SET active=" + marker
-                + " WHERE group_link_id=" + marker + scope_sql,
-                (int(data.active), group_link_id, scope_value),
-            )
-            updated_count += max(0, int(cursor.rowcount or 0))
-    return {"updated_count": updated_count, "active": data.active}
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        ids = _lock_admin_ids(connection, "experiment_group_links", "group_link_id", data.group_link_ids, data.scope)
+        for group_id in ids:
+            connection.execute("UPDATE experiment_group_links SET active=" + marker + " WHERE group_link_id=" + marker, (int(data.active), group_id))
+            if data.include_assignments:
+                cursor = connection.execute("UPDATE experiment_assignments SET active=0 WHERE group_link_id=" + marker + " AND active=1", (group_id,))
+                assignment_count += max(0, int(cursor.rowcount or 0))
+    return {"updated_count": len(ids), "active": data.active, "scope": data.scope, "assignments_deactivated": assignment_count}
+
+
+@app.post("/api/admin/group-links/delete")
+def delete_admin_group_links(data: GroupLinkDeleteIn, x_admin_token: str | None = Header(default=None)):
+    """Retire shareable URLs while preserving invitation and group provenance."""
+    authorize(x_admin_token)
+    if data.confirm_phrase != "DELETE GROUP LINKS":
+        raise HTTPException(422, "برای حذف لینک گروهی عبارت DELETE GROUP LINKS را دقیق وارد کنید.")
+    marker = "%s" if DATABASE_URL else "?"
+    condition, scope_params = _scope_filter(data.scope, "study_code", marker)
+    deleted = preserved = 0
+    if len(set(data.group_link_ids)) != len(data.group_link_ids):
+        raise HTTPException(422, "شناسه‌های انتخاب‌شده نباید تکراری باشند.")
+    with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        for start in range(0, len(data.group_link_ids), 200):
+            batch = sorted(data.group_link_ids)[start:start + 200]
+            rows = connection.execute("SELECT group_link_id FROM experiment_group_links WHERE " + condition
+                + " AND deleted_at IS NULL AND group_link_id IN (" + ",".join([marker] * len(batch)) + ") ORDER BY group_link_id"
+                + (" FOR UPDATE" if DATABASE_URL else ""), (*scope_params, *batch)).fetchall()
+            for row in rows:
+                params = (row["group_link_id"],)
+                preserved += int(connection.execute("SELECT COUNT(*) AS n FROM experiment_assignments WHERE group_link_id=" + marker, params).fetchone()["n"])
+                connection.execute("UPDATE experiment_group_links SET active=0,deleted_at=" + marker + " WHERE group_link_id=" + marker, (now(), row["group_link_id"]))
+                deleted += 1
+    return {"deleted_count": deleted, "preserved_assignments": preserved, "scope": data.scope, "research_data_preserved": True}
 
 
 @app.post("/api/admin/test-links")
@@ -2010,29 +2071,17 @@ def set_admin_assignments_status(
 ):
     """Activate/deactivate selected links without deleting their associated research data."""
     authorize(x_admin_token)
-    if len(set(data.assignment_ids)) != len(data.assignment_ids):
-        raise HTTPException(422, "فهرست شناسه‌های لینک نباید تکراری باشد.")
     marker = "%s" if DATABASE_URL else "?"
-    scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
-    changed = 0
-    # Chunk large selections so SQLite deployments stay below their bind-parameter limit.
     with conn() as connection:
-        for start in range(0, len(data.assignment_ids), 400):
-            batch_ids = data.assignment_ids[start:start + 400]
-            placeholders = ",".join([marker] * len(batch_ids))
-            query = (
-                "UPDATE experiment_assignments SET active=" + marker
-                + " WHERE assignment_id IN (" + placeholders + ") AND " + scope_condition
-            )
-            params = (1 if data.active else 0, *batch_ids, *scope_params)
-            cursor = connection.execute(query, params)
-            changed += max(0, int(cursor.rowcount or 0))
-    return {
-        "updated_count": changed,
-        "active": data.active,
-        "scope": data.scope,
-        "message": "وضعیت لینک‌ها تغییر کرد؛ داده‌های پژوهشی مرتبط دست‌نخورده ماندند.",
-    }
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        ids = _lock_admin_ids(connection, "experiment_assignments", "assignment_id", data.assignment_ids, data.scope)
+        for start in range(0, len(ids), 200):
+            batch = ids[start:start + 200]
+            connection.execute("UPDATE experiment_assignments SET active=" + marker + " WHERE assignment_id IN ("
+                + ",".join([marker] * len(batch)) + ")", (int(data.active), *batch))
+    return {"updated_count": len(ids), "active": data.active, "scope": data.scope,
+            "message": "وضعیت لینک‌ها تغییر کرد؛ داده‌های پژوهشی مرتبط دست‌نخورده ماندند."}
 
 
 @app.post("/api/admin/assignments/reissue-missing-links")
@@ -2130,6 +2179,11 @@ def delete_inactive_admin_assignments(
         raise HTTPException(422, "برای حذف لینک‌های غیرفعال عبارت DELETE INACTIVE LINKS را دقیق وارد کن.")
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(data.scope, "study_code", marker)
+    selection_params = ()
+    if data.assignment_ids is not None:
+        if len(set(data.assignment_ids)) != len(data.assignment_ids):
+            raise HTTPException(422, "شناسه‌های انتخاب‌شده نباید تکراری باشند.")
+        selection_params = tuple(sorted(data.assignment_ids))
     with conn() as connection:
         if not DATABASE_URL:
             connection.execute("BEGIN IMMEDIATE")
@@ -2138,6 +2192,9 @@ def delete_inactive_admin_assignments(
             + scope_condition + " ORDER BY assignment_id" + (" FOR UPDATE" if DATABASE_URL else ""),
             scope_params,
         ).fetchall()
+        if data.assignment_ids is not None:
+            selected_ids = set(selection_params)
+            targets = [row for row in targets if row["assignment_id"] in selected_ids]
         if not targets:
             return {
                 "deleted_count": 0,
@@ -2258,7 +2315,7 @@ def claim_group_invitation(data: GroupClaimIn):
         with conn() as connection:
             group = connection.execute(
                 "SELECT group_link_id,study_code,label,condition_code,workflow_json,active "
-                "FROM experiment_group_links WHERE invitation_token_hash=" + marker,
+                "FROM experiment_group_links WHERE invitation_token_hash=" + marker + (" FOR SHARE" if DATABASE_URL else ""),
                 (group_token_hash,),
             ).fetchone()
             if not group or not bool(group["active"]):
@@ -4316,6 +4373,23 @@ def reset_study_data(
     # The preview count and deletion occur within a single transaction; scoped child rows are
     # removed before their parent run/participation/assignment rows to respect foreign keys.
     with conn() as connection:
+        if not DATABASE_URL:
+            connection.execute("BEGIN IMMEDIATE")
+        for table in ("experiment_group_links", "experiment_assignments"):
+            connection.execute("SELECT " + ("group_link_id" if table.endswith("group_links") else "assignment_id")
+                + " FROM " + table + " WHERE " + condition + " ORDER BY "
+                + ("group_link_id" if table.endswith("group_links") else "assignment_id")
+                + (" FOR UPDATE" if DATABASE_URL else ""), params).fetchall()
+        assignment_query = "SELECT assignment_id FROM experiment_assignments WHERE " + condition
+        run_query = "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp ON sp.participation_id=ir.participation_id WHERE " + condition.replace("study_code", "sp.study_code")
+        cursor = connection.execute("DELETE FROM experiment_group_claim_requests WHERE group_link_id IN (SELECT group_link_id FROM experiment_group_links WHERE "
+            + condition + ") OR assignment_id IN (" + assignment_query + ")", (*params, *params))
+        deleted["experiment_group_claim_requests"] = max(0, int(cursor.rowcount or 0))
+        cursor = connection.execute("DELETE FROM experiment_stage_start_requests WHERE assignment_id IN (" + assignment_query
+            + ") OR run_id IN (" + run_query + ")", (*params, *params))
+        deleted["experiment_stage_start_requests"] = max(0, int(cursor.rowcount or 0))
+        cursor = connection.execute("DELETE FROM experiment_time_event_requests WHERE assignment_id IN (" + assignment_query + ")", params)
+        deleted["experiment_time_event_requests"] = max(0, int(cursor.rowcount or 0))
         for table in ("experiment_client_clock_checkpoints", "experiment_client_clocks"):
             cursor = connection.execute("DELETE FROM " + table + " WHERE run_id IN ("
                 "SELECT ir.run_id FROM instrument_runs ir JOIN study_participations sp "
@@ -4374,6 +4448,7 @@ def reset_study_data(
         )
         deleted["group_links"] = max(0, int(cursor.rowcount or 0))
         if data.scope == "test":
+            connection.execute("DELETE FROM study_workflows WHERE substr(study_code,1,12)='barsan-test-'")
             cursor = connection.execute(
                 "DELETE FROM studies WHERE substr(study_code,1,12)='barsan-test-'"
             )
