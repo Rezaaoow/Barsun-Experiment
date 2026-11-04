@@ -32,7 +32,7 @@ def check_admin_maintenance(client, *, disposable_database=True):
     checkpoint=dict(run_id=run,clock_id=str(uuid.uuid4()),step_id='admin-fix-dd',stage_code='dd_lifetrade',sequence=1,visible_ms=1234,uncertain_ms=0,closed=True)
     post('experiment/dd/complete',{**identity(a),'stage_code':'dd_lifetrade','step_id':'admin-fix-dd','run_id':run,'timing_checkpoints':[checkpoint]})
     outside=group('test')
-    before_outside=client.get('/api/admin/group-links?scope=test',headers=headers).json()['total']
+    before_outside=next(item for item in client.get('/api/admin/group-links?scope=test',headers=headers).json()['items'] if item['group_link_id']==outside['group_link_id'])
     # Whole selection validation: a bad/stale ID cannot partly disable valid rows.
     post('admin/assignments/status',{'scope':'main','assignment_ids':[a_id,'missing-synthetic-id'],'active':False},404)
     identify(a)
@@ -71,7 +71,7 @@ def check_admin_maintenance(client, *, disposable_database=True):
         assert cleared['deleted_rows'][name]>=1,name
     after=client.get('/api/admin/maintenance/preview?scope=main',headers=headers).json()['counts']
     assert all(after[name]==0 for name in ['assignments','group_links','participations','runs','lifetrade_trials'])
-    assert client.get('/api/admin/group-links?scope=test',headers=headers).json()['total']==before_outside
+    assert next(item for item in client.get('/api/admin/group-links?scope=test',headers=headers).json()['items'] if item['group_link_id']==outside['group_link_id'])==before_outside
     if disposable_database:
         post('admin/maintenance/reset',{'scope':'test','confirm_phrase':'CLEAR TEST DATA'})
         with main.conn() as c:
