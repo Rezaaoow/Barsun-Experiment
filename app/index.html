@@ -4,8 +4,11 @@
 #screen .panel:not(.questionnaire-screen) h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:900}
 #screen .panel>p,#screen .welcome-summary,#screen .field label,#screen .consent-row{font-size:clamp(1.15rem,2vw,1.35rem)!important;line-height:1.85!important}
 #screen .btn:not(.questionnaire-actions .btn),#screen .ut-btn{min-height:60px;font-size:clamp(1.2rem,2vw,1.4rem)!important;font-weight:850}
-#screen .interstitial-screen{overflow-y:auto;justify-content:flex-start}
-#screen .interstitial-screen .instruction-main{flex:1 0 auto;overflow:visible}
+#screen{align-items:center}
+#screen #stimulus{align-items:center;justify-content:center}
+#screen .trial-stage{justify-content:center;justify-content:safe center}
+#screen .interstitial-screen{overflow-y:auto;justify-content:center;justify-content:safe center}
+#screen .interstitial-screen .instruction-main{flex:0 0 auto;overflow:visible}
 #screen .interstitial-screen .instruction-content{flex:0 0 auto;overflow:visible}
 #screen .instruction-heading{font-size:clamp(2.1rem,4.5vw,3rem)!important;font-weight:950;line-height:1.4}
 #screen .instruction-content>p{font-size:clamp(1.2rem,2.2vw,1.45rem)!important;line-height:1.85!important}
@@ -29,7 +32,7 @@
 #screen .ut-opponent-statement.is-coworker{color:#075f68;background:#e4f5f3}
 #screen .ut-card .ut-metric-label,#screen .ut-card .ut-proposer-total{font-size:clamp(1.2rem,2.4vw,1.6rem)!important;font-weight:850;line-height:1.6}
 #screen .ut-card .ut-body{gap:16px}
-#screen .ut-card .ut-main{justify-content:flex-start;overscroll-behavior-y:contain}
+#screen .ut-card .ut-main{justify-content:center;justify-content:safe center;overscroll-behavior-y:contain}
 #screen .ut-card .ut-metric-card{padding:16px 12px}
 @media(max-width:680px){
  #screen .dd-guide .example-choices{grid-template-columns:minmax(0,1fr);gap:8px}
