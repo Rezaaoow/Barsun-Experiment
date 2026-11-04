@@ -209,8 +209,7 @@ def test_full_client_ultimatum_uses_one_prepare_and_delivers_final_auxiliary_eve
        }else if(spec.block==='practice_proposer_agent')await utStartPracticeProposer();
        else{
         await utStartPracticeResponder();
-        [...document.querySelectorAll('.ut-actions button')].find(button=>button.textContent==='آماده‌ام').click();
-        for(let i=0;i<50&&!document.querySelector('.ut-actions .accept');i++)await new Promise(resolve=>setTimeout(resolve,20));
+        if([...document.querySelectorAll('.ut-actions button')].some(button=>button.textContent==='آماده‌ام'))throw new Error('Obsolete practice readiness page returned');
         if(!document.querySelector('.ut-actions .accept'))throw new Error('Practice responder did not become ready');
        }
        const round=ultimatumState.currentRound;
