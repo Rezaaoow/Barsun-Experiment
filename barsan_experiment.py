@@ -4653,6 +4653,35 @@ def experiment_progress(
     return output
 
 
+def _ultimatum_export_scores(connection: Any, run_ids: list[str]) -> dict[str, dict[str, int]]:
+    """Reconstruct scores from authoritative rounds, including historical attempts.
+
+    Use protocol order, not UUID/receipt order; never combine separate runs or
+    count practice/prepared rounds. One bounded query per batch, outside writes.
+    """
+    marker = "%s" if DATABASE_URL else "?"
+    ids = list(dict.fromkeys(run_ids))
+    scores = {}
+    for offset in range(0, len(ids), 200):
+        batch = ids[offset:offset + 200]
+        rows = connection.execute(
+            "SELECT round_id,phase,status,"
+            "SUM(CASE WHEN phase='main' AND status='completed' THEN points_earned ELSE 0 END) "
+            "OVER (PARTITION BY run_id ORDER BY CASE WHEN phase='practice' THEN 0 ELSE 1 END,"
+            "block_order,trial_sequence,trial_in_block,round_id ROWS UNBOUNDED PRECEDING) AS cumulative_score,"
+            "SUM(CASE WHEN phase='main' AND status='completed' THEN points_earned ELSE 0 END) "
+            "OVER (PARTITION BY run_id) AS run_total_score "
+            "FROM ultimatum_trials WHERE run_id IN (" + ",".join([marker] * len(batch)) + ")",
+            tuple(batch),
+        ).fetchall()
+        for row in rows:
+            scores[row["round_id"]] = {
+                "cumulative_score": int(row["cumulative_score"] or 0),
+                "run_total_score": int(row["run_total_score"] or 0),
+            }
+    return scores
+
+
 @app.get("/api/admin/ultimatum/export.csv")
 def export_ultimatum_csv(
     x_admin_token: str | None = Header(default=None),
@@ -4686,6 +4715,8 @@ def export_ultimatum_csv(
     with conn() as connection:
         rows = connection.execute(query, () if scope == "test" else (STUDY_CODE,)).fetchall()
 
+        scores = _ultimatum_export_scores(connection, [row["run_id"] for row in rows])
+
     fields = [
         "study_code", "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
         "run_completed_at", "attempt_number", "instrument_version", "round_id", "phase",
@@ -4695,7 +4726,7 @@ def export_ultimatum_csv(
         "opponent_share", "participant_decision", "opponent_decision", "accepted",
         "points_earned", "potential_points_lost", "reaction_time_ms", "wait_duration_ms",
         "started_at", "decision_screen_shown_at", "responded_at", "received_at",
-        "completed_at", "server_resolved_at", "feedback_group", "final_score",
+        "completed_at", "server_resolved_at", "feedback_group", "final_score", "cumulative_score", "run_total_score",
         "final_potential_points_lost", "block_order_json", "final_stage_payload_json",
         "run_metadata_json", "client_metadata_json", "client_metadata_resolve_json",
         "client_event_timestamps_json", "client_event_server_received_at",
@@ -4742,7 +4773,8 @@ def export_ultimatum_csv(
                 run_metadata.get("block_order") or [], ensure_ascii=False, separators=(",", ":")
             )
             final_payload = stage_payload if current_completed_run else {}
-            item["final_score"] = final_payload.get("final_score")
+            item.update(scores[item["round_id"]])
+            item["final_score"] = item["cumulative_score"]
             item["final_potential_points_lost"] = final_payload.get("total_potential_points_lost")
             item["final_stage_payload_json"] = json.dumps(
                 final_payload, ensure_ascii=False, separators=(",", ":")
@@ -5028,12 +5060,15 @@ def _ordered_task_export(module: str, scope: str):
                     "LEFT JOIN experiment_assignments AS a ON a.participant_id=sp.participant_id AND a.study_code=sp.study_code "
                     "ORDER BY trial." + key, params,
                 ).fetchall()
+                visible_rows = [row for row in rows if (
+                    str(row["study_code"]).startswith(TEST_STUDY_PREFIX)
+                    if scope == "test" else row["study_code"] == STUDY_CODE)]
+                scores = (_ultimatum_export_scores(connection, [row["run_id"] for row in visible_rows])
+                          if module == "ultimatum" else {})
             if not rows:
                 break
             buffer.seek(0);buffer.truncate(0)
-            for raw in rows:
-                if not (str(raw["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else raw["study_code"] == STUDY_CODE):
-                    continue
+            for raw in visible_rows:
                 item = dict(raw)
                 payload = _json_value(item["payload"])
                 metadata = _json_value(item.pop("run_metadata"))
@@ -5050,6 +5085,8 @@ def _ordered_task_export(module: str, scope: str):
                                 adaptive_path_json=encode(record["adaptive_path"]))
                 else:
                     item["round_status"] = item["status"]
+                    item.update(scores[item["round_id"]])
+                    item["final_score"] = item["cumulative_score"]
                     record = ultimatum_record(item, payload)
                     item.update(planned_wait_duration_ms=payload.get("planned_wait_duration_ms"),
                                 events_json=encode(record["timing"]["events"]),

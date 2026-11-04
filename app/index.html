@@ -3019,7 +3019,7 @@ function utEmphasizeCopy(element,text) {
 }
 function utAddText(parent,tag,className,value) {
  const el=utNode(tag,className,value);
- if(typeof value==="string" && ["p","span","strong","div"].includes(tag))utEmphasizeCopy(el,value);
+ if(className!=="ut-metric-label" && typeof value==="string" && ["p","span","strong","div"].includes(tag))utEmphasizeCopy(el,value);
  parent.appendChild(el);return el;
 }
 function utMetricCard(parent,label,value,kind) {

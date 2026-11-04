@@ -17,7 +17,7 @@ UT_FIELDS = COMMON_FIELDS + [
     "participant_decision", "opponent_decision", "accepted", "points_earned", "potential_points_lost",
     "reaction_time_ms", "planned_wait_duration_ms", "wait_duration_ms", "decision_screen_shown_at",
     "responded_at", "server_received_at", "completed_at", "events_json", "model_json", "device_json",
-    "record_json", "raw_payload_json",
+    "record_json", "raw_payload_json", "final_score", "cumulative_score", "run_total_score",
 ]
 
 
@@ -53,7 +53,8 @@ def ultimatum_record(context: dict[str, Any], payload: dict[str, Any]) -> dict[s
         "design": select(context, ("phase", "block_code", "block_order", "trial_in_block", "trial_sequence",
                                    "role", "opponent_condition", "opponent_actual_type", "round_status")),
         "choice": select(context, ("participant_share", "opponent_share", "participant_decision", "opponent_decision")),
-        "outcome": select(context, ("accepted", "points_earned", "potential_points_lost")),
+        "outcome": select(context, ("accepted", "points_earned", "potential_points_lost",
+                                    "final_score", "cumulative_score", "run_total_score")),
         "timing": {**select(context, ("reaction_time_ms", "wait_duration_ms", "decision_screen_shown_at",
                                       "responded_at", "server_received_at", "completed_at")),
                    "planned_wait_duration_ms": payload.get("planned_wait_duration_ms"),
