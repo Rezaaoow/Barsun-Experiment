@@ -28,7 +28,7 @@ def test_one_dd_guide_and_direct_practice_responder(browser_env):
         if captures:page.screenshot(path=str(captures/(name+'-dd-guide.png')))
         page.evaluate("()=>utRenderProposerOffer(true,'practice_proposer_agent',0,1,{})")
         assert page.locator('.ut-opponent-statement').evaluate('(el)=>parseFloat(getComputedStyle(el).fontSize)')>=23
-        assert page.locator('.ut-question').inner_text()=='حاضرید چند امتیاز به بازیکن مقابل بدهید؟'
+        assert page.locator('.ut-question').inner_text()=='حاضرید چند امتیاز به هوش‌مصنوعی بارسان بدهید؟'
         page.locator('.ut-btn').scroll_into_view_if_needed()
         assert page.locator('.ut-btn').is_visible()
         if captures:page.screenshot(path=str(captures/(name+'-proposer.png')))
@@ -44,7 +44,7 @@ def test_one_dd_guide_and_direct_practice_responder(browser_env):
     }""")
     assert result==[['prepare','practice','practice_responder_coworker',0,1,0],['wait',True,'practice_responder_coworker',0,1]]
     assert page.get_by_role('button',name='آماده‌ام').count()==0
-    assert page.locator('.ut-shares .ut-metric-label').all_text_contents()==['سهم شما','سهم بازیکن مقابل']
+    assert page.locator('.ut-shares .ut-metric-label').all_text_contents()==['سهم شما','سهم همکارتان']
     page.get_by_role('button',name='رد',exact=True).scroll_into_view_if_needed()
     assert page.get_by_role('button',name='قبول',exact=True).is_visible()
     assert page.get_by_role('button',name='رد',exact=True).is_visible()

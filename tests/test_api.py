@@ -876,10 +876,9 @@ def test_ultimatum_blocks_are_server_randomized_and_order_enforced(client, monke
 
 def test_ultimatum_complete_run_scores_and_csv_export(client, monkeypatch):
     # Keep the first block proposer/agent so the rejection edge case is deterministic.
-    monkeypatch.setattr(
-        main.random, "sample",
-        lambda population, k: ["proposer_agent", "responder_agent", "proposer_coworker", "responder_coworker"],
-    )
+    desired=("proposer_agent", "responder_agent", "proposer_coworker", "responder_coworker")
+    monkeypatch.setattr(main.randomization, "_deck", lambda seed,cycle:
+                        (desired, *[order for order in main.randomization.ORDERS if order != desired]))
     identity, started = _start_ultimatum_run(
         client, monkeypatch, code="BS-ULT-COMPLETE-01", condition="A"
     )

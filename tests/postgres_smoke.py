@@ -363,6 +363,8 @@ def main_test():
         check_admin_maintenance(resilience_client)
         from inactive_link_checks import check_inactive_link_deletion
         check_inactive_link_deletion(resilience_client)
+        from counterbalance_checks import check_atomic_counterbalancing
+        check_atomic_counterbalancing(main,resilience_client)
     print("PostgreSQL task recovery: DD + both Ultimatum variants passed")
 
 

@@ -15,6 +15,15 @@ _logger = logging.getLogger("barsan.request_metrics")
 _trace_pattern = re.compile(rb"[a-f0-9]{32}")
 
 
+@contextmanager
+def allocation_timing():
+    started=time.perf_counter()
+    try:yield
+    finally:
+        metrics=_current.get()
+        if metrics is not None:metrics["allocation_ms"] += (time.perf_counter()-started)*1000
+
+
 class _Connection:
     def __init__(self, connection, metrics):
         self._connection = connection
@@ -76,7 +85,7 @@ class RequestMetricsMiddleware:
             active_at_start = self._active
         metrics = {"started": time.perf_counter(), "first_db_ms": None,
                    "pool_wait_ms": 0.0, "sql_ms": 0.0, "sql_count": 0,
-                   "db_scope_ms": 0.0}
+                   "db_scope_ms": 0.0, "allocation_ms": 0.0}
         token = _current.set(metrics)
         status = 500
         error_type = None
@@ -93,7 +102,7 @@ class RequestMetricsMiddleware:
                     (b"x-barsan-trace", request_id.encode("ascii")),
                     (b"server-timing", (
                         f'app;dur={(time.perf_counter() - metrics["started"]) * 1000:.3f},'
-                        f'pool;dur={metrics["pool_wait_ms"]:.3f},sql;dur={metrics["sql_ms"]:.3f}'
+                        f'pool;dur={metrics["pool_wait_ms"]:.3f},sql;dur={metrics["sql_ms"]:.3f},allocation;dur={metrics["allocation_ms"]:.3f}'
                     ).encode("ascii")),
                 ]
             await send(message)
@@ -114,7 +123,7 @@ class RequestMetricsMiddleware:
                       "python_threads": threading.active_count(),
                       "inflight_start": active_at_start, "inflight_end": active_at_end,
                       "app_ms": round((time.perf_counter() - metrics["started"]) * 1000, 3)}
-            for key in ("first_db_ms", "pool_wait_ms", "sql_ms", "db_scope_ms", "sql_count"):
+            for key in ("first_db_ms", "pool_wait_ms", "sql_ms", "db_scope_ms", "sql_count", "allocation_ms"):
                 record[key] = round(metrics[key], 3) if metrics[key] is not None else None
             _current.reset(token)
             _logger.info(json.dumps(record, separators=(",", ":")))
