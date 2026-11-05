@@ -1,3 +1,13 @@
+# Current Ubuntu Production migration — 2026-11-05
+
+The current user requires Production only on the NEW server 37.152.183.1, canonical https://experiment.barsun4818.ir/dce/. No application Staging deployment/database is authorized on this server. All application/load/stress/capacity tests target the NEW Production deployment using isolated synthetic studies and preserving real data.
+
+The OLD hosting deployment must remain fully operational and untouched throughout migration. Do not deploy, overwrite configuration, restart/disable services, alter DNS/redirects, close links, change data or run tests/load against that host. Do not execute legacy cPanel release scripts for this migration. No old-host maintenance window, cutover, retirement, shared writable database or writeback is authorized. A future needed data snapshot may be read-only and must preserve availability; snapshots do not continuously synchronize independent databases.
+
+Inspect existing resources before changing them; preserve credentials and a recovery path. Use the verified barsan-ops key login and sudo for new-server operations; barsan-deploy remains a separate read-only GitHub repository identity without sudo. Root key recovery/provider files remain intact. No private keys/tokens/real invitation fixtures belong in logs or Git. Keep dated protected operation records.
+
+TLS was verified on the new server with DNS/port gates, a trusted certificate, active renewal timer and successful dry-run/reload hook. /dce/ still serves intentional maintenance 503 until application/data deployment; do not call it production-ready from TLS/SSH checks alone. See ops/ubuntu-production for current procedures. Historical staging/cPanel instructions below are release history and do not authorize changes to the old host under this migration.
+
 # Current decision-screen spacing — 2026-11-05
 
 User requests compact Ultimatum proposer/responder screens only, including practice. Remove wasted space so normal mobile/desktop viewports show all choices without scrolling, preserve readable text/points and natural scrolling for zoom/small viewports. No content, protocol, scoring or persistence changes. Merge and deploy the cumulative-score baseline plus this appearance change to Staging then Production. Only focused layout/syntax/public-health checks; no full CI or load tests for CSS changes.
