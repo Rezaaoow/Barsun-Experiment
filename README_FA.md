@@ -1,5 +1,9 @@
 # BarSan Experiment — سامانهٔ آزمایش آنلاین
 
+## New Ubuntu Production runtime — 2026-11-05
+
+The new server now has verified operations/GitHub/TLS access, Python 3.12, a hash-locked offline-recoverable dependency cache and an empty, socket-only PostgreSQL 16 Production database. A controlled reboot into the installed newer kernel passed fresh access, service, configuration and HTTPS checks. Application/data migration is still pending and `/dce/` remains maintenance 503. See [runtime preparation and recovery limits](ops/ubuntu-production/runtime/RUNTIME.md). The existing old hosting deployment remains untouched and fully independent; no application Staging environment is deployed to the new server.
+
 ## درشت‌ترشدن رابط — ۵ نوامبر ۲۰۲۶
 
 اعداد امتیاز در بودجه، سهم‌ها، جمع امتیاز و نتیجهٔ نهایی درشت‌ترند. متن توضیحات و مبالغ/زمان گزینه‌های واقعی DD و Life-Trade بزرگ‌تر است. عبارت‌های موجود «دو دور تمرینی»، «دور تمرینی» و «تاثیر ندارد» در نشانه‌گذاری مشترک متن بولد و مشخص‌اند؛ محتوای جمله، منطق، ثبت داده و زمان‌بندی تغییر نمی‌کند. بررسی فقط syntax، نمایش و سلامت انتشار است.
