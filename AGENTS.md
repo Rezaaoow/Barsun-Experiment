@@ -1,3 +1,7 @@
+# Latest offer spread decision — 2026-11-05
+
+User restores the existing offer-model configured normal SD to 4.0. Deploy to NEW Production only, preserve the latest UI/copy/icons/Frame-Control fixes and stored outcomes. Old host remains frozen. Continue the explicit no-tests instruction; observe actual worker startup for deployment readiness only, with existing protected backup/rollback and one-time frozen operator approval.
+
 # Current copy/icon/offer spread correction — NEW Production only, 2026-11-05
 
 User explicitly requests immediate new-Production deployment of exact opponent-selection/welcome copy, large visible AI/coworker icons beside labels, responder waiting for proposals, and offer-model SD=3. Old host remains entirely frozen. Do not run any tests: no suites, syntax test commands, browser checks, synthetic flows, load or capacity testing. Preserve backup/rollback and observe actual service startup as deployment readiness only. Record frozen one-time operator approval accurately; do not claim CI/tests passed. Frame-only loss feedback, stored data, invitation identity/recovery, order/timing and acceptance algorithm remain unchanged.

@@ -337,7 +337,7 @@ def test_ultimatum_practice_main_blocks_scoring_completion_and_export(client, mo
     payload = json.loads(sample["payload"]) if isinstance(sample["payload"], str) else dict(sample["payload"])
     assert payload["offer_model"]["model"] == "discrete_truncated_normal"
     assert payload["offer_model"]["mean"] == 5.0
-    assert payload["offer_model"]["sd"] == 3.0
+    assert payload["offer_model"]["sd"] == 4.0
 
     final_payload = {
         "schema_version": 1,
@@ -470,7 +470,7 @@ def test_ultimatum_ai_offer_uses_sd_four_and_symmetric_discrete_weights(monkeypa
     assert participant_share == 5
     assert offer_model["model"] == "discrete_truncated_normal"
     assert offer_model["mean"] == 5.0
-    assert offer_model["sd"] == 3.0
+    assert offer_model["sd"] == 4.0
     assert captured["population"] == list(range(11))
     assert captured["k"] == 1
     assert captured["weights"] == pytest.approx(list(reversed(captured["weights"])))

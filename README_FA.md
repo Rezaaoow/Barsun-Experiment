@@ -1,3 +1,7 @@
+## Latest offer spread decision — 2026-11-05
+
+The offer model's configured normal SD is restored to **4.0** by the latest user instruction. New Production only, with no test runs. The latest UI and all stored outcomes are preserved.
+
 ## Current Ultimatum follow-up — 2026-11-05
 
 New Production only: exact introduction/welcome copy, visible opponent icons, role-specific waiting messages, and offer standard deviation 3. User requests no tests; deployment uses backup and service-startup readiness only. Old host remains untouched. See docs/ULTIMATUM_COPY_ICONS_SD_2026_11_05.md.

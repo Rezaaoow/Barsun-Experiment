@@ -770,7 +770,7 @@ def test_ultimatum_ai_models_are_bounded_and_auditable(monkeypatch):
     assert offer_model["sampled_participant_share"] == 6
     assert offer_model["support"] == list(range(11))
     assert offer_model["mean"] == 5.0
-    assert offer_model["sd"] == 3.0
+    assert offer_model["sd"] == 4.0
 
     # Six successes out of ten at p=.6 cross the acceptance threshold.
     draws = iter([0.1] * 6 + [0.9] * 4)

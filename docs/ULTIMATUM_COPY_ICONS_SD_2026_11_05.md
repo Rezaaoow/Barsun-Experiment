@@ -1,3 +1,7 @@
+## Latest instruction: restore SD to 4.0
+
+The user subsequently restored the offer-model configured normal standard deviation to 4.0. Only this parameter and future-CI expected parameter values change; all UI corrections below remain. Deploy only to new Production, with no tests and only actual worker-startup observation under the same explicit instruction. Existing/prefetched offers retain their recorded parameters and are not rewritten.
+
 # Ultimatum copy, icons and offer spread — 2026-11-05
 
 Scope: NEW Production only. Old hosting and Staging are not accessed or changed.
