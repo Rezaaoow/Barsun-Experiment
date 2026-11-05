@@ -1,0 +1,2444 @@
+{
+  "application_code_commit": "e859767f57008c7a89d231b14ff003349318a2cb",
+  "ci": {
+    "run_id": 42106031999,
+    "tests_passed": 166,
+    "postgres_integration": "passed"
+  },
+  "counterbalance_algorithm": "full24-williams-quartets-v1",
+  "production_url": "https://experiment.barsun4818.ir/dce/",
+  "network_origins": {
+    "mac_external_sessions": 100,
+    "on_server_sessions": 500,
+    "physical_origins": 2,
+    "not_600_browsers_or_isps": true
+  },
+  "runs": {
+    "smoke2": {
+      "run": {
+        "cohort": "smoke2",
+        "users": 2,
+        "network_origins": 1,
+        "mode": "fast",
+        "elapsed_s": 6.3,
+        "local_exit": 0,
+        "server_exit": null,
+        "aborted": false,
+        "health_samples": 1,
+        "health_failures": 0
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 2,
+            "rate": 0.4447872271341558,
+            "thresholds": {
+              "count==2": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 0,
+            "rate": 0
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 95,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 112,
+            "fails": 0,
+            "thresholds": {
+              "rate==1": false
+            },
+            "value": 1
+          },
+          "http_req_duration": {
+            "avg": 77.03564210526316,
+            "med": 50.283,
+            "p(95)": 201.98099999999974,
+            "p(99)": 358.4562599999997,
+            "max": 694.573,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "avg": 73.0265,
+            "med": 73.0265,
+            "p(95)": 77.49095,
+            "p(99)": 77.88779,
+            "max": 77.987
+          },
+          "ultimatum_start_ms": {
+            "avg": 33.4895,
+            "med": 33.4895,
+            "p(95)": 35.06135,
+            "p(99)": 35.201069999999994,
+            "max": 35.236
+          },
+          "pool_ms": {
+            "avg": 0.6050222222222222,
+            "med": 0.563,
+            "p(95)": 1.06605,
+            "p(99)": 2.2617700000000003,
+            "max": 2.268
+          },
+          "app_ms": {
+            "avg": 13.688566666666672,
+            "med": 14.206,
+            "p(95)": 24.16269999999999,
+            "p(99)": 26.71727,
+            "max": 28.459
+          },
+          "threshold_failures": []
+        }
+      },
+      "verification": {
+        "cohort": "smoke2",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 1,
+            "completed_ultimatum": 1,
+            "dd_rows": 5,
+            "closed_clocks": 3,
+            "rounds": 22,
+            "completed": 22,
+            "main": 20,
+            "timed": 22,
+            "distinct_orders": 1,
+            "order_counts": [
+              1
+            ],
+            "positions": [
+              {
+                "proposer_agent": 1
+              },
+              {
+                "responder_coworker": 1
+              },
+              {
+                "responder_agent": 1
+              },
+              {
+                "proposer_coworker": 1
+              }
+            ]
+          },
+          {
+            "variant": "Control",
+            "participants": 1,
+            "completed_ultimatum": 1,
+            "dd_rows": 5,
+            "closed_clocks": 3,
+            "rounds": 22,
+            "completed": 22,
+            "main": 20,
+            "timed": 22,
+            "distinct_orders": 1,
+            "order_counts": [
+              1
+            ],
+            "positions": [
+              {
+                "proposer_agent": 1
+              },
+              {
+                "proposer_coworker": 1
+              },
+              {
+                "responder_coworker": 1
+              },
+              {
+                "responder_agent": 1
+              }
+            ]
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 1,
+        "health_failures": 0,
+        "max_app_memory_mib": 0.0,
+        "min_root_free_gib": 38.15,
+        "max_sampled_cpu_busy_percent": null
+      }
+    },
+    "ramp24": {
+      "run": {
+        "cohort": "ramp24",
+        "users": 24,
+        "network_origins": 1,
+        "mode": "paced",
+        "elapsed_s": 168.1,
+        "local_exit": 0,
+        "server_exit": null,
+        "aborted": false,
+        "health_samples": 27,
+        "health_failures": 0
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 24,
+            "rate": 0.14562337059962807,
+            "thresholds": {
+              "count==24": false
+            }
+          },
+          "terminal_failures": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "rate": 0.03033820220825585,
+            "count": 5
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 1374,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 1704,
+            "fails": 0,
+            "thresholds": {
+              "rate==1": false
+            },
+            "value": 1
+          },
+          "http_req_duration": {
+            "p(99)": 1046.413429999999,
+            "max": 3385.968,
+            "avg": 114.60242940320246,
+            "med": 53.227500000000006,
+            "p(95)": 410.8040499999998,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "p(99)": 1072.5457999999999,
+            "max": 1104.455,
+            "avg": 215.39615999999998,
+            "med": 90.419,
+            "p(95)": 882.0063999999995
+          },
+          "ultimatum_start_ms": {
+            "p(99)": 95.64524,
+            "max": 102.545,
+            "avg": 42.73612,
+            "med": 35.636,
+            "p(95)": 71.36319999999999
+          },
+          "pool_ms": {
+            "avg": 0.5504369811320752,
+            "med": 0.42,
+            "p(95)": 1.068,
+            "p(99)": 1.8286799999999994,
+            "max": 3.298
+          },
+          "app_ms": {
+            "p(95)": 21.75619999999999,
+            "p(99)": 26.611599999999996,
+            "max": 52.578,
+            "avg": 10.950051320754717,
+            "med": 8.093
+          },
+          "threshold_failures": []
+        }
+      },
+      "verification": {
+        "cohort": "ramp24",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 12,
+            "completed_ultimatum": 12,
+            "dd_rows": 60,
+            "closed_clocks": 36,
+            "rounds": 264,
+            "completed": 264,
+            "main": 240,
+            "timed": 264,
+            "distinct_orders": 12,
+            "order_counts": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "positions": [
+              {
+                "responder_agent": 3,
+                "responder_coworker": 3,
+                "proposer_coworker": 3,
+                "proposer_agent": 3
+              },
+              {
+                "responder_coworker": 3,
+                "proposer_agent": 3,
+                "responder_agent": 3,
+                "proposer_coworker": 3
+              },
+              {
+                "proposer_coworker": 3,
+                "responder_coworker": 3,
+                "proposer_agent": 3,
+                "responder_agent": 3
+              },
+              {
+                "proposer_agent": 3,
+                "proposer_coworker": 3,
+                "responder_agent": 3,
+                "responder_coworker": 3
+              }
+            ]
+          },
+          {
+            "variant": "Control",
+            "participants": 12,
+            "completed_ultimatum": 12,
+            "dd_rows": 60,
+            "closed_clocks": 36,
+            "rounds": 264,
+            "completed": 264,
+            "main": 240,
+            "timed": 264,
+            "distinct_orders": 12,
+            "order_counts": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "positions": [
+              {
+                "proposer_coworker": 3,
+                "responder_agent": 3,
+                "proposer_agent": 3,
+                "responder_coworker": 3
+              },
+              {
+                "responder_coworker": 3,
+                "proposer_coworker": 3,
+                "proposer_agent": 3,
+                "responder_agent": 3
+              },
+              {
+                "responder_agent": 3,
+                "proposer_agent": 3,
+                "responder_coworker": 3,
+                "proposer_coworker": 3
+              },
+              {
+                "proposer_agent": 3,
+                "responder_coworker": 3,
+                "responder_agent": 3,
+                "proposer_coworker": 3
+              }
+            ]
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 27,
+        "health_failures": 0,
+        "max_app_memory_mib": 0.0,
+        "min_root_free_gib": 38.14,
+        "max_sampled_cpu_busy_percent": null
+      }
+    },
+    "ramp100": {
+      "run": {
+        "cohort": "ramp100",
+        "users": 100,
+        "network_origins": 1,
+        "mode": "fast",
+        "elapsed_s": 90.9,
+        "local_exit": 99,
+        "server_exit": null,
+        "aborted": false,
+        "health_samples": 10,
+        "health_failures": 0
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 100,
+            "rate": 1.1562447257174184,
+            "thresholds": {
+              "count==100": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 38,
+            "rate": 0.439372995772619
+          },
+          "lost_ack_replays": {
+            "count": 25,
+            "rate": 0.2890611814293546
+          },
+          "http_req_failed": {
+            "fails": 4682,
+            "passes": 84,
+            "thresholds": {
+              "rate<0.001": true
+            },
+            "value": 0.017624842635333614
+          },
+          "checks": {
+            "passes": 5556,
+            "fails": 48,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9914346895074947
+          },
+          "http_req_duration": {
+            "avg": 953.9999928661395,
+            "med": 321.4,
+            "p(95)": 4042.7969999999927,
+            "p(99)": 15000.2269,
+            "max": 15002.335,
+            "thresholds": {
+              "p(95)<1000": true,
+              "p(99)<3000": true
+            }
+          },
+          "claim_request_ms": {
+            "avg": 4728.198411764705,
+            "med": 2342.008,
+            "p(95)": 15000.7735,
+            "p(99)": 15001.33486,
+            "max": 15002.263
+          },
+          "ultimatum_start_ms": {
+            "p(95)": 1920.5719999999988,
+            "p(99)": 7828.636719999995,
+            "max": 8706.916,
+            "avg": 605.6628691588785,
+            "med": 310.692
+          },
+          "ultimatum_allocation_server_ms": {
+            "avg": 1.4045420560747661,
+            "med": 1.272,
+            "p(95)": 2.8329,
+            "p(99)": 3.3015,
+            "max": 3.337
+          },
+          "pool_ms": {
+            "avg": 0.7595403136735147,
+            "med": 0.626,
+            "p(95)": 1.7883999999999995,
+            "p(99)": 3.3331399999999993,
+            "max": 19.155
+          },
+          "app_ms": {
+            "p(99)": 42.929899999999975,
+            "max": 223.005,
+            "avg": 13.098294013695595,
+            "med": 12.117,
+            "p(95)": 25.103499999999997
+          },
+          "threshold_failures": [
+            {
+              "metric": "http_req_failed",
+              "expression": "rate<0.001"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(95)<1000"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(99)<3000"
+            },
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            }
+          ]
+        }
+      },
+      "verification": {
+        "cohort": "ramp100",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 50,
+            "completed_ultimatum": 50,
+            "dd_rows": 250,
+            "closed_clocks": 150,
+            "rounds": 1100,
+            "completed": 1100,
+            "main": 1000,
+            "timed": 1100,
+            "distinct_orders": 24,
+            "order_counts": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              3,
+              3
+            ],
+            "positions": [
+              {
+                "proposer_coworker": 13,
+                "responder_agent": 13,
+                "responder_coworker": 12,
+                "proposer_agent": 12
+              },
+              {
+                "responder_agent": 12,
+                "responder_coworker": 13,
+                "proposer_coworker": 13,
+                "proposer_agent": 12
+              },
+              {
+                "proposer_agent": 13,
+                "proposer_coworker": 12,
+                "responder_agent": 13,
+                "responder_coworker": 12
+              },
+              {
+                "responder_coworker": 13,
+                "proposer_agent": 13,
+                "proposer_coworker": 12,
+                "responder_agent": 12
+              }
+            ]
+          },
+          {
+            "variant": "Control",
+            "participants": 50,
+            "completed_ultimatum": 50,
+            "dd_rows": 250,
+            "closed_clocks": 150,
+            "rounds": 1100,
+            "completed": 1100,
+            "main": 1000,
+            "timed": 1100,
+            "distinct_orders": 24,
+            "order_counts": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              3,
+              3
+            ],
+            "positions": [
+              {
+                "responder_coworker": 12,
+                "proposer_agent": 13,
+                "responder_agent": 12,
+                "proposer_coworker": 13
+              },
+              {
+                "proposer_coworker": 13,
+                "proposer_agent": 12,
+                "responder_coworker": 12,
+                "responder_agent": 13
+              },
+              {
+                "proposer_agent": 13,
+                "responder_coworker": 13,
+                "proposer_coworker": 12,
+                "responder_agent": 12
+              },
+              {
+                "responder_agent": 13,
+                "responder_coworker": 13,
+                "proposer_coworker": 12,
+                "proposer_agent": 12
+              }
+            ]
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 10,
+        "health_failures": 0,
+        "max_app_memory_mib": 112.19,
+        "min_root_free_gib": 38.12,
+        "max_sampled_cpu_busy_percent": 23.54
+      }
+    },
+    "ramp300": {
+      "run": {
+        "cohort": "ramp300",
+        "users": 300,
+        "network_origins": 1,
+        "mode": "server-fast",
+        "elapsed_s": 72.1,
+        "local_exit": 0,
+        "server_exit": 99,
+        "aborted": false,
+        "health_samples": 10,
+        "health_failures": 0
+      },
+      "summaries": {
+        "server-summary": {
+          "completed_participants": {
+            "count": 300,
+            "rate": 4.48421085184684,
+            "thresholds": {
+              "count==300": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 75,
+            "rate": 1.12105271296171
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 14182,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 16807,
+            "fails": 5,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9997025933856769
+          },
+          "http_req_duration": {
+            "p(99)": 2835.5639983900014,
+            "max": 3644.792015,
+            "avg": 1236.1408121987795,
+            "med": 1130.3965945,
+            "p(95)": 2333.5303400499997,
+            "thresholds": {
+              "p(95)<1000": true,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "p(99)": 918.87082756,
+            "max": 956.530023,
+            "avg": 584.9924271301588,
+            "med": 582.939523,
+            "p(95)": 867.1474499000001
+          },
+          "ultimatum_start_ms": {
+            "avg": 1319.6259115482865,
+            "med": 1006.123204,
+            "p(95)": 2835.062972,
+            "p(99)": 3113.4380238,
+            "max": 3291.312419
+          },
+          "ultimatum_allocation_server_ms": {
+            "avg": 9.843006230529596,
+            "med": 5.055,
+            "p(95)": 24.613,
+            "p(99)": 126.32900000000072,
+            "max": 273.615
+          },
+          "pool_ms": {
+            "max": 728.222,
+            "avg": 34.172444370812165,
+            "med": 30.112,
+            "p(95)": 67.082,
+            "p(99)": 102.94960000000029
+          },
+          "app_ms": {
+            "p(95)": 2315.967,
+            "p(99)": 2837.091600000002,
+            "max": 3637.153,
+            "avg": 1242.5990778293167,
+            "med": 1141.543
+          },
+          "threshold_failures": [
+            {
+              "metric": "http_req_duration",
+              "expression": "p(95)<1000"
+            },
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            }
+          ]
+        }
+      },
+      "verification": {
+        "cohort": "ramp300",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 150,
+            "completed_ultimatum": 150,
+            "dd_rows": 750,
+            "closed_clocks": 450,
+            "rounds": 3300,
+            "completed": 3300,
+            "main": 3000,
+            "timed": 3300,
+            "distinct_orders": 24,
+            "order_counts": [
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              7,
+              7,
+              7,
+              7,
+              7,
+              7
+            ],
+            "positions": [
+              {
+                "proposer_coworker": 38,
+                "responder_coworker": 37,
+                "responder_agent": 37,
+                "proposer_agent": 38
+              },
+              {
+                "proposer_agent": 37,
+                "responder_agent": 38,
+                "responder_coworker": 38,
+                "proposer_coworker": 37
+              },
+              {
+                "responder_coworker": 38,
+                "proposer_agent": 37,
+                "responder_agent": 38,
+                "proposer_coworker": 37
+              },
+              {
+                "responder_agent": 37,
+                "responder_coworker": 37,
+                "proposer_coworker": 38,
+                "proposer_agent": 38
+              }
+            ]
+          },
+          {
+            "variant": "Control",
+            "participants": 150,
+            "completed_ultimatum": 150,
+            "dd_rows": 750,
+            "closed_clocks": 450,
+            "rounds": 3300,
+            "completed": 3300,
+            "main": 3000,
+            "timed": 3300,
+            "distinct_orders": 24,
+            "order_counts": [
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              7,
+              7,
+              7,
+              7,
+              7,
+              7
+            ],
+            "positions": [
+              {
+                "responder_agent": 37,
+                "responder_coworker": 38,
+                "proposer_agent": 37,
+                "proposer_coworker": 38
+              },
+              {
+                "proposer_agent": 37,
+                "responder_agent": 38,
+                "proposer_coworker": 37,
+                "responder_coworker": 38
+              },
+              {
+                "proposer_coworker": 38,
+                "responder_agent": 37,
+                "proposer_agent": 38,
+                "responder_coworker": 37
+              },
+              {
+                "responder_coworker": 37,
+                "proposer_agent": 38,
+                "responder_agent": 38,
+                "proposer_coworker": 37
+              }
+            ]
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 10,
+        "health_failures": 0,
+        "max_app_memory_mib": 130.98,
+        "min_root_free_gib": 38.04,
+        "max_sampled_cpu_busy_percent": 70.12
+      }
+    },
+    "ramp300-tuned": {
+      "run": {
+        "cohort": "ramp300-tuned",
+        "users": 300,
+        "network_origins": 1,
+        "mode": "server-fast",
+        "elapsed_s": 49.3,
+        "local_exit": 0,
+        "server_exit": 99,
+        "aborted": false,
+        "health_samples": 7,
+        "health_failures": 0
+      },
+      "summaries": {
+        "server-summary": {
+          "completed_participants": {
+            "count": 300,
+            "rate": 6.553025414752178,
+            "thresholds": {
+              "count==300": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 75,
+            "rate": 1.6382563536880446
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 14182,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "fails": 6,
+            "passes": 16806,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9996431120628123
+          },
+          "http_req_duration": {
+            "avg": 882.2885009564955,
+            "med": 775.821582,
+            "p(95)": 2231.503305,
+            "p(99)": 2464.8876345000003,
+            "max": 2765.253167,
+            "thresholds": {
+              "p(99)<3000": false,
+              "p(95)<1000": true
+            }
+          },
+          "claim_request_ms": {
+            "max": 1269.703132,
+            "avg": 505.99620859047616,
+            "med": 458.386883,
+            "p(95)": 1014.8754839,
+            "p(99)": 1107.03167604
+          },
+          "ultimatum_start_ms": {
+            "p(95)": 1484.531302,
+            "p(99)": 1540.2585326,
+            "max": 2038.730154,
+            "avg": 745.0605887476632,
+            "med": 600.062373
+          },
+          "ultimatum_allocation_server_ms": {
+            "med": 8.677,
+            "p(95)": 36.836,
+            "p(99)": 55.13540000000005,
+            "max": 77.701,
+            "avg": 12.79471962616822
+          },
+          "pool_ms": {
+            "avg": 46.13567815330246,
+            "med": 39.719,
+            "p(95)": 100.773,
+            "p(99)": 136.45780000000008,
+            "max": 433.736
+          },
+          "app_ms": {
+            "avg": 875.7496884618172,
+            "med": 778.356,
+            "p(95)": 2231.889,
+            "p(99)": 2458.5412000000006,
+            "max": 2658.289
+          },
+          "threshold_failures": [
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(95)<1000"
+            }
+          ]
+        }
+      },
+      "verification": {
+        "cohort": "ramp300-tuned",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 150,
+            "completed_ultimatum": 150,
+            "dd_rows": 750,
+            "closed_clocks": 450,
+            "rounds": 3300,
+            "completed": 3300,
+            "main": 3000,
+            "timed": 3300,
+            "distinct_orders": 24,
+            "order_counts": [
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              7,
+              7,
+              7,
+              7,
+              7,
+              7
+            ],
+            "positions": [
+              {
+                "responder_coworker": 38,
+                "proposer_agent": 37,
+                "responder_agent": 38,
+                "proposer_coworker": 37
+              },
+              {
+                "proposer_coworker": 38,
+                "proposer_agent": 37,
+                "responder_agent": 38,
+                "responder_coworker": 37
+              },
+              {
+                "proposer_agent": 38,
+                "responder_agent": 37,
+                "responder_coworker": 38,
+                "proposer_coworker": 37
+              },
+              {
+                "responder_agent": 37,
+                "proposer_coworker": 38,
+                "proposer_agent": 38,
+                "responder_coworker": 37
+              }
+            ]
+          },
+          {
+            "variant": "Control",
+            "participants": 150,
+            "completed_ultimatum": 150,
+            "dd_rows": 750,
+            "closed_clocks": 450,
+            "rounds": 3300,
+            "completed": 3300,
+            "main": 3000,
+            "timed": 3300,
+            "distinct_orders": 24,
+            "order_counts": [
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              6,
+              7,
+              7,
+              7,
+              7,
+              7,
+              7
+            ],
+            "positions": [
+              {
+                "responder_coworker": 38,
+                "responder_agent": 37,
+                "proposer_agent": 38,
+                "proposer_coworker": 37
+              },
+              {
+                "proposer_agent": 37,
+                "proposer_coworker": 38,
+                "responder_agent": 37,
+                "responder_coworker": 38
+              },
+              {
+                "responder_agent": 38,
+                "proposer_coworker": 37,
+                "responder_coworker": 37,
+                "proposer_agent": 38
+              },
+              {
+                "proposer_coworker": 38,
+                "responder_coworker": 37,
+                "proposer_agent": 37,
+                "responder_agent": 38
+              }
+            ]
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 7,
+        "health_failures": 0,
+        "max_app_memory_mib": 227.84,
+        "min_root_free_gib": 37.92,
+        "max_sampled_cpu_busy_percent": 87.62
+      }
+    },
+    "distributed600": {
+      "run": {
+        "cohort": "distributed600",
+        "aborted": true,
+        "reason": "coordinator resource-probe SSH timeout; finally terminated generators",
+        "completed_acceptance": false
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==300": true
+            }
+          },
+          "terminal_failures": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 6,
+            "rate": 0.1505897357584338
+          },
+          "lost_ack_replays": {
+            "count": 16,
+            "rate": 0.4015726286891568
+          },
+          "http_req_failed": {
+            "passes": 25,
+            "fails": 1160,
+            "thresholds": {
+              "rate<0.001": true
+            },
+            "value": 0.02109704641350211
+          },
+          "checks": {
+            "passes": 1379,
+            "fails": 19,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9864091559370529
+          },
+          "http_req_duration": {
+            "avg": 1394.8483848101282,
+            "med": 663.702,
+            "p(95)": 5508.245599999996,
+            "p(99)": 15000.190920000001,
+            "max": 15001.186,
+            "thresholds": {
+              "p(95)<1000": true,
+              "p(99)<3000": true
+            }
+          },
+          "claim_request_ms": {
+            "p(99)": 15000.23292,
+            "max": 15000.292,
+            "avg": 1733.2297674418608,
+            "med": 748.091,
+            "p(95)": 6071.8868
+          },
+          "ultimatum_start_ms": {
+            "avg": 1789.2885555555556,
+            "med": 1301.619,
+            "p(95)": 4304.7058,
+            "p(99)": 4467.71636,
+            "max": 4508.469
+          },
+          "ultimatum_allocation_server_ms": {
+            "med": 2.044,
+            "p(95)": 8.040799999999999,
+            "p(99)": 8.97456,
+            "max": 9.208,
+            "avg": 2.9991111111111106
+          },
+          "pool_ms": {
+            "avg": 5.184631519274383,
+            "med": 0.342,
+            "p(95)": 2.1508999999999983,
+            "p(99)": 87.68018999999882,
+            "max": 510.916
+          },
+          "app_ms": {
+            "avg": 23.68059523809526,
+            "med": 6.83,
+            "p(95)": 30.807749999999967,
+            "p(99)": 564.38791,
+            "max": 716.086
+          },
+          "threshold_failures": [
+            {
+              "metric": "http_req_failed",
+              "expression": "rate<0.001"
+            },
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(95)<1000"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(99)<3000"
+            },
+            {
+              "metric": "completed_participants",
+              "expression": "count==300"
+            }
+          ]
+        }
+      },
+      "resources": {
+        "samples": 3,
+        "health_failures": 0,
+        "max_app_memory_mib": 226.39,
+        "min_root_free_gib": 37.91,
+        "max_sampled_cpu_busy_percent": 21.8
+      }
+    },
+    "distributed600b": {
+      "run": {
+        "cohort": "distributed600b",
+        "users": 600,
+        "network_origins": 2,
+        "mode": "distributed",
+        "started_epoch": 1793913430.326253,
+        "ended_epoch": 1793913648.018629,
+        "elapsed_s": 217.7,
+        "local_exit": 99,
+        "server_exit": 99,
+        "aborted": false,
+        "health_samples": 40,
+        "health_failures": 0
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 100,
+            "rate": 0.4732734552490487,
+            "thresholds": {
+              "count==100": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 25,
+            "rate": 0.11831836381226217
+          },
+          "http_req_failed": {
+            "fails": 5728,
+            "passes": 0,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 7102,
+            "fails": 2,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9997184684684685
+          },
+          "http_req_duration": {
+            "p(99)": 949.1901699999996,
+            "max": 7643.027,
+            "avg": 129.5002531424578,
+            "med": 69.25,
+            "p(95)": 382.74014999999997,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "max": 1002.323,
+            "avg": 206.8196857142857,
+            "med": 107.717,
+            "p(95)": 625.8448,
+            "p(99)": 890.4280399999999
+          },
+          "ultimatum_start_ms": {
+            "avg": 121.97989719626172,
+            "med": 63.482,
+            "p(95)": 374.5142999999999,
+            "p(99)": 613.0456599999999,
+            "max": 713.647
+          },
+          "ultimatum_allocation_server_ms": {
+            "med": 1.479,
+            "p(95)": 6.3561000000000005,
+            "p(99)": 10.231739999999999,
+            "max": 13.347,
+            "avg": 2.224626168224299
+          },
+          "pool_ms": {
+            "max": 182.096,
+            "avg": 2.5441358784150547,
+            "med": 0.778,
+            "p(95)": 8.4924,
+            "p(99)": 39.479679999999966
+          },
+          "app_ms": {
+            "p(99)": 122.90555999999997,
+            "max": 287.211,
+            "avg": 20.6616676316266,
+            "med": 14.4,
+            "p(95)": 53.5192
+          },
+          "threshold_failures": [
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            }
+          ]
+        },
+        "server-summary": {
+          "completed_participants": {
+            "count": 500,
+            "rate": 2.3419496995044655,
+            "thresholds": {
+              "count==500": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 125,
+            "rate": 0.5854874248761164
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 28636,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 35511,
+            "fails": 9,
+            "thresholds": {
+              "rate==1": true
+            },
+            "value": 0.9997466216216216
+          },
+          "http_req_duration": {
+            "med": 16.050595,
+            "p(95)": 53.98978125,
+            "p(99)": 121.29265985000019,
+            "max": 348.268522,
+            "avg": 22.018357586429826,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "max": 174.48125,
+            "avg": 17.269912401904776,
+            "med": 12.347534,
+            "p(95)": 42.952014999999996,
+            "p(99)": 78.66651771999989
+          },
+          "ultimatum_start_ms": {
+            "p(99)": 95.22063447999977,
+            "max": 150.250885,
+            "avg": 20.37448436635516,
+            "med": 15.724517,
+            "p(95)": 47.569238799999994
+          },
+          "ultimatum_allocation_server_ms": {
+            "p(99)": 10.241999999999967,
+            "max": 39.737,
+            "avg": 2.4806242990654206,
+            "med": 1.572,
+            "p(95)": 6.768299999999997
+          },
+          "pool_ms": {
+            "p(95)": 7.572699999999994,
+            "p(99)": 33.50659999999999,
+            "max": 236.004,
+            "avg": 2.4009314637235204,
+            "med": 0.792
+          },
+          "app_ms": {
+            "max": 344.857,
+            "avg": 20.49148977745607,
+            "med": 14.553,
+            "p(95)": 51.30569999999995,
+            "p(99)": 116.86189999999996
+          },
+          "threshold_failures": [
+            {
+              "metric": "checks",
+              "expression": "rate==1"
+            }
+          ]
+        }
+      },
+      "verification": {
+        "peak_concurrent_ultimatum": 600,
+        "cohort": "distributed600b",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 300,
+            "completed_ultimatum": 300,
+            "dd_rows": 1500,
+            "closed_clocks": 900,
+            "rounds": 6600,
+            "completed": 6600,
+            "main": 6000,
+            "timed": 6600,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_coworker": 75,
+                "responder_agent": 75,
+                "proposer_agent": 75,
+                "responder_coworker": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "proposer_agent": 75,
+                "responder_coworker": 75
+              },
+              {
+                "responder_coworker": 75,
+                "proposer_agent": 75,
+                "proposer_coworker": 75,
+                "responder_agent": 75
+              },
+              {
+                "proposer_agent": 75,
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          },
+          {
+            "variant": "Control",
+            "participants": 300,
+            "completed_ultimatum": 300,
+            "dd_rows": 1500,
+            "closed_clocks": 900,
+            "rounds": 6600,
+            "completed": 6600,
+            "main": 6000,
+            "timed": 6600,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_agent": 75,
+                "proposer_coworker": 75,
+                "responder_agent": 75,
+                "responder_coworker": 75
+              },
+              {
+                "proposer_coworker": 75,
+                "responder_coworker": 75,
+                "responder_agent": 75,
+                "proposer_agent": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75
+              },
+              {
+                "responder_coworker": 75,
+                "proposer_agent": 75,
+                "proposer_coworker": 75,
+                "responder_agent": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 40,
+        "health_failures": 0,
+        "max_app_memory_mib": 254.36,
+        "min_root_free_gib": 37.76,
+        "max_sampled_cpu_busy_percent": 69.24
+      }
+    },
+    "distributed600c": {
+      "run": {
+        "cohort": "distributed600c",
+        "users": 600,
+        "network_origins": 2,
+        "mode": "distributed",
+        "started_epoch": 1793913781.244856,
+        "ended_epoch": 1793914000.9560199,
+        "elapsed_s": 219.7,
+        "local_exit": 0,
+        "server_exit": 0,
+        "aborted": false,
+        "health_samples": 39,
+        "health_failures": 0
+      },
+      "summaries": {
+        "summary": {
+          "completed_participants": {
+            "count": 100,
+            "rate": 0.46150216545815326,
+            "thresholds": {
+              "count==100": false
+            }
+          },
+          "terminal_failures": {
+            "rate": 0,
+            "count": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 25,
+            "rate": 0.11537554136453831
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 5728,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 7104,
+            "fails": 0,
+            "thresholds": {
+              "rate==1": false
+            },
+            "value": 1
+          },
+          "http_req_duration": {
+            "avg": 185.18447486033546,
+            "med": 79.297,
+            "p(95)": 679.0175999999996,
+            "p(99)": 1660.8446999999999,
+            "max": 10076.048,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "med": 210.146,
+            "p(95)": 1296.0525999999988,
+            "p(99)": 2939.4685199999994,
+            "max": 3082.265,
+            "avg": 402.9845333333333
+          },
+          "ultimatum_start_ms": {
+            "p(95)": 633.1113999999997,
+            "p(99)": 789.2655599999999,
+            "max": 1174.775,
+            "avg": 171.45940186915894,
+            "med": 88.182
+          },
+          "ultimatum_allocation_server_ms": {
+            "p(95)": 9.416399999999994,
+            "p(99)": 32.69047999999998,
+            "max": 36.989,
+            "avg": 3.2234392523364495,
+            "med": 1.916
+          },
+          "pool_ms": {
+            "avg": 2.258316808395153,
+            "med": 0.805,
+            "p(95)": 7.446099999999994,
+            "p(99)": 26.132799999999992,
+            "max": 217.373
+          },
+          "app_ms": {
+            "p(95)": 50.342299999999994,
+            "p(99)": 97.1797,
+            "max": 330.452,
+            "avg": 19.87864646281888,
+            "med": 14.578
+          },
+          "threshold_failures": []
+        },
+        "server-summary": {
+          "completed_participants": {
+            "count": 500,
+            "rate": 2.418666507544906,
+            "thresholds": {
+              "count==500": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 125,
+            "rate": 0.6046666268862265
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 28636,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 35520,
+            "fails": 0,
+            "thresholds": {
+              "rate==1": false
+            },
+            "value": 1
+          },
+          "http_req_duration": {
+            "p(95)": 53.143488500000004,
+            "p(99)": 98.26526195000002,
+            "max": 322.631964,
+            "avg": 20.960840388881152,
+            "med": 15.625581,
+            "thresholds": {
+              "p(95)<1000": false,
+              "p(99)<3000": false
+            }
+          },
+          "claim_request_ms": {
+            "max": 144.545778,
+            "avg": 14.932535438095233,
+            "med": 12.552466,
+            "p(95)": 27.599980999999996,
+            "p(99)": 44.87591499999999
+          },
+          "ultimatum_start_ms": {
+            "avg": 19.738071411214936,
+            "med": 15.498348,
+            "p(95)": 49.15988469999999,
+            "p(99)": 70.14545403999999,
+            "max": 96.97111
+          },
+          "ultimatum_allocation_server_ms": {
+            "avg": 2.6882579439252323,
+            "med": 1.738,
+            "p(95)": 8.2134,
+            "p(99)": 14.079299999999998,
+            "max": 27.888
+          },
+          "pool_ms": {
+            "avg": 2.1263956576804808,
+            "med": 0.797,
+            "p(95)": 6.9342999999999995,
+            "p(99)": 27.11526,
+            "max": 177.71
+          },
+          "app_ms": {
+            "med": 14.21,
+            "p(95)": 51.2696,
+            "p(99)": 95.45205999999999,
+            "max": 317.679,
+            "avg": 19.51389784693327
+          },
+          "threshold_failures": []
+        }
+      },
+      "verification": {
+        "peak_concurrent_ultimatum": 600,
+        "cohort": "distributed600c",
+        "burst": false,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 300,
+            "completed_ultimatum": 300,
+            "dd_rows": 1500,
+            "closed_clocks": 900,
+            "rounds": 6600,
+            "completed": 6600,
+            "main": 6000,
+            "timed": 6600,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_agent": 75,
+                "responder_coworker": 75,
+                "proposer_coworker": 75,
+                "responder_agent": 75
+              },
+              {
+                "responder_coworker": 75,
+                "proposer_coworker": 75,
+                "proposer_agent": 75,
+                "responder_agent": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75
+              },
+              {
+                "proposer_coworker": 75,
+                "responder_agent": 75,
+                "responder_coworker": 75,
+                "proposer_agent": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          },
+          {
+            "variant": "Control",
+            "participants": 300,
+            "completed_ultimatum": 300,
+            "dd_rows": 1500,
+            "closed_clocks": 900,
+            "rounds": 6600,
+            "completed": 6600,
+            "main": 6000,
+            "timed": 6600,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_agent": 75,
+                "responder_coworker": 75,
+                "proposer_coworker": 75,
+                "responder_agent": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75,
+                "proposer_agent": 75
+              },
+              {
+                "proposer_coworker": 75,
+                "proposer_agent": 75,
+                "responder_coworker": 75,
+                "responder_agent": 75
+              },
+              {
+                "responder_coworker": 75,
+                "responder_agent": 75,
+                "proposer_agent": 75,
+                "proposer_coworker": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 39,
+        "health_failures": 0,
+        "max_app_memory_mib": 297.23,
+        "min_root_free_gib": 37.68,
+        "max_sampled_cpu_busy_percent": 71.59
+      }
+    },
+    "burst600": {
+      "run": {
+        "cohort": "burst600",
+        "users": 600,
+        "network_origins": 1,
+        "mode": "server-burst",
+        "started_epoch": 1793914032.866457,
+        "ended_epoch": 1793914066.74151,
+        "elapsed_s": 33.9,
+        "local_exit": 0,
+        "server_exit": 99,
+        "aborted": false,
+        "health_samples": 6,
+        "health_failures": 0
+      },
+      "summaries": {
+        "server-summary": {
+          "completed_participants": {
+            "count": 600,
+            "rate": 21.71014875566369,
+            "thresholds": {
+              "count==600": false
+            }
+          },
+          "terminal_failures": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+              "count==0": false
+            }
+          },
+          "retry_attempts": {
+            "count": 0,
+            "rate": 0
+          },
+          "lost_ack_replays": {
+            "count": 60,
+            "rate": 2.1710148755663687
+          },
+          "http_req_failed": {
+            "passes": 0,
+            "fails": 3673,
+            "thresholds": {
+              "rate<0.001": false
+            },
+            "value": 0
+          },
+          "checks": {
+            "passes": 4224,
+            "fails": 0,
+            "thresholds": {
+              "rate==1": false
+            },
+            "value": 1
+          },
+          "http_req_duration": {
+            "avg": 849.1087635401559,
+            "med": 640.327162,
+            "p(95)": 2174.5107563999977,
+            "p(99)": 3401.1035757599907,
+            "max": 4625.034598,
+            "thresholds": {
+              "p(95)<1000": true,
+              "p(99)<3000": true
+            }
+          },
+          "claim_request_ms": {
+            "avg": 519.6516245349206,
+            "med": 429.6286595,
+            "p(95)": 965.7717353999999,
+            "p(99)": 1099.3403328900001,
+            "max": 1300.116043
+          },
+          "ultimatum_start_ms": {
+            "med": 1135.6418279999998,
+            "p(95)": 2135.8961883499996,
+            "p(99)": 2286.20715238,
+            "max": 2336.632319,
+            "avg": 1136.1616138613706
+          },
+          "ultimatum_allocation_server_ms": {
+            "max": 775.968,
+            "avg": 37.50351246105921,
+            "med": 13.56,
+            "p(95)": 149.16004999999973,
+            "p(99)": 272.5878000000003
+          },
+          "pool_ms": {
+            "med": 17.0435,
+            "p(95)": 73.24469999999998,
+            "p(99)": 121.90038,
+            "max": 216.378,
+            "avg": 23.482211165048533
+          },
+          "app_ms": {
+            "p(95)": 1630.641899999999,
+            "p(99)": 2021.17593,
+            "max": 2183.274,
+            "avg": 536.0305068770225,
+            "med": 386.567
+          },
+          "threshold_failures": [
+            {
+              "metric": "http_req_duration",
+              "expression": "p(95)<1000"
+            },
+            {
+              "metric": "http_req_duration",
+              "expression": "p(99)<3000"
+            }
+          ]
+        }
+      },
+      "verification": {
+        "peak_concurrent_ultimatum": 600,
+        "cohort": "burst600",
+        "burst": true,
+        "results": [
+          {
+            "variant": "Frame",
+            "participants": 300,
+            "completed_ultimatum": 0,
+            "dd_rows": 0,
+            "closed_clocks": null,
+            "rounds": 0,
+            "completed": 0,
+            "main": 0,
+            "timed": 0,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_agent": 75,
+                "responder_agent": 75,
+                "responder_coworker": 75,
+                "proposer_coworker": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_agent": 75,
+                "responder_coworker": 75,
+                "proposer_coworker": 75
+              },
+              {
+                "proposer_coworker": 75,
+                "responder_coworker": 75,
+                "responder_agent": 75,
+                "proposer_agent": 75
+              },
+              {
+                "responder_coworker": 75,
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "proposer_agent": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          },
+          {
+            "variant": "Control",
+            "participants": 300,
+            "completed_ultimatum": 0,
+            "dd_rows": 0,
+            "closed_clocks": null,
+            "rounds": 0,
+            "completed": 0,
+            "main": 0,
+            "timed": 0,
+            "distinct_orders": 24,
+            "order_counts": [
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13,
+              13
+            ],
+            "positions": [
+              {
+                "proposer_coworker": 75,
+                "responder_coworker": 75,
+                "proposer_agent": 75,
+                "responder_agent": 75
+              },
+              {
+                "responder_coworker": 75,
+                "proposer_agent": 75,
+                "responder_agent": 75,
+                "proposer_coworker": 75
+              },
+              {
+                "proposer_agent": 75,
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75
+              },
+              {
+                "responder_agent": 75,
+                "proposer_coworker": 75,
+                "responder_coworker": 75,
+                "proposer_agent": 75
+              }
+            ],
+            "carryover_counts": [
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75,
+              75
+            ],
+            "run_plan_mismatches": 0
+          }
+        ],
+        "preexisting_groups_all_fields_except_external_active_flags_unchanged": 11,
+        "external_admin_active_flag_changes": 2,
+        "preexisting_assignments_unchanged": 12,
+        "signing_key_unchanged": true
+      },
+      "resources": {
+        "samples": 6,
+        "health_failures": 0,
+        "max_app_memory_mib": 294.57,
+        "min_root_free_gib": 37.68,
+        "max_sampled_cpu_busy_percent": 91.44
+      }
+    }
+  },
+  "browser": [
+    {
+      "engine": "webkit",
+      "dd_saved_offline": true,
+      "idle_seconds": 600,
+      "passed": true,
+      "ultimatum_rounds": 22,
+      "pending_entries": 0,
+      "lost_ack_recovered": true,
+      "failed_resolve_attempts": 1,
+      "manual_retry_clicked": false,
+      "page_errors": 0,
+      "no_horizontal_overflow": true,
+      "duration_s": 729.6
+    },
+    {
+      "engine": "chromium",
+      "dd_saved_offline": true,
+      "idle_seconds": 600,
+      "passed": true,
+      "ultimatum_rounds": 22,
+      "pending_entries": 0,
+      "lost_ack_recovered": true,
+      "failed_resolve_attempts": 4,
+      "manual_retry_clicked": false,
+      "page_errors": 0,
+      "no_horizontal_overflow": true,
+      "duration_s": 730.0
+    }
+  ],
+  "recovery": {
+    "idle_connections_closed": 2,
+    "database_recovered_without_app_restart": true,
+    "worker_replaced_automatically": true,
+    "workers_after": 4,
+    "parent_pid_unchanged": true,
+    "recovery_observed_s": 0.441,
+    "health_failures": 0,
+    "probes": 23,
+    "real_active_runs": 0
+  },
+  "live_export": {
+    "live_csv_runs_verified": 600,
+    "rows_verified": 13200,
+    "final_score_is_cumulative": true,
+    "practice_excluded": true,
+    "run_totals_match": true,
+    "elapsed_s": 34.25
+  },
+  "backup": {
+    "last_result": "success",
+    "last_snapshot": "b33282183c9ad1d39de917e45ad11a2ade6747831214cfde8255d0c44ac9602d",
+    "last_capture_bytes": 48423675,
+    "last_success_utc": "2026-11-05T21:33:41.801688+00:00",
+    "backup_volume_limit_bytes": 4294967296,
+    "backup_volume_free_bytes": 3999485952,
+    "root_free_bytes": 40456224768,
+    "root_reserve_bytes": 8589934592,
+    "last_restore_result": "success",
+    "last_restore_test": {
+      "restore_verified": true,
+      "snapshot": "b33282183c9ad1d39de917e45ad11a2ade6747831214cfde8255d0c44ac9602d",
+      "tables_verified": 23,
+      "file_hashes_verified": true,
+      "elapsed_seconds": 15.47,
+      "off_server": false,
+      "verified_at_utc": "2026-11-05T21:35:28.488377+00:00"
+    },
+    "off_server": false
+  },
+  "worker_tuning": {
+    "workers_before": 2,
+    "workers_after": 4,
+    "original_workers_preserved": true,
+    "application_restarted": false,
+    "unit_before_sha256": "eede070f5c3cfc018c6b8e7cb4ed794055bb34fa74c71a4fe6a4b3df57dbfbc5",
+    "unit_after_sha256": "f3327644e7903bab4954a9cd4bf9e3f5779d82fbaa1740f118193edaf80d32e9",
+    "at_epoch": 1793913048.3016353
+  },
+  "invitation_integrity": {
+    "original_group_records": 11,
+    "all_non_active_fields_byte_identical": true,
+    "user_confirmed_active_status_changes": 2,
+    "original_individual_assignments_byte_identical": 12,
+    "invitation_key_unchanged": true,
+    "operator_did_not_modify_existing_links": true
+  },
+  "cleanup": {
+    "new_synthetic_groups_closed": 22,
+    "preexisting_ids_explicitly_forbidden_by_cleanup_guard": true,
+    "research_and_synthetic_data_retained": true
+  },
+  "limitations": [
+    "Two physical origins only; network jitter/outages are application-layer simulations.",
+    "Initial 600-start burst exceeded one-second p95 target despite zero failures.",
+    "External HTTP maximum was 10.08 seconds including cold assets; no universal no-delay guarantee.",
+    "Backups remain on the same physical server; external storage and independent alert delivery are not configured."
+  ]
+}

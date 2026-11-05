@@ -7,15 +7,17 @@ if(__ENV.BASE_URL!==base)throw Error('NEW Production URL required');
 const fixture=JSON.parse(open(__ENV.FIXTURE_FILE));
 if(!fixture.synthetic||!fixture.groups.every(g=>g.study_code.startsWith('barsan-test-')))throw Error('Synthetic scope required');
 const users=Number(__ENV.USERS||24),offset=Number(__ENV.OFFSET||0),burst=__ENV.MODE==='burst',fast=__ENV.FAST==='1';
-if(![2,24,100,300,600].includes(users)||offset<0)throw Error('Invalid cohort');
+if(![2,24,100,300,500,600].includes(users)||offset<0)throw Error('Invalid cohort');
 const completed=new Counter('completed_participants'),terminal=new Counter('terminal_failures'),retry=new Counter('retry_attempts'),replays=new Counter('lost_ack_replays');
+const utAllocationMs=new Trend('ultimatum_allocation_server_ms');
 const utStartMs=new Trend('ultimatum_start_ms'),ddStartMs=new Trend('dd_start_ms');
 const allocation=new Trend('allocation_request_ms'),claimMs=new Trend('claim_request_ms'),logicalMs=new Trend('logical_request_ms'),appMs=new Trend('app_ms'),poolMs=new Trend('pool_ms'),allocationMs=new Trend('allocation_server_ms');
 export const options={scenarios:{journeys:{executor:'per-vu-iterations',vus:users,iterations:1,maxDuration:'12m',exec:'journey'}},
- systemTags:['status','method','name','scenario','error_code'],summaryTrendStats:['avg','med','p(95)','p(99)','max'],
+ systemTags:['status','method','name','scenario','error_code','check','group'],summaryTrendStats:['avg','med','p(95)','p(99)','max'],
  thresholds:{checks:['rate==1'],completed_participants:[`count==${users}`],terminal_failures:['count==0'],http_req_failed:['rate<0.001'],http_req_duration:['p(95)<1000','p(99)<3000']}};
 const uuid=()=> 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)});
 const stamp=()=>new Date().toISOString();
+const planKey=p=>JSON.stringify(Object.keys(p).sort().map(k=>[k,p[k]]));
 function observe(r,path){
  const h=Object.entries(r.headers||{}).find(([k])=>k.toLowerCase()==='server-timing');const m={};
  if(h)for(const item of String(h[1]).matchAll(/(app|pool|allocation);dur=([0-9.]+)/g))m[item[1]]=Number(item[2]);
@@ -31,7 +33,7 @@ function post(path,payload,replay=false){
  for(let attempt=0;attempt<6;attempt++){
   const r=http.post(base+path,JSON.stringify(payload),{headers:{'Content-Type':'application/json'},timeout:'15s',tags:{name:path}});observe(r,path);
   if(r.status>=200&&r.status<300){
-   if(path==='/api/experiment/stages/start'){if(payload.stage_code==='ultimatum')utStartMs.add(r.timings.duration);if(payload.stage_code==='dd_lifetrade')ddStartMs.add(r.timings.duration);}
+   if(path==='/api/experiment/stages/start'){if(payload.stage_code==='ultimatum'){utStartMs.add(r.timings.duration);const h=Object.entries(r.headers).find(([k])=>k.toLowerCase()==='server-timing');const m=h&&String(h[1]).match(/allocation;dur=([0-9.]+)/);if(m)utAllocationMs.add(Number(m[1]));}if(payload.stage_code==='dd_lifetrade')ddStartMs.add(r.timings.duration);}
    if(replay){replays.add(1);replay=false;continue;}
    logicalMs.add(Date.now()-begin);check(r,{'logical operation succeeds':()=>true});return r.json();
   }
@@ -48,7 +50,11 @@ export function setup(){
 export function journey(data){
  const index=offset+__VU,g=fixture.groups[(index-1)%2],code=fixture.prefix+'-'+String(index).padStart(4,'0');
  const shouldReplay=index%20===0;
- if(!burst&&!fast)sleep(Math.random()*15);
+ if(!burst&&!fast)sleep(Math.random()*Number(__ENV.ENTRY_SPREAD_SECONDS||60));
+ const entry=http.get(base+'/?group='+g.group_token,{timeout:'15s',tags:{name:'participant_entry'}});
+ check(entry,{'active synthetic link entry loads':r=>r.status===200&&r.body.includes('participant-first-name')});
+ const font=http.get(base+'/assets/vazirmatn-v33.003.woff2',{responseType:'none',timeout:'15s',tags:{name:'local_font'}});
+ check(font,{'local font loads':r=>r.status===200});
  const claim=post('/api/experiment/group/claim',{group_token:g.group_token,participant_code:code,first_name:'Synthetic',last_name:'Acceptance',claim_request_id:uuid()},shouldReplay);
  const identity={participant_code:claim.participant_code,invitation_token:claim.invitation_token};
  post('/api/experiment/consent',{...identity,first_name:'Synthetic',last_name:'Acceptance',accepted:true});
@@ -68,13 +74,14 @@ export function journey(data){
   const dd=post('/api/experiment/stages/start',ddBody,shouldReplay);time('dd_lifetrade','load-dd','start');clock(dd.run_id,'dd_lifetrade','load-dd');
   const position=dd.draft_payload.dd_positions.now_left;
   check(position,{'DD plan balanced and stable':p=>p.length===5&&[2,3].includes(p.filter(Boolean).length)});
-  const rows=[];let delay=182.5;
+  const rows=[];let current=15,stepSize=8;
   for(let i=1;i<=5;i++){
    if(!fast)sleep(1.5+Math.random()*2);
-   const choice=(index+i)%2?'Later':'Now';
+   const choice=(index+i)%2?'Later':'Now',condition=fixture.dd_conditions[current],next=Math.max(0,Math.min(30,current+(choice==='Now'?-stepSize:stepSize)));
+   const left=position[i-1]?'Now':'Later';
    rows.push({client_event_id:dd.run_id+'-dd-'+i,row:{task:'KT',task_order:1,block_name:'Standalone',magnitude:'100M',trial_in_block:i,index:i,user_choice_type:choice,
-    delay_days:delay,amount_now:50000000,amount_later:100000000,now_on_left:position[i-1],reaction_time_ms:750,response_method:'synthetic',trial_started_iso:stamp(),response_iso:stamp(),visibility_hidden:false}});
-   delay+=choice==='Now'?-(365/2**(i+1)):(365/2**(i+1));
+    delay:condition.delay,choice:condition.choice,index:condition.index,requested_row:current,displayed_row:current+1,requested_next_row:next,bounded_next_row:next,boundary_hit:false,left_stimulus:left,right_stimulus:left==='Now'?'Later':'Now',now_on_left:position[i-1],reaction_time_ms:750,response_method:'synthetic',trial_started_iso:stamp(),response_iso:stamp(),visibility_hidden:false}});
+   current=next;stepSize=Math.max(1,Math.floor(stepSize/2));
   }
   post('/api/trials',{session_id:dd.run_id,trials:rows},shouldReplay);
   post('/api/experiment/dd/complete',{...identity,stage_code:'dd_lifetrade',step_id:'load-dd',run_id:dd.run_id});time('dd_lifetrade','load-dd','complete');clock(dd.run_id,'dd_lifetrade','load-dd',true);
@@ -87,7 +94,7 @@ export function journey(data){
  let ut=post('/api/experiment/stages/start',startBody,shouldReplay),plan=ut.draft_payload.randomization;
  check(plan,{'full-24 saved server allocation':p=>p.algorithm==='full24-williams-quartets-v1'&&p.stratum===g.variant});
  // Refresh creates a fresh attempt, but preserves the original allocation.
- if(index%50===0){const restarted=post('/api/experiment/stages/start',{...startBody,start_request_id:uuid()});check(restarted,{'restart keeps allocation':r=>JSON.stringify(r.draft_payload.randomization)===JSON.stringify(plan)&&r.run_id!==ut.run_id});ut=restarted;}
+ if(index%50===0){const restarted=post('/api/experiment/stages/start',{...startBody,start_request_id:uuid()});check(restarted,{'restart keeps allocation':r=>planKey(r.draft_payload.randomization)===planKey(plan)&&r.run_id!==ut.run_id});ut=restarted;}
  if(burst){completed.add(1);return;}
  time('ultimatum','load-ut','start');clock(ut.run_id,'ultimatum','load-ut');
  if(!fast)sleep(3+Math.random()*3);

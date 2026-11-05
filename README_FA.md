@@ -1,3 +1,9 @@
+# Current NEW Production acceptance — 2026-11-06
+
+Production: https://experiment.barsun4818.ir/dce/ . Validated application e859767f57008c7a89d231b14ff003349318a2cb, four workers. Clean600-session test passed with exact stored answers/timing, all24 atomic counterbalance orders and no HTTP failures/unplanned retries. Two origins only (100 Mac/500 server), not600 actual ISPs/browsers. Synchronized600 entry start p95 was2.14s, above the artificial1s stress target. Full evidence, limits, failed earlier runs, invitation protection, backups and code-only rollback: [final report](docs/FINAL_ACCEPTANCE_2026_11_05.md).
+
+Existing invitation tokens/URLs/workflows were preserved; the user's two confirmed status changes were left intact. Only this operation's22 new synthetic groups were closed. Old hosting and Staging were not accessed. Same-server encrypted backups remain bounded at4GiB; independent off-server disaster recovery is still unavailable.
+
 ## Final acceptance — 2026-11-05
 
 New Production only: scientific 24-order atomic counterbalancing, reliability review and explicitly authorized 600-participant synthetic load/recovery test. Existing finalized group links are preserved without modification; old hosting is frozen. Source/runtime rollback baseline is retained independently of normal release cleanup. See docs/FINAL_ACCEPTANCE_2026_11_05.md for design, constraints and measured results.
