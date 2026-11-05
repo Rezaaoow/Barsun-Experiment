@@ -1,3 +1,7 @@
+## Current Ultimatum follow-up — 2026-11-05
+
+New Production only: exact introduction/welcome copy, visible opponent icons, role-specific waiting messages, and offer standard deviation 3. User requests no tests; deployment uses backup and service-startup readiness only. Old host remains untouched. See docs/ULTIMATUM_COPY_ICONS_SD_2026_11_05.md.
+
 ## Current Ultimatum display correction — 2026-11-05
 
 New Production only; the old host is frozen. Correct AI/coworker labels and restore Frame-only loss feedback. No score/data/protocol changes and no full/load/capacity tests. See docs/ULTIMATUM_DISPLAY_FIX_2026_11_05.md.

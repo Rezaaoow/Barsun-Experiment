@@ -1025,7 +1025,7 @@ body{display:block}
 #screen .ut-card .ut-score,#screen .ut-card .ut-opponent{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--research-line);border-radius:8px;background:#fff;box-shadow:none;color:#202020;font-size:1rem!important;line-height:1.5!important}
 #screen .ut-card .ut-score-label,#screen .ut-card .ut-opponent-label{font-size:1rem!important;font-weight:700;color:#404040}
 #screen .ut-card .ut-score-value{font-size:1.8rem!important;min-width:32px;min-height:32px;padding:0;border:0;background:none}
-#screen .ut-card .ut-opponent-icon{display:none}
+#screen .ut-card .ut-opponent-icon{display:inline-flex;width:clamp(42px,12vw,52px);height:clamp(42px,12vw,52px);font-size:clamp(1.9rem,8vw,2.35rem);line-height:1;flex:0 0 auto;background:#f5f5f5;border:1px solid #dedede;box-shadow:none}
 #screen .ut-card .ut-rolebox,#screen .ut-card .ut-proposer-control,#screen .ut-card .ut-metric-card,#screen .ut-card .ut-summary-box,#screen .ut-card .ut-summary-metric{width:100%;max-width:none;padding:16px 12px;border:1px solid var(--research-line);border-radius:9px;background:#fff;background-image:none;box-shadow:none}
 #screen .ut-card .ut-rolebox strong{font-size:clamp(1.25rem,2.5vw,1.6rem)!important;font-weight:850;margin:0 0 10px}
 #screen .ut-card .ut-rolebox .ut-opponent-statement{font-size:clamp(1.45rem,2.6vw,1.7rem)!important;font-weight:750;line-height:1.7!important;padding:0;background:none;border-radius:0}
@@ -3331,7 +3331,7 @@ async function startUltimatumInstructions() {
 function utRenderWelcome() {
  const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
-  "شما برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ در هر دور ۱۰ امتیاز بین شما و هوش‌مصنوعی بارسان یا همکارتان تقسیم می‌شود.",
+  "شما برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ در هر دور ۱۰ امتیاز بین شما و بازیکن مقابل شما تقسیم می‌شود.",
   "این بازی دو نقش پیشنهاد دهنده و پاسخ دهنده دارد. پیشنهاد دهنده تعیین می‌کند هر نفر چند امتیاز بگیرد؛ پاسخ دهنده پیشنهاد را قبول یا رد می‌کند. با قبول پیشنهاد، امتیازها طبق آن تقسیم می‌شوند؛ با رد پیشنهاد، هیچ‌کس امتیازی نمی‌گیرد."
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
@@ -3341,16 +3341,17 @@ function utRenderWelcome() {
 async function utSelectOpponent() {
  const state=ultimatumState;
  const s=utMakeScreen({header:false});
- const message=utAddText(s.body,"p","ut-result-main","در حال تعیین همکارتان از بین همکاران");
+ const message=utAddText(s.body,"p","ut-result-main","در حال انتخاب بازیکن مقابل شما از بین همکاران در سالن...");
  s.body.setAttribute('aria-live','polite');
  const delay=3000+randomInt(3001);
  await new Promise(resolve=>setTimeout(resolve,delay));
  if(ultimatumState!==state||!message.isConnected)return;
- message.textContent="همکارتان تعیین شد";
+ message.textContent="بازیکن مقابل شما انتخاب شد";
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",utRenderPracticeIntro,"");
 }
-function utWaitingMessage(condition) {
+function utWaitingMessage(condition,role="proposer") {
+ if(role==="responder")return condition==='agent'?"منتظر دریافت پیشنهاد هوش مصنوعی بارسان باشید":"منتظر دریافت پیشنهاد همکارتان باشید";
  return condition==='agent'?"منتظر دریافت پاسخ هوش مصنوعی بارسان باشید":"منتظر دریافت پاسخ همکارتان باشید";
 }
 function utRenderPracticeIntro() {
@@ -3509,7 +3510,7 @@ async function utStartPracticeResponder() {
 async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) {
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
- utRenderWaiting(condition,utWaitingMessage(condition));
+ utRenderWaiting(condition,utWaitingMessage(condition,"responder"));
  ultimatumState.currentEventTimestamps={waiting_started_at:nowISO()};
  const waitStart=performance.now();
  await new Promise(function(resolve){setTimeout(resolve,delay);});
