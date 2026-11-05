@@ -1128,47 +1128,20 @@ body{display:block}
 <section class="panel ethics-panel hidden" id="ethics" dir="rtl">
   <h1>توضیحات پژوهش و رضایت برای مشارکت</h1>
   <p>این بازی‌ها یرای یک فعالیت پژوهشی دربارهٔ تجربهٔ همکاری و شرایط کاری شما در بارسان انجام می‌شود. داده‌های گردآوری‌شده در راستای اهداف پژوهشی استفاده می‌شوند و نتایج در سطح گروهی گزارش خواهند شد و در اختیار تیم پژوهشی می‌ماند.</p>
-  <p id="participant-code-instruction">شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد یکتای خود را وارد کنید و موافقت خود را ثبت کنید.</p>
-  <div class="group-code-choice hidden" id="group-code-choice">
-    <div class="group-code-heading">
-      <span class="group-code-heading-mark" aria-hidden="true">ID</span>
-      <span>
-        <strong>کد خود را وارد کنید.</strong>
-        <small>یکی از دو روش زیر را انتخاب کنید.</small>
-      </span>
-    </div>
-    <div class="group-code-options" role="radiogroup" aria-label="روش ثبت کد شرکت‌کننده">
-      <label class="group-code-card is-selected" data-group-mode="own">
-        <input class="group-code-radio" type="radio" name="group-code-mode" value="own" checked>
-        <span class="group-code-card-body">
-          <span class="group-code-card-icon own" aria-hidden="true">کد</span>
-          <span class="group-code-card-copy">
-            <strong>کد خودم را وارد می‌کنم</strong>
-            <small>از کدی که قبلاً برای شما در نظر گرفته شده استفاده کنید.</small>
-          </span>
-          <span class="group-code-card-check" aria-hidden="true">✓</span>
-        </span>
-      </label>
-      <label class="group-code-card" data-group-mode="random">
-        <input class="group-code-radio" type="radio" name="group-code-mode" value="random">
-        <span class="group-code-card-body">
-          <span class="group-code-card-icon random" aria-hidden="true">R</span>
-          <span class="group-code-card-copy">
-            <strong>یک کد تصادفی برایم ساخته شود</strong>
-            <small>نیازی به واردکردن کد شخصی ندارید؛ سامانه یک کد مستقل می‌سازد.</small>
-          </span>
-          <span class="group-code-card-check" aria-hidden="true">✓</span>
-        </span>
-      </label>
-    </div>
-    <p class="group-code-footnote">در هر دو روش، پاسخ‌های شما با یک کد مستقل و محرمانه ثبت می‌شود.</p>
+  <p id="participant-code-instruction">شرکت در این فعالیت با انتخاب شماست. اگر توضیحات را خوانده‌اید و مایل به شرکت هستید، کد خود را وارد کنید و موافقت خود را ثبت کنید.</p>
+  <div class="field">
+    <label for="participant-first-name">نام</label>
+    <input id="participant-first-name" type="text" name="first_name" maxlength="100" autocomplete="given-name" dir="rtl" required>
+  </div>
+  <div class="field">
+    <label for="participant-last-name">نام خانوادگی</label>
+    <input id="participant-last-name" type="text" name="last_name" maxlength="100" autocomplete="family-name" dir="rtl" required>
   </div>
   <div class="field participant-code-field" id="participant-code-field">
     <label for="participant-code-input">کد شرکت‌کننده</label>
     <input id="participant-code-input" type="text" name="participant_code" maxlength="100" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="کد خود را وارد کنید" dir="ltr" required>
     <p class="hint hidden" id="participant-code-error" role="alert"></p>
   </div>
-  <p class="hint hidden" id="group-code-result" role="status" aria-live="polite"></p>
   <label class="consent-row" for="consent-checkbox">
     <input type="checkbox" id="consent-checkbox" name="consent">
     <span>توضیحات را خوانده‌ام و با شرکت در این پژوهش موافقم.</span>
@@ -1211,42 +1184,6 @@ const workflow = {
  currentModuleCode:null,
  timerActive:false
 };
-function selectedGroupCodeMode(){
- const selected=document.querySelector('input[name="group-code-mode"]:checked');
- return selected?selected.value:'own';
-}
-function updateGroupCodeMode(){
- if(!workflow.groupInvitationToken)return;
- const randomMode=selectedGroupCodeMode()==='random';
- const codeField=$('participant-code-field');
- const codeInput=$('participant-code-input');
- const result=$('group-code-result');
- document.querySelectorAll('.group-code-card').forEach(card=>{
-  const selected=card.dataset.groupMode===(randomMode?'random':'own');
-  card.classList.toggle('is-selected',selected);
-  if(selected)card.setAttribute('aria-current','true');
-  else card.removeAttribute('aria-current');
- });
- codeField.classList.toggle('hidden',randomMode);
- codeInput.required=!randomMode;
- codeInput.disabled=randomMode;
- if(randomMode){
-  result.classList.remove('hidden');
-  result.textContent='پس از تأیید، یک کد تصادفی مستقل برای شما ساخته می‌شود. کد اختصاصی‌تان در پایان آزمایش نمایش داده خواهد شد؛ آن را یادداشت کنید.';
- }else{
-  result.classList.add('hidden');
-  result.textContent='';
-  codeInput.disabled=false;
- }
-}
-if(workflow.groupInvitationToken){
- const choice=$('group-code-choice');
- if(choice)choice.classList.remove('hidden');
- const instruction=$('participant-code-instruction');
- if(instruction)instruction.remove();
- document.querySelectorAll('input[name="group-code-mode"]').forEach(input=>input.addEventListener('change',updateGroupCodeMode));
- updateGroupCodeMode();
-}
 let rows=[], participant={}, taskIndex=0, trialCount=0, stopped=false, responseHandler=null, csvUrl=null, sessionId=null, participantCode=null, currentTrialResolve=null, responseLock=false, activeKeyHandler=null, activeVisibilityHandler=null, trialWasHidden=false;
 function randomInt(maxExclusive){
  if(!Number.isInteger(maxExclusive)||maxExclusive<1||maxExclusive>0x100000000)throw new RangeError('Invalid random range');
@@ -1393,10 +1330,10 @@ function showInstructionPage(taskKey, pageIndex){
   note.textContent='این فقط یک مثال است؛ انتخاب‌های شما در صفحهٔ بعد شروع می‌شود.';
   example.append(question,note,choices);
   const explanation=taskKey==='KT'
-    ?'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر پس از مدت مشخص، یکی را انتخاب کنید.'
+    ?'در هر دور، باید بین دریافت مبلغ کمتر همین الان و یا مبلغ بیشتر پس از مدت مشخص، یکی را انتخاب کنید.'
     :'در هر دور، بین مبلغ کمتر در همین الان و مبلغ بیشتر در ازای واگذاری بخشی از عمرتان، یکی را انتخاب کنید. زمان واگذارشده از عمرتان حذف می‌شود و آن را تجربه نمی‌کنید.';
   const box=showInfo(title,[explanation,example,
-    'مبالغ فرضی‌اند و پرداخت واقعی ندارند. طوری انتخاب کنید که انگار تصمیمی واقعی است.']);
+    'در این بازی مبالغ فرضی‌اند و پرداختی به شما صورت نمی‌گیرد']);
   box.classList.add('dd-guide');
   const button=box.querySelector('.next-page');
   button.textContent='شروع بازی';
@@ -1475,6 +1412,11 @@ async function performApi(path,body,options={}){
   const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify(body),cache:'no-store',signal:controller?controller.signal:undefined});
   if(!res.ok){
+   if(res.headers.get('X-Barsan-Link-Inactive')==='1'){
+    // Preserve durable queues, but replace the entire UI after deactivation.
+    document.body.replaceChildren();window.location.reload();
+    const inactive=new Error('این لینک غیر فعال است.');inactive.status=res.status;throw inactive;
+   }
    let detail='';
    try{const errorBody=await res.json();detail=errorBody.detail||errorBody.message||'';}catch(_){}
    const error=new Error(detail?String(detail):'درخواست به سرور ناموفق بود ('+res.status+').');
@@ -2436,7 +2378,7 @@ function intermissionCopy(steps,index){
  const previous=steps.slice(0,index).filter(step=>GAME_MODULES.has(step.module_code)).length;
  const next=steps.slice(index+1).some(step=>GAME_MODULES.has(step.module_code));
  const paragraphs=[previous?`بازی ${gameOrdinal(previous)} تمام شد.`:'پیش از ادامه کمی استراحت کنید.'];
- paragraphs.push(next?`کمی استراحت کنید و هر وقت آماده بودید، به بازی ${gameOrdinal(previous+1)} بروید.`
+ paragraphs.push(next?(previous+1===2?'هر وقت آماده بودید، بازی دوم را شروع کنید.':`کمی استراحت کنید و هر وقت آماده بودید، به بازی ${gameOrdinal(previous+1)} بروید.`)
    :'کمی استراحت کنید و هر وقت آماده بودید، ادامه دهید.');
  return {paragraphs,button:next?`بازی ${gameOrdinal(previous+1)}`:'ادامه'};
 }
@@ -2632,9 +2574,12 @@ async function beginParticipantFlow(){
  const codeError=$('participant-code-error');
  const startButton=$('start');
  let enteredCode=codeInput.value.trim();
- const randomGroupCode=Boolean(workflow.groupInvitationToken&&selectedGroupCodeMode()==='random');
+ const profile={first_name:$('participant-first-name').value.trim(),last_name:$('participant-last-name').value.trim()};
  codeError.classList.add('hidden');
- if(!randomGroupCode&&!enteredCode){
+ for(const [field,id,label] of [['first_name','participant-first-name','نام'],['last_name','participant-last-name','نام خانوادگی']]){
+  if(!profile[field]){codeError.textContent=label+' را وارد کنید.';codeError.classList.remove('hidden');$(id).focus();return;}
+ }
+ if(!enteredCode){
   codeError.textContent='لطفاً کد شرکت‌کننده را وارد کنید.';
   codeError.classList.remove('hidden');codeInput.focus();return;
  }
@@ -2652,15 +2597,15 @@ async function beginParticipantFlow(){
  try{
   if(workflow.groupInvitationToken){
    const storageKey='barsan-group-claim:'+workflow.groupInvitationToken;
-   const mode=randomGroupCode?'random':'own';
+   const mode='own';
    let claim=null;
    try{
     const cached=JSON.parse(sessionStorage.getItem(storageKey)||'null');
     if(cached&&cached.mode===mode&&cached.invitation_token&&cached.participant_code&&
-       (randomGroupCode||cached.participant_code===enteredCode.toUpperCase()))claim=cached;
+       cached.participant_code===enteredCode.toUpperCase())claim=cached;
    }catch(_){}
    if(!claim){
-    const requestStorageKey=storageKey+':request';
+    const requestStorageKey=storageKey+':request:'+enteredCode.toUpperCase();
     let claimRequestId=null;
     try{
      claimRequestId=localStorage.getItem(requestStorageKey);
@@ -2671,8 +2616,8 @@ async function beginParticipantFlow(){
     }catch(_){claimRequestId=null;}
     const claimPayload={
      group_token:workflow.groupInvitationToken,
-     participant_code:randomGroupCode?null:enteredCode,
-     assign_random:randomGroupCode,
+     participant_code:enteredCode,
+     ...profile,
      ...(claimRequestId?{claim_request_id:claimRequestId}:{})
     };
     // Retry only with a stable browser-persisted request key; the server then replays the
@@ -2701,6 +2646,8 @@ async function beginParticipantFlow(){
    };
    await apiWithRetry('/api/experiment/consent',{
     ...participantIdentity,
+    ...profile,
+    ...(workflow.groupInvitationToken?{group_token:workflow.groupInvitationToken}:{}),
     accepted:true
    },{attempts:5,baseDelayMs:600,maxDelayMs:8000,timeoutMs:12000});
    const identity=await apiWithRetry('/api/experiment/identify',participantIdentity,{
@@ -3388,7 +3335,22 @@ function utRenderWelcome() {
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"شروع کنیم",utSelectOpponent,"");
+}
+async function utSelectOpponent() {
+ const state=ultimatumState;
+ const s=utMakeScreen({header:false});
+ const message=utAddText(s.body,"p","ut-result-main","در حال تعیین بازیکن مقابل از بین همکاران");
+ s.body.setAttribute('aria-live','polite');
+ const delay=3000+randomInt(3001);
+ await new Promise(resolve=>setTimeout(resolve,delay));
+ if(ultimatumState!==state||!message.isConnected)return;
+ message.textContent="بازیکن مقابل تعیین شد";
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",utRenderPracticeIntro,"");
+}
+function utWaitingMessage(condition) {
+ return condition==='agent'?"منتظر دریافت پاسخ هوش مصنوعی باشید":"منتظر دریافت پاسخ همکارتان باشید";
 }
 function utRenderPracticeIntro() {
  const s=utMakeScreen({header:false,scrollable:true});
@@ -3468,7 +3430,7 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
  ultimatumState.proposalSubmitting=true;
  try{
   const condition=utCondition(blockCode),delay=utWaitMs(condition);
-  utRenderWaiting(condition,'لطفاً منتظر پاسخ بازیکن مقابل باشید…');
+  utRenderWaiting(condition,utWaitingMessage(condition));
   ultimatumState.currentEventTimestamps.waiting_started_at=nowISO();
   const payload={
    invitation_token:workflow.invitationToken,participant_code:workflow.participantCode,
@@ -3546,7 +3508,7 @@ async function utStartPracticeResponder() {
 async function utWaitThenResponder(isPractice,blockCode,blockOrder,trial,round) {
  const condition=utCondition(blockCode);
  const delay=utWaitMs(condition);
- utRenderWaiting(condition,"لطفاً منتظر پیشنهاد بازیکن مقابل باشید…");
+ utRenderWaiting(condition,utWaitingMessage(condition));
  ultimatumState.currentEventTimestamps={waiting_started_at:nowISO()};
  const waitStart=performance.now();
  await new Promise(function(resolve){setTimeout(resolve,delay);});
@@ -3775,7 +3737,7 @@ async function finishUltimatumImpl() {
   }else if(hasNext){
    closingMessage="بازی این مرحله به پایان رسید. برای ادامه، دکمهٔ ادامه را بزنید.";
   }else{
-   closingMessage="بارسانی عزیز، بازی و برنامه ‌پژوهشی به پایان رسید. امتیاز شما از طریق کد یکتای شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل خواهد شد.";
+   closingMessage="بارسانی عزیز، بازی و برنامه ‌پژوهشی به پایان رسید. امتیاز شما از طریق کد شما به حساب کاربری‌تان در باشگاه رانندگان بارسان منتقل خواهد شد.";
   }
   utAddText(end.body,"p","ut-copy",closingMessage);
   if(hasNext){

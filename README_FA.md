@@ -1,5 +1,9 @@
 # BarSan Experiment — سامانهٔ آزمایش آنلاین
 
+## Two-Production registration update — 2026-11-05
+
+Both Production deployments receive required first/last name and code registration, direct manual-code group entry, a minimal inactive-link page and the exact requested Persian copy/opponent-intro sequence. Staging is retired; no load/capacity tests in this phase. Historical data, existing individual invitations, research algorithms and durable recovery remain. Old Production requires a no-downtime parallel-worker handover. See [scope, exact copy, compatibility and verification](docs/PARTICIPANT_REGISTRATION_PRODUCTION_2026_11_05.md). Earlier deployment notes below are history.
+
 ## Clean Ubuntu Production deployment and bounded backups — 2026-11-05
 
 Production is served at https://experiment.barsun4818.ir/dce/ using Nginx, native ASGI and local PostgreSQL. The user selected a clean database; old hosting remains independent and untouched. Five-minute encrypted backups use a hard-capped 4 GiB local volume with an 8 GiB root-space reserve. Actual restore, isolated synthetic DD/rest/Ultimatum journeys, idempotency and cumulative exports were verified. Independent off-server recovery and external alert delivery remain pending. See [backup/recovery](ops/ubuntu-production/backup/BACKUP.md) and [deployment/rollback](ops/ubuntu-production/deploy/DEPLOYMENT.md). Future application updates are gated by successful main CI and a read-only server pull; active real runs defer deployment. Preparation notes below are historical checkpoints.

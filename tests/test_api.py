@@ -219,7 +219,7 @@ def _create_assignment(client, monkeypatch, code="BS-0001", condition="A"):
     token = parse_qs(urlparse(payload["assignments"][0]["invitation_url"]).query)["invite"][0]
     consent = client.post(
         "/api/experiment/consent",
-        json={"invitation_token": token, "participant_code": code, "accepted": True},
+        json={"first_name":"Synthetic", "last_name":"Participant", "invitation_token": token, "participant_code": code, "accepted": True},
     )
     assert consent.status_code == 200, consent.text
     return token
@@ -240,12 +240,12 @@ def test_identity_requires_persisted_consent(client, monkeypatch):
     not_yet_consented = client.post("/api/experiment/identify", json=identity)
     assert not_yet_consented.status_code == 403
 
-    rejected = client.post("/api/experiment/consent", json={**identity, "accepted": False})
+    rejected = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": False})
     assert rejected.status_code == 403
     still_not_consented = client.post("/api/experiment/identify", json=identity)
     assert still_not_consented.status_code == 403
 
-    accepted = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    accepted = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert accepted.status_code == 200, accepted.text
     identified = client.post("/api/experiment/identify", json=identity)
     assert identified.status_code == 200, identified.text

@@ -21,7 +21,7 @@ def check_concurrent_starts(main, client, admin_token):
         row = response.json()["assignments"][0]
         identity = {"invitation_token": parse_qs(urlsplit(row["invitation_url"]).query)["invite"][0],
                     "participant_code": code}
-        assert client.post("/api/experiment/consent", json={**identity, "accepted": True}).status_code == 200
+        assert client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True}).status_code == 200
         return {**identity, "stage_code": main._canonical_workflow_stage(module), "step_id": step}
 
     def race(payloads):

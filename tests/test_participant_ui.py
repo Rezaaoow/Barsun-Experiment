@@ -40,7 +40,9 @@ def test_research_explanation_is_merged_and_group_instruction_does_not_return():
     assert 'و در اختیار تیم پژوهشی می‌ماند.' in ethics
     assert 'اطلاعات فردی نباید' not in ethics
     assert 'این لینک برای یک گروه است.' not in HTML
-    assert '<strong>کد خود را وارد کنید.</strong>' in ethics
+    assert 'id="participant-first-name"' in ethics
+    assert 'id="participant-last-name"' in ethics
+    assert 'group-code-choice' not in ethics
 
 
 def test_dd_and_life_trade_instruction_title_is_participant_facing():

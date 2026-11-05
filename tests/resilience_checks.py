@@ -15,7 +15,7 @@ def setup_module_run(client, stage, condition="A"):
     assert response.status_code == 200
     invitation = response.json()["invitation_url"]
     identity = {"invitation_token": parse_qs(urlparse(invitation).query)["invite"][0], "participant_code": "TEST"}
-    assert client.post("/api/experiment/consent", json={**identity, "accepted": True}).status_code == 200
+    assert client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True}).status_code == 200
     step_id = "module-test-" + stage
     started = client.post("/api/experiment/stages/start", json={**identity, "stage_code": stage,
                           "step_id": step_id, "start_request_id": str(uuid.uuid4())})

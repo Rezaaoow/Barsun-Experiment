@@ -17,14 +17,14 @@ def check_admin_maintenance(client, *, disposable_database=True):
         return post('admin/group-links',{'scope':scope,'label':'Synthetic admin maintenance check','steps':[{'step_id':'admin-fix-dd','module_code':'dd_standalone'}]})
     def claim(g):
         token=parse_qs(urlparse(g['invitation_url']).query)['group'][0]
-        request={'group_token':token,'assign_random':True,'claim_request_id':str(uuid.uuid4())}
+        request={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", 'group_token':token,'assign_random':False,'claim_request_id':str(uuid.uuid4())}
         return post('experiment/group/claim',request),request
     def identity(row):return {k:row[k] for k in ['invitation_token','participant_code']}
     def identify(row,expected=200):return post('experiment/identify',identity(row),expected)
     first=group();a,claim_a=claim(first);b,claim_b=claim(first)
-    for row in [a,b]:post('experiment/consent',{**identity(row),'accepted':True})
+    for row in [a,b]:post('experiment/consent',{"first_name":"Synthetic", "last_name":"Participant", **identity(row),'accepted':True})
     info_a=identify(a);info_b=identify(b);a_id=info_a['assignment_id'];b_id=info_b['assignment_id']
-    post('experiment/consent',{**identity(a),'accepted':True})
+    post('experiment/consent',{"first_name":"Synthetic", "last_name":"Participant", **identity(a),'accepted':True})
     started=post('experiment/stages/start',{**identity(a),'stage_code':'dd_lifetrade','step_id':'admin-fix-dd','start_request_id':str(uuid.uuid4())})
     run=started['run_id']
     post('experiment/time',{**identity(a),'stage_code':'dd_lifetrade','step_id':'admin-fix-dd','event':'start','event_id':str(uuid.uuid4())})

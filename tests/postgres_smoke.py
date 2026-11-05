@@ -80,7 +80,7 @@ def main_test():
         }
         consent = client.post(
             "/api/experiment/consent",
-            json={**full_test_identity, "accepted": True},
+            json={"first_name":"Synthetic", "last_name":"Participant", **full_test_identity, "accepted": True},
         )
         assert consent.status_code == 200, consent.text
         identified = client.post("/api/experiment/identify", json=full_test_identity)
@@ -211,7 +211,7 @@ def main_test():
         }
         ultimatum_consent = client.post(
             "/api/experiment/consent",
-            json={**ultimatum_identity, "accepted": True},
+            json={"first_name":"Synthetic", "last_name":"Participant", **ultimatum_identity, "accepted": True},
         )
         assert ultimatum_consent.status_code == 200, ultimatum_consent.text
         ultimatum_start = client.post(

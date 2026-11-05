@@ -14,7 +14,7 @@ def create_assignment(client, steps, code=None):
     assert response.status_code == 200, response.text
     link = response.json()['assignments'][0]
     identity = dict(invitation_token=parse_qs(urlparse(link['invitation_url']).query)['invite'][0], participant_code=code)
-    response = client.post('/api/experiment/consent', json={**identity, 'accepted': True})
+    response = client.post('/api/experiment/consent', json={"first_name":"Synthetic", "last_name":"Participant", **identity, 'accepted': True})
     assert response.status_code == 200, response.text
     return identity
 

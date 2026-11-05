@@ -9,7 +9,7 @@ DD_FIELDS = COMMON_FIELDS + [
     "left_stimulus", "right_stimulus", "user_choice_type", "user_pressed_key", "response_method",
     "reaction_time_ms", "trial_started_iso", "response_iso", "server_received_at", "visibility_hidden",
     "stimulus_parameters_json", "adaptive_path_json", "record_json", "raw_payload_json",
-    "workflow_module_code", "workflow_step_id",
+    "workflow_module_code", "workflow_step_id", "first_name", "last_name",
 ]
 UT_FIELDS = COMMON_FIELDS + [
     "round_id", "phase", "block_code", "block_order", "trial_in_block", "trial_sequence", "role",
@@ -17,7 +17,7 @@ UT_FIELDS = COMMON_FIELDS + [
     "participant_decision", "opponent_decision", "accepted", "points_earned", "potential_points_lost",
     "reaction_time_ms", "planned_wait_duration_ms", "wait_duration_ms", "decision_screen_shown_at",
     "responded_at", "server_received_at", "completed_at", "events_json", "model_json", "device_json",
-    "record_json", "raw_payload_json", "final_score", "cumulative_score", "run_total_score",
+    "record_json", "raw_payload_json", "final_score", "cumulative_score", "run_total_score", "first_name", "last_name",
 ]
 
 
@@ -29,7 +29,7 @@ def dd_record(context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any
     """Group every analytical concept once; raw payload remains separately available."""
     return {
         "schema_version": SCHEMA_VERSION,
-        "identity": select(context, ("study_code", "participant_code", "condition_code", "run_id", "client_event_id")),
+        "identity": select(context, ("study_code", "participant_code", "first_name", "last_name", "condition_code", "run_id", "client_event_id")),
         "run": select(context, ("run_status", "attempt_number", "instrument_version", "run_started_at", "run_completed_at")),
         "design": {**select(payload, ("task", "task_order", "block_name", "magnitude", "trial_in_block")),
                    **select(context, ("workflow_module_code", "workflow_step_id"))},
@@ -48,7 +48,7 @@ def dd_record(context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any
 def ultimatum_record(context: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "identity": select(context, ("study_code", "participant_code", "condition_code", "run_id", "round_id")),
+        "identity": select(context, ("study_code", "participant_code", "first_name", "last_name", "condition_code", "run_id", "round_id")),
         "run": select(context, ("run_status", "attempt_number", "instrument_version", "run_started_at", "run_completed_at")),
         "design": select(context, ("phase", "block_code", "block_order", "trial_in_block", "trial_sequence",
                                    "role", "opponent_condition", "opponent_actual_type", "round_status")),

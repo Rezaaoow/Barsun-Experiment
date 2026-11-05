@@ -47,7 +47,7 @@ def create_workflow_assignment(client, steps, code="WORKFLOW-001"):
     assert response.status_code == 200, response.text
     link = response.json()["assignments"][0]
     identity = {"invitation_token": token_from_link(link), "participant_code": code}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
     return link, identity
 
@@ -198,7 +198,7 @@ def test_full_test_link_is_one_snapshot_of_the_supplied_workflow(client):
     assert len(data["assignments"]) == 1
     link = data["assignments"][0]
     identity = {"invitation_token": token_from_link(link), "participant_code": "TEST"}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
     identified = client.post("/api/experiment/identify", json=identity)
     assert identified.status_code == 200, identified.text
@@ -278,7 +278,7 @@ def test_preexisting_default_links_are_compatible_with_active_time_tracking(clie
     assert response.status_code == 200, response.text
     link = response.json()["assignments"][0]
     identity = {"invitation_token": token_from_link(link), "participant_code": "LEGACY-TIME-001"}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
 
     # Old assignments have no stored workflow snapshot, but the default step ids
