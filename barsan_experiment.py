@@ -22,10 +22,11 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from request_metrics import RequestMetricsMiddleware, observed_connection
+from request_metrics import RequestMetricsMiddleware, observed_connection, allocation_timing
 from bulk_exports import BulkExportMiddleware
 from client_timing import TimingCheckpoint, initialize as initialize_client_timing, save as save_client_timing
 from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
+import randomization
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.getenv("DATABASE_URL", "").replace("postgres://", "postgresql://", 1)
@@ -205,6 +206,8 @@ def _invitation_base_url(request: Request, api_route: str) -> str:
 
 
 if DATABASE_URL:
+    from psycopg import OperationalError
+    from psycopg.errors import QueryCanceled, LockNotAvailable
     from psycopg.rows import dict_row
     from psycopg.types.json import Jsonb
     from psycopg_pool import ConnectionPool, PoolTimeout, TooManyRequests
@@ -217,10 +220,13 @@ if DATABASE_URL:
             timeout=DB_POOL_TIMEOUT,
             max_waiting=DB_POOL_MAX_WAITING,
             num_workers=1,
+            check=ConnectionPool.check_connection,
+            max_lifetime=1800,
             kwargs={
                 "row_factory": dict_row,
                 "connect_timeout": max(1, int(os.getenv("DB_CONNECT_TIMEOUT", "5"))),
                 "application_name": "barsan-experiment-api",
+                "options": "-c statement_timeout=15000 -c idle_in_transaction_session_timeout=30000",
             },
             open=True,
         )
@@ -264,7 +270,7 @@ if DATABASE_URL:
         try:
             with observed_connection(DB_POOL.connection(timeout=DB_POOL_TIMEOUT)) as connection:
                 yield connection
-        except (PoolTimeout, TooManyRequests) as exc:
+        except (PoolTimeout, TooManyRequests, OperationalError, QueryCanceled, LockNotAvailable) as exc:
             raise HTTPException(
                 status_code=503,
                 detail="Database is temporarily busy; please retry.",
@@ -273,6 +279,8 @@ if DATABASE_URL:
 
     def init_db() -> None:
         with conn() as connection:
+            # Multiple ASGI workers may import together; serialize additive DDL.
+            connection.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("barsan-schema-init-v3",))
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS studies ("
                 "study_code TEXT PRIMARY KEY, study_name TEXT NOT NULL, created_at TEXT NOT NULL)"
@@ -735,6 +743,7 @@ def _seed_registry(connection: Any) -> None:
             if name not in columns:
                 connection.execute("ALTER TABLE participants ADD COLUMN " + name + " TEXT NOT NULL DEFAULT ''")
     initialize_client_timing(connection)
+    randomization.initialize(connection, bool(DATABASE_URL))
     instrument_rows = list({code: name for code, _version, name in STAGE_TO_INSTRUMENT.values()}.items())
     for instrument_code, instrument_name in instrument_rows:
         if DATABASE_URL:
@@ -2981,15 +2990,27 @@ def start_experiment_stage(data: StageStartIn):
         run_id = str(uuid.uuid4())
         stage_draft: dict[str, Any] = {}
         workflow_module_code = workflow_step["module_code"] if workflow_step else data.stage_code
+        # Occurrence, rather than attempt/request/link token, owns the stable plan.
+        occurrence = 1
+        if data.step_id:
+            canonical = _canonical_workflow_stage(workflow_module_code)
+            occurrence = sum(_canonical_workflow_stage(step["module_code"]) == canonical
+                             for step in workflow_steps[:workflow_step_index + 1])
         if workflow_module_code == "dd_standalone":
             stage_draft["dd_design"] = DD_WORKFLOW_DESIGNS[workflow_module_code]
+            stage_draft["dd_positions"] = randomization.allocate_dd(
+                connection, bool(DATABASE_URL), assignment, occurrence, timestamp)
         if data.stage_code == "ultimatum":
             stage_draft["workflow_module_code"] = workflow_module_code
-            stage_draft["ultimatum_variant"] = ULTIMATUM_WORKFLOW_VARIANTS.get(workflow_module_code)
-            # Randomize block order server-side and persist it with this attempt.
-            stage_draft["block_order"] = random.sample(
-                list(ULTIMATUM_BLOCKS.keys()), k=ULTIMATUM_MAIN_BLOCK_COUNT
-            )
+            variant = ULTIMATUM_WORKFLOW_VARIANTS.get(workflow_module_code)
+            stage_draft["ultimatum_variant"] = variant
+            stratum = variant or ("Frame" if str(assignment["condition_code"]).upper() in {"A","FRAME","FRAMING"} else "Control")
+            legacy = _json_value(existing.get("draft_payload")).get("block_order") if existing else None
+            with allocation_timing():
+                plan = randomization.allocate_ultimatum(
+                    connection, bool(DATABASE_URL), assignment, occurrence, stratum, timestamp, legacy)
+            stage_draft["block_order"] = plan["block_order"]
+            stage_draft["randomization"] = plan
         metadata = {
             "stage_code": data.stage_code,
             "workflow_module_code": workflow_module_code,
@@ -2997,6 +3018,8 @@ def start_experiment_stage(data: StageStartIn):
             "condition_code": assignment["condition_code"],
             "attempt_number": attempt_number,
             "block_order": stage_draft.get("block_order"),
+            "randomization": stage_draft.get("randomization"),
+            "dd_positions": stage_draft.get("dd_positions"),
             "dd_design": stage_draft.get("dd_design"),
             "workflow_step_id": data.step_id,
         }
@@ -5276,7 +5299,7 @@ def admin_links_page(request: Request):
     try:
         with open(path, encoding="utf-8") as file:
             return HTMLResponse(file.read().replace("__BARSAN_FONT_URL__",
-                request.scope.get("root_path", "").rstrip("/") + "/assets/vazirmatn-v33.003.woff2"))
+                request.scope.get("root_path", "").rstrip("/") + "/assets/vazirmatn-v33.003.woff2"), headers={"Cache-Control":"no-store"})
     except OSError as exc:
         raise HTTPException(503, "Admin link page is not installed on this server.") from exc
 

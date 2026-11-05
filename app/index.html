@@ -1829,7 +1829,7 @@ function waitForChoice(start){
   window.addEventListener('keydown',handler);
  });
 }
-async function runTask(taskKey, taskNum, design=null){const task=DATA[taskKey];const taskTotal=design?design.task_keys.length:2;setStatus(`بخش ${taskNum} از ${taskTotal} · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(design&&design.magnitude_keys?task.blocks.filter(block=>design.magnitude_keys.includes(block.magnitude)):task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ${taskTotal} · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={workflow_module_code:workflow.currentModuleCode||"dd_lifetrade",workflow_step_id:workflow.currentStepId,participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
+async function runTask(taskKey, taskNum, design=null){const task=DATA[taskKey];const taskTotal=design?design.task_keys.length:2;setStatus(`بخش ${taskNum} از ${taskTotal} · راهنما`);for(let page=0;page<INSTRUCTION_PAGE_COUNT;page++){if(stopped)return;showInstructionPage(taskKey,page);await spaceToContinue()}await wait(1500);if(stopped)return;const blocks=shuffle(design&&design.magnitude_keys?task.blocks.filter(block=>design.magnitude_keys.includes(block.magnitude)):task.blocks);for(const block of blocks){if(stopped)return;let currentRow=15,stepSize=8;setStatus(`بخش ${taskNum} از ${taskTotal} · دور ${block.block_name==='Low'?'کم':block.block_name==='Mid'?'متوسط':'زیاد'}`);for(let trial=1;trial<=5;trial++){if(stopped)return;showFixation();await wait(1000);if(stopped)return;const requestedRow=currentRow;const boundedRow=Math.max(0,Math.min(30,requestedRow));const boundaryHit=requestedRow!==boundedRow;const trialData=task[block.magnitude][boundedRow];if(!trialData){throw new Error(`Missing condition row ${boundedRow} for ${taskKey}/${block.magnitude}`)}const nowLeft=Array.isArray(design&&design.now_left)?design.now_left[trial-1]:randomInt(2)===1;makeTrialScreen(taskKey,block.magnitude,trialData,nowLeft);const started=performance.now(),startISO=nowISO();const ans=await waitForChoice(started);if(stopped||ans.key==='escape')return;let keySide;if(ans.key==='escape')return;if(['arrowleft','l','tap-left'].includes(ans.key))keySide='left';else keySide='right';const nowSide=nowLeft?'left':'right';const choiceType=keySide===nowSide?'Now':'Later';const leftStimulus=optionLabel(taskKey,block.magnitude,trialData,nowLeft),rightStimulus=optionLabel(taskKey,block.magnitude,trialData,!nowLeft);const rawNextRow=choiceType==='Now'?currentRow-stepSize:currentRow+stepSize;const boundedNextRow=Math.max(0,Math.min(30,rawNextRow));const nextBoundaryHit=rawNextRow!==boundedNextRow;const row={workflow_module_code:workflow.currentModuleCode||"dd_lifetrade",workflow_step_id:workflow.currentStepId,participant_code:participantCode,session_id:sessionId,participant:participantCode,session:sessionId,task:taskKey,task_order:taskNum,block_name:block.block_name,magnitude:block.magnitude,trial_in_block:trial,index:trialData.index,requested_row:requestedRow,displayed_row:boundedRow+1,delay:trialData.delay,choice:trialData.choice,immED50:trialData.immED50,delED50:trialData.delED50,immK:trialData.immK,delK:trialData.delK,left_image:leftStimulus,right_image:rightStimulus,left_stimulus:leftStimulus,right_stimulus:rightStimulus,user_pressed_key:ans.key,user_choice_type:choiceType,response_method:ans.key.startsWith('tap-')?'touch':'keyboard',reaction_time_ms:Number(ans.rt.toFixed(2)),trial_started_iso:startISO,response_iso:nowISO(),boundary_hit:boundaryHit||nextBoundaryHit,requested_next_row:rawNextRow,bounded_next_row:boundedNextRow,client_event_id:crypto.randomUUID(),visibility_hidden:ans.visibility_hidden};rows.push(row);trialCount++;await saveTrial(row);currentRow=boundedNextRow;if(trial<5){stepSize=Math.max(1,Math.floor(stepSize/2))}await wait(1500)}}}
 async function startLegacyExperiment(){
  const codeInput=$('participant-code-input');
  const codeError=$('participant-code-error');
@@ -2727,7 +2727,9 @@ async function startAssignedDDStage(){
  try{
   show();
 
-  const design=started.draft_payload&&started.draft_payload.dd_design;
+  const savedDraft=started.draft_payload||{};
+  const design=savedDraft.dd_design?{...savedDraft.dd_design,
+   ...(savedDraft.dd_positions?{now_left:savedDraft.dd_positions.now_left}:{})}:null;
    const taskOrder=shuffle(design?design.task_keys:['LT','KT']);
   for(let i=0;i<taskOrder.length;i++){
    if(stopped)break;
@@ -3087,6 +3089,16 @@ function utShowError(message,retry) {
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"تلاش دوباره",retry,"");
 }
+function utShowSyncRetry(error,retry) {
+ if(error.localStorageFailure||!isRetryableApiError(error)){
+  utShowError(error.localStorageFailure?error.message:'ثبت این دور موفق نشد؛ پاسخ قبلی را دوباره ارسال کنید.',retry);return;
+ }
+ const s=utMakeScreen({header:false,title:"در حال برقراری ارتباط"});
+ utAddText(s.body,"p","ut-copy","پاسخ شما روی این دستگاه محفوظ است. لطفاً صفحه را باز نگه دارید؛ ارسال دوباره به‌صورت خودکار انجام می‌شود.");
+ const actions=utNode("div","ut-actions");s.body.appendChild(actions);
+ utButton(actions,"تلاش دوباره",retry,"");
+ scheduleUtOutboxRetry();
+}
 function utOutboxPrefix(){return 'barsan_ultimatum_pending_'+encodeURIComponent(workflow.participantCode||'')+'_';}
 function utOutboxKey(runId){return BarsanStore.scope('ut',workflow.participantCode,runId);}
 async function migrateUtQueues(){
@@ -3204,22 +3216,22 @@ async function recoverOrphanedUltimatumOutbox(){
   const all=(await BarsanStore.list()).filter(entry=>{
    const parts=JSON.parse(entry.scope);return parts[0]==='ut'&&parts[1]===workflow.participantCode;
   });
-  let recovered=0;
+  let recovered=0,deferred=false;
   for(const entry of all.filter(entry=>entry.value.kind==='resolve')){
    if(await recoveryIsHeld(entry))continue;
    const runId=JSON.parse(entry.scope)[2],item={...entry.value,__entry:entry};
    try{
    if(ultimatumState?.runId===runId&&!ultimatumState.results.some(row=>row.round_id===item.payload.round_id)){
-    if(ultimatumState.proposalSubmitting)continue;
+    if(ultimatumState.proposalSubmitting||ultimatumState.resolveInFlight){deferred=true;continue;}
     const meta=item.meta||{};
-    await utPostResolve(item.payload,Boolean(meta.isPractice),meta.blockCode,meta.blockOrder,meta.trial);
+    await utPostResolve(item.payload,Boolean(meta.isPractice),meta.blockCode,meta.blockOrder,meta.trial,true);
    }else await utSendOutboxItem(runId,item);
    recovered++;
    }catch(error){if(ultimatumState?.runId===runId)throw error;await retainInaccessibleRecovery(entry,error);}
   }
   // Old decision rows may have been saved during the prescribed waiting period.
   // Their missing end timestamp stays unknown; recovery must not invent one.
-  resetUtOutboxRetry();
+  if(deferred)scheduleUtOutboxRetry();else resetUtOutboxRetry();
   flushUtEvents().catch(error=>{
    console.warn('Auxiliary recovery deferred',error);
    if(isRetryableApiError(error))scheduleUtOutboxRetry();
@@ -3430,6 +3442,7 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
 async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial,responseTime,respondedAt) {
  if(ultimatumState.proposalSubmitting)return;
  ultimatumState.proposalSubmitting=true;
+ let savedPayload=null;
  try{
   const condition=utCondition(blockCode),delay=utWaitMs(condition);
   utRenderWaiting(condition,utWaitingMessage(condition));
@@ -3442,6 +3455,7 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
    wait_duration_ms:null,planned_wait_duration_ms:delay,prepare_next:true,
    client_metadata:utMetadata(),client_event_timestamps:{...ultimatumState.currentEventTimestamps}
   };
+  savedPayload=payload;
   const item=await utQueueOutboxItem(payload.run_id,{kind:'resolve',item_id:payload.round_id,payload,
    meta:{isPractice,blockCode,blockOrder,trial}});
   const started=performance.now();
@@ -3456,9 +3470,9 @@ async function utStateSubmitProposal(offer,isPractice,blockCode,blockOrder,trial
   utApplyResolvedResult(isPractice,blockCode,blockOrder,trial,resolved.result);
  }catch(error){
   console.error(error);
-  utShowError(error.localStorageFailure?error.message:'پاسخ شما روی این دستگاه محفوظ است؛ برای دریافت نتیجه دوباره تلاش کنید.',()=>{
-   recoverOrphanedUltimatumOutbox().catch(()=>utShowError('ارتباط برقرار نشد؛ لطفاً صفحه را باز نگه دارید.',()=>recoverOrphanedUltimatumOutbox()));
-  });
+  utShowSyncRetry(error,()=>savedPayload
+   ?utPostResolve(savedPayload,isPractice,blockCode,blockOrder,trial)
+   :recoverOrphanedUltimatumOutbox());
  }finally{ultimatumState.proposalSubmitting=false;}
 }
 function utApplyResolvedResult(isPractice,blockCode,blockOrder,trial,result){
@@ -3475,7 +3489,7 @@ function utApplyResolvedResult(isPractice,blockCode,blockOrder,trial,result){
  }
  utRenderResult(isPractice,blockCode,blockOrder,trial,result);
 }
-async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial){
+async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial,propagateFailure=false){
  if(ultimatumState.resolveInFlight)return;
  ultimatumState.resolveInFlight=true;
  try{
@@ -3485,7 +3499,8 @@ async function utPostResolve(payload,isPractice,blockCode,blockOrder,trial){
   utApplyResolvedResult(isPractice,blockCode,blockOrder,trial,result);
  }catch(error){
   console.error(error);
-  utShowError('ثبت این دور موفق نشد؛ پاسخ قبلی را دوباره ارسال کنید.',()=>utPostResolve(payload,isPractice,blockCode,blockOrder,trial));
+  utShowSyncRetry(error,()=>utPostResolve(payload,isPractice,blockCode,blockOrder,trial));
+  if(propagateFailure)throw error;
  }finally{ultimatumState.resolveInFlight=false;}
 }
 function utRenderWaiting(condition,message) {

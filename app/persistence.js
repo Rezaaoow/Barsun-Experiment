@@ -21,16 +21,24 @@
     if(settled){request.result.close();return;}
     const db=request.result;
     db.onversionchange=()=>{db.close();databasePromise=null;};
+    db.onclose=()=>{databasePromise=null;};
     resolve(db);
    };
   }).catch(error=>{databasePromise=null;throw error;});
   return databasePromise;
  }
- async function transaction(mode,work){
+ async function transaction(mode,work,reopened=false){
   const db=await open();
+  let tx;
+  try{tx=db.transaction('entries',mode);}
+  catch(error){
+   // No transaction started: safely reopen a stale handle once, preserving entries.
+   if(error.name==='InvalidStateError'&&!reopened){
+    db.close();databasePromise=null;return transaction(mode,work,true);
+   }
+   throw storageError();
+  }
   return new Promise((resolve,reject)=>{
-   let tx;
-   try{tx=db.transaction('entries',mode);}catch(error){reject(storageError());return;}
    let result;
    const timer=setTimeout(()=>{try{tx.abort();}catch(error){}reject(storageError());},15000);
    tx.oncomplete=()=>{clearTimeout(timer);resolve(result);};

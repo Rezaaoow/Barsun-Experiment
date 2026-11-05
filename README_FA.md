@@ -1,3 +1,7 @@
+## Final acceptance — 2026-11-05
+
+New Production only: scientific 24-order atomic counterbalancing, reliability review and explicitly authorized 600-participant synthetic load/recovery test. Existing finalized group links are preserved without modification; old hosting is frozen. Source/runtime rollback baseline is retained independently of normal release cleanup. See docs/FINAL_ACCEPTANCE_2026_11_05.md for design, constraints and measured results.
+
 ## Latest offer spread decision — 2026-11-05
 
 The offer model's configured normal SD is restored to **4.0** by the latest user instruction. New Production only, with no test runs. The latest UI and all stored outcomes are preserved.
