@@ -1,0 +1,9 @@
+# New Production runtime scope
+
+Only the new Ubuntu server 37.152.183.1 and https://experiment.barsun4818.ir/dce/ are in scope. No app Staging resources. Leave the old cPanel host fully operational and untouched, including its data, credentials, configuration, services, DNS and links. Do not run legacy cPanel scripts.
+
+Inspect actual state before mutations. Preserve distinct operations/repository/application identities and socket-only PostgreSQL peer authentication. Do not copy old environment files or make the app code, wheel cache or configuration writable by the application identity. Use frozen releases and a separate mutable lock path.
+
+Read RUNTIME.md. Retain strict HTTPS, official PyPI provenance, compatible wheels and complete-file SHA-256 verification. Changing dependencies requires a new reviewed manifest/lock and validation; do not silently resolve new versions during deployment or weaken verification to work around downloads. Validate source requirements and extras as well as pip check. The versioned wheel lock targets Ubuntu 24.04, CPython 3.12, amd64; do not reuse it for a different platform.
+
+User confirmed independent provider console/rescue access before the verified reboot; that is confirmation of access, not a full rescue drill. New infrastructure reboot succeeded into kernel 6.8.0-147 with services/configuration/access preserved. Same-server protected preparation backups are not independent recovery backups. Application deployment, data import, off-server recovery, monitoring and automated release gates remain incomplete. No participant data or credentials belong in Git/logs. The verification script makes read-only database queries and must not initialize the application; use --expect-empty only before app schema/data installation. Intentional maintenance HTTP 503 does not establish application readiness.

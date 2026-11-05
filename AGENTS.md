@@ -1,5 +1,7 @@
 # Current Ubuntu Production migration — 2026-11-05
 
+Runtime preparation completed on the NEW server: Python 3.12, hash-locked dependencies and socket-only PostgreSQL 16, separate application identity and an empty Production database. The user confirmed independent provider console/rescue access; the controlled reboot into kernel 6.8.0-147 passed fresh SSH, service, configuration and HTTPS checks. This is not a full restore drill. See ops/ubuntu-production/runtime/RUNTIME.md. Application/data deployment, independent backups/restore, monitoring and release automation remain pending; keep the new /dce/ in maintenance. Old hosting remains untouched.
+
 The current user requires Production only on the NEW server 37.152.183.1, canonical https://experiment.barsun4818.ir/dce/. No application Staging deployment/database is authorized on this server. All application/load/stress/capacity tests target the NEW Production deployment using isolated synthetic studies and preserving real data.
 
 The OLD hosting deployment must remain fully operational and untouched throughout migration. Do not deploy, overwrite configuration, restart/disable services, alter DNS/redirects, close links, change data or run tests/load against that host. Do not execute legacy cPanel release scripts for this migration. No old-host maintenance window, cutover, retirement, shared writable database or writeback is authorized. A future needed data snapshot may be read-only and must preserve availability; snapshots do not continuously synchronize independent databases.
