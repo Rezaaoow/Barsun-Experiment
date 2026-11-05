@@ -1,5 +1,6 @@
 """Local status only; does not claim external alerting or disaster recovery."""
 from pathlib import Path
+from datetime import datetime
 import json,subprocess,time,urllib.request,shutil,os
 checks={}
 try:
@@ -8,7 +9,9 @@ try:
 except Exception:checks['application']=False
 try:
  backup=json.loads(Path('/var/lib/barsan-backup/status.json').read_text());checks['backup_fresh']=time.time()-backup.get('last_success_epoch',0)<720;checks['backup_last_result']=backup.get('last_result')=='success'
-except Exception:checks['backup_fresh']=checks['backup_last_result']=False
+ restored=backup.get('last_restore_test',{});last=datetime.fromisoformat(restored.get('verified_at_utc','1970-01-01T00:00:00+00:00')).timestamp()
+ checks['restore_test_recent']=time.time()-last<172800 and backup.get('last_restore_result','success')=='success'
+except Exception:checks['backup_fresh']=checks['backup_last_result']=checks['restore_test_recent']=False
 checks['backup_volume_mounted']=os.path.ismount('/var/backups/barsan/repository')
 checks['root_reserve']=shutil.disk_usage('/').free>=8*1024**3
 checks['backup_volume_reserve']=checks['backup_volume_mounted'] and shutil.disk_usage('/var/backups/barsan/repository').free>=512*1024**2

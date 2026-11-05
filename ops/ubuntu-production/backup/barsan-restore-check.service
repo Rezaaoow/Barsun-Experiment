@@ -1,0 +1,24 @@
+[Unit]
+Description=Verify local Barsan backup by isolated restore
+Requires=var-backups-barsan-repository.mount
+After=var-backups-barsan-repository.mount postgresql@16-main.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/barsan/backup.py restore-test
+ExecStopPost=/usr/bin/python3 /usr/local/lib/barsan/backup_failure.py restore
+TimeoutStartSec=240
+Nice=15
+IOSchedulingClass=idle
+CPUWeight=20
+MemoryMax=512M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+RuntimeDirectory=barsan-backup
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ReadWritePaths=/var/backups/barsan/repository /var/lib/barsan-backup /run/barsan-backup /run/lock
+RestrictAddressFamilies=AF_UNIX
+LogNamespace=barsan
