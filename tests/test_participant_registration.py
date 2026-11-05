@@ -127,3 +127,33 @@ def test_exact_requested_copy_and_no_unique_code_phrase():
         assert text in html
     assert 'کد یکتا' not in html
     assert 'منتظر پاسخ بازیکن مقابل' not in html
+
+
+@pytest.mark.parametrize('group_mode',[False,True])
+def test_busy_entry_never_mislabels_active_invitation(client,monkeypatch,group_mode):
+    item=create_group_link(client) if group_mode else create_main_assignment(client)
+    query=urlparse(item['invitation_url']).query
+    def unavailable(*args,**kwargs):raise main.HTTPException(503,'Temporary database failure')
+    monkeypatch.setattr(main,'_require_active_entry_token',unavailable)
+    response=client.get('/?'+query)
+    assert response.status_code==503
+    assert 'این لینک غیر فعال است.' not in response.text
+    assert 'participant-first-name' not in response.text
+    assert 'در حال برقراری ارتباط' in response.text
+    assert 2<=int(response.headers['refresh'])<=5
+    assert response.headers['cache-control']=='no-store'
+
+
+def test_browser_entry_retries_same_active_link_without_manual_refresh(browser_env,monkeypatch):
+    client,page,_,base=browser_env
+    group=client.post('/api/admin/group-links',headers={'X-Admin-Token':main.ADMIN_TOKEN},json={'scope':'test','label':'Synthetic automatic entry retry'}).json();query=urlparse(group['invitation_url']).query
+    original=main._require_active_entry_token;attempts=[]
+    def briefly_unavailable(*args,**kwargs):
+        attempts.append(True)
+        if len(attempts)==1:raise main.HTTPException(503,'Synthetic stale connection')
+        return original(*args,**kwargs)
+    monkeypatch.setattr(main,'_require_active_entry_token',briefly_unavailable)
+    response=page.goto(base+'/?'+query)
+    assert response.status==503
+    page.wait_for_function("Boolean(document.querySelector('#participant-first-name'))",timeout=15000)
+    assert page.url==base+'/?'+query and len(attempts)>=2

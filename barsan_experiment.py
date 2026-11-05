@@ -5331,6 +5331,17 @@ def home(request: Request):
                 raise _inactive_invitation_error()
             with conn() as connection:
                 _require_active_entry_token(connection, supplied[0][1], group=supplied[0][0] == "group")
-        except HTTPException:
-            return HTMLResponse(INACTIVE_INVITATION_PAGE, headers={"Cache-Control": "no-store"})
+        except HTTPException as exc:
+            if (exc.headers or {}).get("X-Barsan-Link-Inactive") == "1":
+                return HTMLResponse(INACTIVE_INVITATION_PAGE, headers={"Cache-Control": "no-store"})
+            if exc.status_code == 503:
+                # Unverified availability is not deactivation. Retry this same URL,
+                # retaining its query and browser storage; never expose the form first.
+                return HTMLResponse('<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8">'
+                    '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                    '<body style="margin:0;min-height:100svh;display:grid;place-content:center;'
+                    'text-align:center;background:white;color:#171717;font:700 1.5rem/1.8 sans-serif">'
+                    '<p>در حال برقراری ارتباط</p></body></html>', status_code=503,
+                    headers={"Cache-Control":"no-store","Retry-After":"2","Refresh":str(2+secrets.randbelow(4))})
+            raise
     return HTMLResponse(load_homepage().replace("__BARSAN_FONT_URL__", root_path + "/assets/vazirmatn-v33.003.woff2"), headers={"Cache-Control": "no-store"})
