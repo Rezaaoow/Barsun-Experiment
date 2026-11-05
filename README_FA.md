@@ -1,3 +1,7 @@
+## Current Ultimatum display correction — 2026-11-05
+
+New Production only; the old host is frozen. Correct AI/coworker labels and restore Frame-only loss feedback. No score/data/protocol changes and no full/load/capacity tests. See docs/ULTIMATUM_DISPLAY_FIX_2026_11_05.md.
+
 ## Verified participant registration release — 2026-11-05
 
 Both Production deployments now run the same verified release; Staging has been retired with its data archived. See [release results](docs/PARTICIPANT_REGISTRATION_RESULTS_2026_11_05.md) for changes, independent health/browser checks, data-preservation evidence and remaining limitations. No load/capacity phase has started.

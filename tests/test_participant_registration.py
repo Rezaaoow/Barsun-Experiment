@@ -101,15 +101,15 @@ def test_browser_form_and_opponent_selection(browser_env):
     assert page.locator('#group-code-choice').count()==0
     page.evaluate('ultimatumState={};utRenderWelcome()')
     page.get_by_role('button',name='شروع کنیم',exact=True).click()
-    page.get_by_text('در حال تعیین بازیکن مقابل از بین همکاران',exact=True).wait_for()
+    page.get_by_text('در حال تعیین همکارتان از بین همکاران',exact=True).wait_for()
     started=time.monotonic()
     assert page.get_by_role('button',name='شروع کنیم',exact=True).count()==0
-    page.get_by_text('بازیکن مقابل تعیین شد',exact=True).wait_for(timeout=7000)
+    page.get_by_text('همکارتان تعیین شد',exact=True).wait_for(timeout=7000)
     elapsed=time.monotonic()-started
     assert 2.8<=elapsed<=6.6
     page.get_by_role('button',name='شروع کنیم',exact=True).click()
     assert page.get_by_text('قبل از شروع بازی اصلی دو دور تمرینی انجام می‌شود که در نتیجه‌ی نهایی تاثیر ندارد.',exact=True).is_visible()
-    assert page.evaluate("utWaitingMessage('agent')")=='منتظر دریافت پاسخ هوش مصنوعی باشید'
+    assert page.evaluate("utWaitingMessage('agent')")=='منتظر دریافت پاسخ هوش مصنوعی بارسان باشید'
     assert page.evaluate("utWaitingMessage('coworker')")=='منتظر دریافت پاسخ همکارتان باشید'
 
 
@@ -119,10 +119,10 @@ def test_exact_requested_copy_and_no_unique_code_phrase():
         'در هر دور، باید بین دریافت مبلغ کمتر همین الان و یا مبلغ بیشتر پس از مدت مشخص، یکی را انتخاب کنید.',
         'در این بازی مبالغ فرضی‌اند و پرداختی به شما صورت نمی‌گیرد',
         'هر وقت آماده بودید، بازی دوم را شروع کنید.',
-        'منتظر دریافت پاسخ هوش مصنوعی باشید',
+        'منتظر دریافت پاسخ هوش مصنوعی بارسان باشید',
         'منتظر دریافت پاسخ همکارتان باشید',
-        'در حال تعیین بازیکن مقابل از بین همکاران',
-        'بازیکن مقابل تعیین شد',
+        'در حال تعیین همکارتان از بین همکاران',
+        'همکارتان تعیین شد',
     ]:
         assert text in html
     assert 'کد یکتا' not in html

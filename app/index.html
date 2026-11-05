@@ -2956,10 +2956,11 @@ function utIsFrameGroup() {
 function utGroupName(){return utIsFrameGroup()?"Frame":"Control";}
 function utCondition(code){return String(code||"").indexOf("coworker")>=0?"coworker":"agent";}
 function utRole(code){return String(code||"").indexOf("responder")>=0?"responder":"proposer";}
+function utOpponentName(condition){return condition==="coworker"?"همکارتان":"هوش‌مصنوعی بارسان";}
 function utOpponentText(condition) {
  return condition==="coworker"
-  ? "بازیکن مقابل شما یکی از همکاران شما در همین سالن است."
-  : "بازیکن مقابل شما هوش‌مصنوعی بارسان است.";
+  ? "رو به‌ روی شما یکی از همکاران‌ شما در همین سالن است"
+  : "رو به‌ روی شما هوش‌مصنوعی بارسان است";
 }
 function utMetadata() {
  return {
@@ -2982,7 +2983,7 @@ function utNode(tag, className, value) {
 const UT_COPY_CUES={
   "هوش‌مصنوعی بارسان":"agent","هوش مصنوعی بارسان":"agent",
   "یکی از همکاران شما در همین سالن":"coworker","یکی از همکاران حاضر در سالن":"coworker",
-  "پیشنهاد دهنده":"role","پاسخ دهنده":"role","بازیکن مقابل":"opponent",
+  "پیشنهاد دهنده":"role","پاسخ دهنده":"role","همکارتان":"coworker",
   "دو دور تمرینی":"practice","دور تمرینی":"practice","دور‌های تمرینی":"practice","تاثیر ندارد":"practice",
   "قبول":"accept","رد":"reject"
  };
@@ -3045,7 +3046,7 @@ function utMakeScreen(options) {
    const icon=utNode("span","ut-opponent-icon",isCoworker?"👤":"🤖");
    icon.setAttribute("aria-hidden","true");
    opponent.appendChild(icon);
-   const text=utNode("span","ut-opponent-label",isCoworker?"همکار":"هوش مصنوعی");
+   const text=utNode("span","ut-opponent-label",isCoworker?"همکار":"هوش‌مصنوعی بارسان");
    opponent.appendChild(text);top.appendChild(opponent);
   }
   card.appendChild(top);
@@ -3330,7 +3331,7 @@ async function startUltimatumInstructions() {
 function utRenderWelcome() {
  const s=utMakeScreen({header:false,title:"بازی باشگاه رانندگان بارسان",scrollable:true});
  const paras=[
-  "شما برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ در هر دور ۱۰ امتیاز بین شما و بازیکن مقابل تقسیم می‌شود.",
+  "شما برای کسب امتیاز باشگاه رانندگان با هوش‌مصنوعی بارسان یا یکی از همکاران حاضر در سالن بازی می‌کنید؛ در هر دور ۱۰ امتیاز بین شما و هوش‌مصنوعی بارسان یا همکارتان تقسیم می‌شود.",
   "این بازی دو نقش پیشنهاد دهنده و پاسخ دهنده دارد. پیشنهاد دهنده تعیین می‌کند هر نفر چند امتیاز بگیرد؛ پاسخ دهنده پیشنهاد را قبول یا رد می‌کند. با قبول پیشنهاد، امتیازها طبق آن تقسیم می‌شوند؛ با رد پیشنهاد، هیچ‌کس امتیازی نمی‌گیرد."
  ];
  paras.forEach(function(t){utAddText(s.body,"p","ut-copy",t);});
@@ -3340,17 +3341,17 @@ function utRenderWelcome() {
 async function utSelectOpponent() {
  const state=ultimatumState;
  const s=utMakeScreen({header:false});
- const message=utAddText(s.body,"p","ut-result-main","در حال تعیین بازیکن مقابل از بین همکاران");
+ const message=utAddText(s.body,"p","ut-result-main","در حال تعیین همکارتان از بین همکاران");
  s.body.setAttribute('aria-live','polite');
  const delay=3000+randomInt(3001);
  await new Promise(resolve=>setTimeout(resolve,delay));
  if(ultimatumState!==state||!message.isConnected)return;
- message.textContent="بازیکن مقابل تعیین شد";
+ message.textContent="همکارتان تعیین شد";
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"شروع کنیم",utRenderPracticeIntro,"");
 }
 function utWaitingMessage(condition) {
- return condition==='agent'?"منتظر دریافت پاسخ هوش مصنوعی باشید":"منتظر دریافت پاسخ همکارتان باشید";
+ return condition==='agent'?"منتظر دریافت پاسخ هوش مصنوعی بارسان باشید":"منتظر دریافت پاسخ همکارتان باشید";
 }
 function utRenderPracticeIntro() {
  const s=utMakeScreen({header:false,scrollable:true});
@@ -3381,13 +3382,13 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
  utAddText(total,"span","","امتیاز قابل تقسیم");
  utAddText(total,"strong","","۱۰");
  control.appendChild(total);
- utAddText(control,"p","ut-question","حاضرید چند امتیاز به بازیکن مقابل بدهید؟");
+ utAddText(control,"p","ut-question","حاضرید چند امتیاز به "+utOpponentName(condition)+" بدهید؟");
 
  const wrap=utNode("div","ut-slider-wrap");
  const bubble=utNode("output","ut-bubble","۵");bubble.style.left="clamp(18px, 50%, calc(100% - 18px))";
  const slider=document.createElement("input");
  slider.type="range";slider.className="ut-slider";slider.min="0";slider.max="10";slider.step="1";slider.value="5";slider.dir="ltr";
- slider.setAttribute("aria-label","تعداد امتیاز پیشنهادی به بازیکن مقابل");
+ slider.setAttribute("aria-label","تعداد امتیاز پیشنهادی به "+utOpponentName(condition));
  const ticks=utNode("div","ut-ticks");
  for(let i=0;i<=10;i++)utAddText(ticks,"span","",utFa(i));
  wrap.append(bubble,slider,ticks);
@@ -3396,7 +3397,7 @@ function utRenderProposerOffer(isPractice,blockCode,blockOrder,trial,round) {
 
  const shares=utNode("div","ut-shares");
  const your=utMetricCard(shares,"سهم شما","۵","mine");
- const other=utMetricCard(shares,"سهم بازیکن مقابل","۵","other");
+ const other=utMetricCard(shares,"سهم "+utOpponentName(condition),"۵","other");
  s.body.appendChild(shares);
  function update() {
   const toOther=Number(slider.value);
@@ -3524,10 +3525,10 @@ function utRenderResponderDecision(isPractice,blockCode,blockOrder,trial,round) 
  s.card.classList.add("ut-responder-screen","ut-decision-screen");
  utAddRoleBox(s.body,"responder",condition);
  utMetricCard(s.body,"امتیاز قابل تقسیم","۱۰","total-points");
- utAddText(s.body,"p","ut-question","پیشنهاد بازیکن مقابل");
+ utAddText(s.body,"p","ut-question","پیشنهاد "+utOpponentName(condition));
  const shares=utNode("div","ut-shares");
  utMetricCard(shares,"سهم شما",utFa(round.participant_share),"mine");
- utMetricCard(shares,"سهم بازیکن مقابل",utFa(round.opponent_share),"other");
+ utMetricCard(shares,"سهم "+utOpponentName(condition),utFa(round.opponent_share),"other");
  s.body.appendChild(shares);
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
  utButton(actions,"قبول",function(){utSubmitResponderDecision("accept",isPractice,blockCode,blockOrder,trial);},"accept");
@@ -3570,10 +3571,10 @@ function utRenderResult(isPractice,blockCode,blockOrder,trial,result) {
  const center=utNode("div","ut-result");
  let mainText, detailText;
  if(role==="proposer") {
-  mainText=result.accepted?"بازیکن مقابل پیشنهاد شما را قبول کرد.":"بازیکن مقابل پیشنهاد شما را رد کرد.";
+  mainText=result.accepted?utOpponentName(utCondition(blockCode))+" پیشنهاد شما را قبول کرد.":utOpponentName(utCondition(blockCode))+" پیشنهاد شما را رد کرد.";
   detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید."
  } else {
-  mainText=result.accepted?"شما پیشنهاد بازیکن مقابل را قبول کردید.":"شما پیشنهاد بازیکن مقابل را رد کردید.";
+  mainText=result.accepted?"شما پیشنهاد "+utOpponentName(utCondition(blockCode))+" را قبول کردید.":"شما پیشنهاد "+utOpponentName(utCondition(blockCode))+" را رد کردید.";
   detailText=result.accepted?utFa(result.points_earned)+" امتیاز دریافت کردید.":"امتیازی دریافت نکردید.";
  }
  utAddText(center,"div","ut-result-icon "+(result.accepted?"accepted":"rejected"),result.accepted?"✓":"×");
@@ -3637,7 +3638,7 @@ function utRenderBlockIntro() {
  ultimatumState.trialInBlock=1;
  const role=utRole(blockCode),condition=utCondition(blockCode);
  const roleLabel=role==="proposer"?"پیشنهاد دهنده":"پاسخ دهنده";
- const opponentLabel=condition==="agent"?"بازیکن مقابل شما هوش‌مصنوعی بارسان است":"بازیکن مقابل شما یکی از همکاران حاضر در سالن است";
+ const opponentLabel=utOpponentText(condition);
  const s=utMakeScreen({condition:condition,scrollable:true});
  utAddText(s.body,"p","ut-copy ut-block-intro-copy","در ۵ دور بعدی، شما در نقش "+roleLabel+" بازی می‌کنید. "+opponentLabel+".");
  const actions=utNode("div","ut-actions");s.body.appendChild(actions);
@@ -3673,7 +3674,7 @@ function utRenderBlockSummary() {
  const s=utMakeScreen({header:false});
  utAddText(s.body,"p","ut-copy ut-block-summary-intro","در ۵ دور قبلی شما:");
  const box=utNode("div","ut-summary-box");
- const showLoss=true;
+ const showLoss=utIsFrameGroup();
  const metrics=utNode("div","ut-summary-metrics"+(showLoss?"":" single"));
  const earnedMetric=utNode("div","ut-summary-metric earned");
  utAddText(earnedMetric,"div","ut-summary-metric-label","امتیاز به دست آوردید");
