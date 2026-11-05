@@ -12,11 +12,11 @@ def check_inactive_link_deletion(client):
         'steps':[{'step_id':step,'module_code':'dd_standalone'}]})
     assert group.status_code==200,group.text
     token=parse_qs(urlparse(group.json()['invitation_url']).query)['group'][0]
-    claim={'group_token':token,'assign_random':True,'claim_request_id':str(uuid.uuid4())}
+    claim={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", 'group_token':token,'assign_random':False,'claim_request_id':str(uuid.uuid4())}
     result=client.post('/api/experiment/group/claim',json=claim)
     assert result.status_code==200,result.text
     owned=result.json();identity={k:owned[k] for k in ['invitation_token','participant_code']}
-    assert client.post('/api/experiment/consent',json={**identity,'accepted':True}).status_code==200
+    assert client.post('/api/experiment/consent',json={"first_name":"Synthetic", "last_name":"Participant", **identity,'accepted':True}).status_code==200
     start=client.post('/api/experiment/stages/start',json={**identity,'stage_code':'dd_lifetrade','step_id':step,'start_request_id':str(uuid.uuid4())})
     assert start.status_code==200,start.text
     run=start.json()['run_id'];marker='%s' if main.DATABASE_URL else '?'
@@ -29,12 +29,12 @@ def check_inactive_link_deletion(client):
     checkpoint=dict(run_id=run,clock_id=str(uuid.uuid4()),step_id=step,stage_code='dd_lifetrade',sequence=1,visible_ms=12345,uncertain_ms=0,closed=True)
     completed=client.post('/api/experiment/dd/complete',json={**identity,'stage_code':'dd_lifetrade','step_id':step,'run_id':run,'timing_checkpoints':[checkpoint]})
     assert completed.status_code==200,completed.text
-    active=client.post('/api/experiment/group/claim',json={**claim,'claim_request_id':str(uuid.uuid4())})
+    active=client.post('/api/experiment/group/claim',json={**claim,'participant_code':'TEST-'+uuid.uuid4().hex,'claim_request_id':str(uuid.uuid4())})
     assert active.status_code==200
     active_identity={k:active.json()[k] for k in ['invitation_token','participant_code']}
     outside=client.post('/api/admin/group-links',headers=headers,json={'scope':'test','label':'Synthetic scope sentinel','steps':[{'step_id':step,'module_code':'dd_standalone'}]})
     outside_token=parse_qs(urlparse(outside.json()['invitation_url']).query)['group'][0]
-    other=client.post('/api/experiment/group/claim',json={'group_token':outside_token,'assign_random':True,'claim_request_id':str(uuid.uuid4())})
+    other=client.post('/api/experiment/group/claim',json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", 'group_token':outside_token,'assign_random':False,'claim_request_id':str(uuid.uuid4())})
     assert other.status_code==200
     with main.conn() as connection:
         other_assignment=main._lookup_assignment(connection,other.json()['invitation_token'],other.json()['participant_code'])

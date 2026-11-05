@@ -22,17 +22,13 @@ def check_copy(page,url,*,artifacts=None,title_preview=False):
         assert page.locator('#ethics').is_visible()
         assert page.locator('#ethics .eyebrow').count()==0
         assert page.locator('#ethics > p:not([id])').all_text_contents()==[EXPLANATION]
-        assert page.locator('#participant-code-instruction').count()==0
-        assert page.locator('.group-code-heading strong').inner_text()=='کد خود را وارد کنید.'
+        assert page.locator('#participant-code-instruction').is_visible()
+        assert page.locator('#group-code-choice').count()==0
+        for selector in ('#participant-first-name','#participant-last-name','#participant-code-input'):
+            assert page.locator(selector).is_visible()
+            assert page.locator(selector).is_enabled()
+            assert page.locator(selector).get_attribute('required') is not None
         assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
-        page.locator('[data-group-mode="random"]').click()
-        assert page.locator('input[name="group-code-mode"][value="random"]').is_checked()
-        assert page.locator('#participant-code-field').is_hidden()
-        assert page.locator('#participant-code-input').is_disabled()
-        page.locator('[data-group-mode="own"]').click()
-        assert page.locator('input[name="group-code-mode"][value="own"]').is_checked()
-        assert page.locator('#participant-code-field').is_visible()
-        assert page.locator('#participant-code-input').is_enabled()
         assert not page.locator('#consent-checkbox').is_checked()
         if artifacts:page.screenshot(path=str(root/(label+'-explanation.png')),full_page=True)
         page.locator('#ethics-back').click()

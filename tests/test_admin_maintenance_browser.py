@@ -11,7 +11,7 @@ def test_admin_buttons_refresh_and_ignore_stale_scope(browser_env):
     headers={'X-Admin-Token':main.ADMIN_TOKEN}
     group=client.post('/api/admin/group-links',headers=headers,json={'scope':'main','label':'Synthetic UI admin group'}).json()
     token=parse_qs(urlparse(group['invitation_url']).query)['group'][0]
-    person=client.post('/api/experiment/group/claim',json={'group_token':token,'assign_random':True,'claim_request_id':str(uuid.uuid4())}).json()
+    person=client.post('/api/experiment/group/claim',json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", 'group_token':token,'assign_random':False,'claim_request_id':str(uuid.uuid4())}).json()
     stale=client.get('/api/admin/assignments?scope=main',headers=headers).json()
     errors=[];bad=[]
     page.on('pageerror',lambda e:errors.append(type(e).__name__))

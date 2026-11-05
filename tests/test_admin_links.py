@@ -167,7 +167,7 @@ def test_test_link_uses_one_exact_saved_workflow_and_not_a_frame_control_pair(cl
 
     token = invite_token(link)
     identity = {"invitation_token": token, "participant_code": "TEST"}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
     identified = client.post("/api/experiment/identify", json=identity)
     assert identified.status_code == 200, identified.text
@@ -243,7 +243,7 @@ def test_module_only_test_links_start_at_selected_stage(client):
         assert link["study_code"].startswith(main.TEST_STUDY_PREFIX + "module-")
 
         identity = {"invitation_token": invite_token(link), "participant_code": "TEST"}
-        consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+        consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
         assert consent.status_code == 200, consent.text
         identified = client.post("/api/experiment/identify", json=identity)
         assert identified.status_code == 200, identified.text
@@ -350,7 +350,7 @@ def test_delete_inactive_assignments_removes_assignment_child_rows_safely(client
     link = create_main_assignment(client, code="DELETE-CHILDREN", condition="B")
     token = invite_token(link)
     identity = {"invitation_token": token, "participant_code": "DELETE-CHILDREN"}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
 
     with main.conn() as connection:
@@ -467,7 +467,7 @@ def test_group_link_claims_the_participants_own_code_and_creates_a_normal_invite
     group = create_group_link(client)
     claim = client.post(
         "/api/experiment/group/claim",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "group_token": parse_qs(urlparse(group["invitation_url"]).query)["group"][0],
             "participant_code": "BS-GROUP-101",
             "assign_random": False,
@@ -481,7 +481,7 @@ def test_group_link_claims_the_participants_own_code_and_creates_a_normal_invite
 
     consent = client.post(
         "/api/experiment/consent",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "invitation_token": payload["invitation_token"],
             "participant_code": payload["participant_code"],
             "accepted": True,
@@ -499,23 +499,23 @@ def test_group_link_claims_the_participants_own_code_and_creates_a_normal_invite
     assert identity.json()["participant_code"] == "BS-GROUP-101"
 
 
-def test_group_link_can_assign_distinct_random_codes_without_personal_codes(client):
+def test_group_link_accepts_distinct_supplied_codes_without_individual_invites(client):
     group = create_group_link(client, label="Anonymous code group")
     group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
 
     first = client.post(
         "/api/experiment/group/claim",
-        json={"group_token": group_token, "assign_random": True},
+        json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", "group_token": group_token, "assign_random": False},
     )
     second = client.post(
         "/api/experiment/group/claim",
-        json={"group_token": group_token, "assign_random": True},
+        json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", "group_token": group_token, "assign_random": False},
     )
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     first_payload, second_payload = first.json(), second.json()
-    assert first_payload["participant_code"].startswith("RND-")
-    assert second_payload["participant_code"].startswith("RND-")
+    assert first_payload["participant_code"].startswith("TEST-")
+    assert second_payload["participant_code"].startswith("TEST-")
     assert first_payload["participant_code"] != second_payload["participant_code"]
     assert first_payload["invitation_token"] != second_payload["invitation_token"]
 
@@ -523,7 +523,7 @@ def test_group_link_can_assign_distinct_random_codes_without_personal_codes(clie
 def test_group_link_claim_is_idempotent_for_the_same_participant_and_group(client):
     group = create_group_link(client)
     group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
-    request_body = {
+    request_body = {"first_name":"Synthetic", "last_name":"Participant",
         "group_token": group_token,
         "participant_code": "BS-GROUP-RETRY",
         "assign_random": False,
@@ -550,7 +550,7 @@ def test_group_link_rejects_reuse_of_a_code_already_assigned_individually(client
     group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
     response = client.post(
         "/api/experiment/group/claim",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "group_token": group_token,
             "participant_code": "BS-GROUP-EXISTING",
             "assign_random": False,
@@ -576,7 +576,7 @@ def test_group_link_can_be_listed_and_deactivated(client):
     assert disabled.status_code == 200, disabled.text
     claim = client.post(
         "/api/experiment/group/claim",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "group_token": parse_qs(urlparse(group["invitation_url"]).query)["group"][0],
             "participant_code": "BS-GROUP-DISABLED",
             "assign_random": False,
@@ -597,7 +597,7 @@ def test_group_links_are_removed_by_scoped_data_reset(client):
     assert response.json()["deleted_rows"]["group_links"] == 1
     claim = client.post(
         "/api/experiment/group/claim",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "group_token": group_token,
             "participant_code": "BS-GROUP-AFTER-RESET",
             "assign_random": False,
@@ -655,13 +655,13 @@ def test_group_workflow_preview_rejects_inactive_or_unknown_group_token(client):
     )
     assert response.status_code == 404
 
-def test_random_group_claim_request_replay_returns_the_same_identity(client):
+def test_named_group_claim_request_replay_returns_the_same_identity(client):
     group = create_group_link(client, label="Random claim replay group")
     group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
     request_id = "b95f35ec-9d70-4f15-866d-3f0efbb48ea1"
-    request_body = {
+    request_body = {"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant",
         "group_token": group_token,
-        "assign_random": True,
+        "assign_random": False,
         "claim_request_id": request_id,
     }
 
@@ -670,7 +670,7 @@ def test_random_group_claim_request_replay_returns_the_same_identity(client):
     assert first.status_code == 200, first.text
     assert replay.status_code == 200, replay.text
     first_payload, replay_payload = first.json(), replay.json()
-    assert first_payload["participant_code"].startswith("RND-")
+    assert first_payload["participant_code"].startswith("TEST-")
     assert replay_payload["participant_code"] == first_payload["participant_code"]
     assert replay_payload["invitation_token"] == first_payload["invitation_token"]
     assert replay_payload["reused"] is True
@@ -690,7 +690,7 @@ def test_random_group_claim_request_replay_returns_the_same_identity(client):
     # A request ID is bound to its original group and allocation mode.
     mismatched = client.post(
         "/api/experiment/group/claim",
-        json={
+        json={"first_name":"Synthetic", "last_name":"Participant",
             "group_token": group_token,
             "assign_random": False,
             "participant_code": "SOME-OTHER-CODE",
@@ -700,16 +700,16 @@ def test_random_group_claim_request_replay_returns_the_same_identity(client):
     assert mismatched.status_code == 409, mismatched.text
 
 
-def test_group_claim_without_request_id_keeps_legacy_distinct_random_allocations(client):
+def test_group_claim_without_request_id_accepts_distinct_supplied_codes(client):
     group = create_group_link(client, label="Legacy random group")
     group_token = parse_qs(urlparse(group["invitation_url"]).query)["group"][0]
     first = client.post(
         "/api/experiment/group/claim",
-        json={"group_token": group_token, "assign_random": True},
+        json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", "group_token": group_token, "assign_random": False},
     )
     second = client.post(
         "/api/experiment/group/claim",
-        json={"group_token": group_token, "assign_random": True},
+        json={"participant_code":"TEST-"+uuid.uuid4().hex, "first_name":"Synthetic", "last_name":"Participant", "group_token": group_token, "assign_random": False},
     )
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text

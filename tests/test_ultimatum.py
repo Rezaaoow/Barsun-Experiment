@@ -41,7 +41,7 @@ def create_active_ultimatum(client, monkeypatch, participant_code="UT-TEST-01", 
     invitation_url = assigned.json()["assignments"][0]["invitation_url"]
     token = parse_qs(urlparse(invitation_url).query)["invite"][0]
     identity = {"invitation_token": token, "participant_code": participant_code}
-    consent = client.post("/api/experiment/consent", json={**identity, "accepted": True})
+    consent = client.post("/api/experiment/consent", json={"first_name":"Synthetic", "last_name":"Participant", **identity, "accepted": True})
     assert consent.status_code == 200, consent.text
 
     # Seed the two already-completed prerequisite stages. Their behaviour is covered

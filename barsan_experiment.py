@@ -717,6 +717,23 @@ else:
 
 def _seed_registry(connection: Any) -> None:
     """Idempotently register the study and every canonical module."""
+    # Additive profile migration; older releases can still read every existing row.
+    if DATABASE_URL:
+        missing = connection.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema=current_schema() AND table_name='participants'"
+        ).fetchall()
+        columns = {row["column_name"] for row in missing}
+        if not {"first_name", "last_name"}.issubset(columns):
+            connection.execute("SET LOCAL lock_timeout='2s'")
+            for name in ("first_name", "last_name"):
+                connection.execute("ALTER TABLE participants ADD COLUMN IF NOT EXISTS " + name + " TEXT NOT NULL DEFAULT ''")
+            connection.execute("SET LOCAL lock_timeout=DEFAULT")
+    else:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(participants)").fetchall()}
+        for name in ("first_name", "last_name"):
+            if name not in columns:
+                connection.execute("ALTER TABLE participants ADD COLUMN " + name + " TEXT NOT NULL DEFAULT ''")
     initialize_client_timing(connection)
     instrument_rows = list({code: name for code, _version, name in STAGE_TO_INSTRUMENT.values()}.items())
     for instrument_code, instrument_name in instrument_rows:
@@ -859,6 +876,8 @@ class GroupClaimIn(BaseModel):
     group_token: str = Field(min_length=20, max_length=200)
     participant_code: str | None = Field(default=None, max_length=100)
     assign_random: bool = False
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
     # Stable UUID lets the server return the same allocation after a lost response.
     claim_request_id: str | None = Field(default=None, min_length=16, max_length=100)
 
@@ -902,6 +921,10 @@ class ExperimentIdentityIn(BaseModel):
 
 class ExperimentConsentIn(ExperimentIdentityIn):
     accepted: bool
+    # Optional on historical consent retries, mandatory for first acceptance.
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    group_token: str | None = Field(default=None, min_length=20, max_length=200)
 
 
 class StageStartIn(ExperimentIdentityIn):
@@ -1442,6 +1465,37 @@ def _workflow_progress_rows(connection: Any, assignment_id: str) -> dict[str, di
     return {row["step_instance_id"]: dict(row) for row in rows}
 
 
+def _participant_profile(first_name: str | None, last_name: str | None) -> tuple[str, str]:
+    values = tuple(str(value or "").strip() for value in (first_name, last_name))
+    if any(not value or len(value) > 100 or any(ord(ch) < 32 for ch in value) for value in values):
+        raise HTTPException(422, "نام و نام خانوادگی را وارد کنید.")
+    return values
+
+
+def _save_participant_profile(connection: Any, participant_id: str, profile: tuple[str, str]) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    connection.execute(
+        "UPDATE participants SET first_name=" + marker + ",last_name=" + marker
+        + " WHERE participant_id=" + marker,
+        (*profile, participant_id),
+    )
+
+
+def _inactive_invitation_error(status: int = 403) -> HTTPException:
+    return HTTPException(status, "این لینک غیر فعال است.", headers={"X-Barsan-Link-Inactive": "1"})
+
+
+def _require_active_entry_token(connection: Any, token: str, *, group: bool) -> None:
+    marker = "%s" if DATABASE_URL else "?"
+    table = "experiment_group_links" if group else "experiment_assignments"
+    row = connection.execute(
+        "SELECT active FROM " + table + " WHERE invitation_token_hash=" + marker,
+        (hashlib.sha256(token.strip().encode("utf-8")).hexdigest(),),
+    ).fetchone()
+    if not row or not bool(row["active"]):
+        raise _inactive_invitation_error()
+
+
 def _lookup_assignment(
     connection: Any,
     invitation_token: str,
@@ -1461,7 +1515,7 @@ def _lookup_assignment(
     )
     query = (
         "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
-        "sp.participation_id,p.participant_code"
+        "sp.participation_id,p.participant_code,p.first_name,p.last_name"
         + consent_select
         + " FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -1479,7 +1533,12 @@ def _lookup_assignment(
         query += " FOR UPDATE OF a"
     row = connection.execute(query, params).fetchone()
     if not row:
-        # A generic error avoids distinguishing a bad code from a bad invitation link.
+        state = connection.execute(
+            "SELECT active FROM experiment_assignments WHERE invitation_token_hash=" + marker,
+            (token_hash,),
+        ).fetchone()
+        if not state or not bool(state["active"]):
+            raise _inactive_invitation_error()
         raise HTTPException(403, "کد شرکت‌کننده یا لینک اختصاصی معتبر نیست.")
     if require_consent and not bool(row["consent_accepted"]):
         raise HTTPException(403, "رضایت برای مشارکت ثبت نشده است.")
@@ -1517,7 +1576,7 @@ def _lookup_questionnaire_assignment_state(
     marker = "%s" if DATABASE_URL else "?"
     query = (
         "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
-        "sp.participation_id,p.participant_code,"
+        "sp.participation_id,p.participant_code,p.first_name,p.last_name,"
         "EXISTS(SELECT 1 FROM experiment_consents ec "
         "WHERE ec.assignment_id=a.assignment_id AND ec.consent_version=" + marker
         + ") AS consent_accepted,"
@@ -2023,7 +2082,7 @@ def list_admin_assignments(
         where.append("LOWER(p.participant_code) LIKE " + marker)
         params.append("%" + normalized_search + "%")
     query = (
-        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,"
+        "SELECT a.assignment_id,a.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,a.workflow_json,"
         "a.active,a.assigned_at,a.invitation_token_encrypted "
         "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
         "WHERE " + " AND ".join(where) + " ORDER BY a.assigned_at DESC,p.participant_code"
@@ -2141,7 +2200,7 @@ def reissue_admin_assignment_link(
     scope_condition, scope_params = _scope_filter(data.scope, "a.study_code", marker)
     with conn() as connection:
         row = connection.execute(
-            "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,a.active "
+            "SELECT a.assignment_id,a.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,a.workflow_json,a.active "
             "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
             "WHERE a.assignment_id=" + marker + " AND " + scope_condition,
             (data.assignment_id, *scope_params),
@@ -2241,7 +2300,7 @@ def export_admin_active_assignments_csv(
     marker = "%s" if DATABASE_URL else "?"
     scope_condition, scope_params = _scope_filter(scope, "a.study_code", marker)
     query = (
-        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.workflow_json,"
+        "SELECT a.assignment_id,a.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,a.workflow_json,"
         "a.assigned_at,a.invitation_token_encrypted "
         "FROM experiment_assignments a JOIN participants p ON p.participant_id=a.participant_id "
         "WHERE a.active=1 AND " + scope_condition
@@ -2254,7 +2313,7 @@ def export_admin_active_assignments_csv(
     output.write("\ufeff")
     fields = [
         "participant_code", "condition_code", "ultimatum_variant", "active", "study_code",
-        "assigned_at", "invitation_url", "url_available", "link_id",
+        "assigned_at", "invitation_url", "url_available", "link_id", "first_name", "last_name",
     ]
     writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
     writer.writeheader()
@@ -2265,6 +2324,7 @@ def export_admin_active_assignments_csv(
         variant = _workflow_ultimatum_variant(saved_steps) or ""
         writer.writerow({
             "participant_code": item["participant_code"],
+            "first_name": item["first_name"], "last_name": item["last_name"],
             "condition_code": item["condition_code"],
             "ultimatum_variant": variant,
             "active": True,
@@ -2289,17 +2349,11 @@ def export_admin_active_assignments_csv(
 @app.post("/api/experiment/group/claim")
 def claim_group_invitation(data: GroupClaimIn):
     """Exchange a shared group token for one personal participant code and invitation token."""
-    supplied_code = str(data.participant_code or "").strip()
     if data.assign_random:
-        if supplied_code:
-            raise HTTPException(422, "برای دریافت کد تصادفی، فیلد کد شخصی باید خالی باشد.")
-        normalized_code = ""
-        request_fingerprint = "random"
-    else:
-        if not supplied_code:
-            raise HTTPException(422, "کد شرکت‌کننده را وارد کنید یا دریافت کد تصادفی را انتخاب کنید.")
-        normalized_code = normalize_participant_code(supplied_code)
-        request_fingerprint = "own:" + normalized_code
+        raise HTTPException(422, "نام، نام خانوادگی و کد شرکت‌کننده را وارد کنید.")
+    profile = _participant_profile(data.first_name, data.last_name)
+    normalized_code = normalize_participant_code(str(data.participant_code or "").strip())
+    request_fingerprint = "own:" + normalized_code
 
     claim_request_id = None
     if data.claim_request_id:
@@ -2319,7 +2373,7 @@ def claim_group_invitation(data: GroupClaimIn):
                 (group_token_hash,),
             ).fetchone()
             if not group or not bool(group["active"]):
-                raise HTTPException(404, "لینک گروهی معتبر نیست یا غیرفعال شده است.")
+                raise _inactive_invitation_error(404)
 
             # Reserve the client request ID in the same transaction as the
             # assignment. Concurrent replays wait for the first transaction,
@@ -2346,8 +2400,8 @@ def claim_group_invitation(data: GroupClaimIn):
                     ):
                         raise HTTPException(409, "این شناسه درخواست قبلاً برای عملیات دیگری استفاده شده است.")
                     previous_assignment = connection.execute(
-                        "SELECT a.assignment_id,a.group_link_id,a.invitation_token_encrypted,"
-                        "a.condition_code,a.active,p.participant_code "
+                        "SELECT a.assignment_id,a.participant_id,a.group_link_id,a.invitation_token_encrypted,"
+                        "a.condition_code,a.active,p.participant_code,p.first_name,p.last_name "
                         "FROM experiment_assignments AS a "
                         "JOIN participants AS p ON p.participant_id=a.participant_id "
                         "WHERE a.assignment_id=" + marker,
@@ -2364,29 +2418,17 @@ def claim_group_invitation(data: GroupClaimIn):
                     )
                     if not previous_token:
                         raise HTTPException(503, "بازیابی لینک اختصاصی موقتاً ممکن نشد.")
+                    _save_participant_profile(connection, previous_assignment["participant_id"], profile)
                     return {
                         "participant_code": previous_assignment["participant_code"],
                         "invitation_token": previous_token,
                         "condition_code": previous_assignment["condition_code"],
                         "reused": True,
-                        "random_code_assigned": data.assign_random,
+                        "random_code_assigned": False,
+                            **dict(zip(("first_name", "last_name"), profile)),
                     }
 
-            if data.assign_random:
-                participant_code = ""
-                for _ in range(8):
-                    candidate = "RND-" + secrets.token_hex(6).upper()
-                    occupied = connection.execute(
-                        "SELECT 1 FROM participants WHERE participant_code=" + marker,
-                        (candidate,),
-                    ).fetchone()
-                    if not occupied:
-                        participant_code = candidate
-                        break
-                if not participant_code:
-                    raise HTTPException(503, "ساخت کد تصادفی ممکن نشد؛ دوباره تلاش کنید.")
-            else:
-                participant_code = normalized_code
+            participant_code = normalized_code
 
             participant_id, _participation_id = _ensure_participation(
                 connection,
@@ -2394,6 +2436,7 @@ def claim_group_invitation(data: GroupClaimIn):
                 study_code=group["study_code"],
                 study_name=group["label"],
             )
+            _save_participant_profile(connection, participant_id, profile)
             existing = connection.execute(
                 "SELECT assignment_id,group_link_id,invitation_token_encrypted,active "
                 "FROM experiment_assignments WHERE study_code=" + marker
@@ -2418,7 +2461,8 @@ def claim_group_invitation(data: GroupClaimIn):
                             "invitation_token": previous_token,
                             "condition_code": group["condition_code"],
                             "reused": True,
-                            "random_code_assigned": data.assign_random,
+                            "random_code_assigned": False,
+                            **dict(zip(("first_name", "last_name"), profile)),
                         }
                 raise HTTPException(409, "برای این کد قبلاً در این مطالعه لینک اختصاصی صادر شده است.")
 
@@ -2452,7 +2496,8 @@ def claim_group_invitation(data: GroupClaimIn):
         "invitation_token": invitation_token,
         "condition_code": group["condition_code"],
         "reused": False,
-        "random_code_assigned": data.assign_random,
+        "random_code_assigned": False,
+        **dict(zip(("first_name", "last_name"), profile)),
     }
 
 
@@ -2463,6 +2508,16 @@ def record_experiment_consent(data: ExperimentConsentIn):
         raise HTTPException(403, "شرکت در پژوهش تأیید نشده است.")
     with conn() as connection:
         assignment = _lookup_assignment(connection, data.invitation_token, data.participant_code)
+        if data.group_token:
+            _require_active_entry_token(connection, data.group_token, group=True)
+        marker = "%s" if DATABASE_URL else "?"
+        previous_consent = connection.execute(
+            "SELECT 1 FROM experiment_consents WHERE assignment_id=" + marker + " AND consent_version=" + marker,
+            (assignment["assignment_id"], CONSENT_VERSION),
+        ).fetchone()
+        if data.first_name is not None or data.last_name is not None or not previous_consent:
+            _save_participant_profile(connection, assignment["participant_id"],
+                                      _participant_profile(data.first_name, data.last_name))
         timestamp = now()
         if DATABASE_URL:
             connection.execute(
@@ -2611,6 +2666,8 @@ def identify_experiment_participant(data: ExperimentIdentityIn):
     current_step = next((step for step in public_steps if step["status"] != "completed"), None)
     return {
         "participant_code": assignment["participant_code"],
+        "first_name": assignment["first_name"],
+        "last_name": assignment["last_name"],
         "assignment_id": assignment["assignment_id"],
         "condition_code": assignment["condition_code"],
         "study_code": assignment["study_code"],
@@ -3172,7 +3229,7 @@ def _lookup_active_ultimatum_stage(
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     query = (
         "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
-        "sp.participation_id,p.participant_code,"
+        "sp.participation_id,p.participant_code,p.first_name,p.last_name,"
         "EXISTS(SELECT 1 FROM experiment_consents AS consent "
         "WHERE consent.assignment_id=a.assignment_id AND consent.consent_version=" + marker
         + ") AS consent_accepted,"
@@ -3244,7 +3301,7 @@ def _lookup_active_ultimatum_round(
     token_hash = hashlib.sha256(invitation_token.encode("utf-8")).hexdigest()
     query = (
         "SELECT a.assignment_id,a.study_code,a.participant_id,a.condition_code,a.workflow_json,"
-        "sp.participation_id,p.participant_code,"
+        "sp.participation_id,p.participant_code,p.first_name,p.last_name,"
         "EXISTS(SELECT 1 FROM experiment_consents AS consent "
         "WHERE consent.assignment_id=a.assignment_id AND consent.consent_version=" + marker
         + ") AS consent_accepted,"
@@ -4471,7 +4528,7 @@ def experiment_progress(
     marker = "%s" if DATABASE_URL else "?"
     condition, params = _scope_filter(scope, "a.study_code", marker)
     base_query = (
-        "SELECT a.assignment_id,a.study_code,p.participant_code,a.condition_code,a.assigned_at,"
+        "SELECT a.assignment_id,a.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,a.assigned_at,"
         "a.workflow_json,sp.participation_id "
         "FROM experiment_assignments a "
         "JOIN participants p ON p.participant_id=a.participant_id "
@@ -4692,7 +4749,7 @@ def export_ultimatum_csv(
     marker = "%s" if DATABASE_URL else "?"
     scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT sp.study_code,p.participant_code,a.condition_code,ir.run_id,ir.status AS run_status,"
+        "SELECT sp.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,ir.run_id,ir.status AS run_status,"
         "ir.started_at AS run_started_at,ir.completed_at AS run_completed_at,"
         "ir.metadata AS run_metadata,usp.current_run_id AS current_stage_run_id,"
         "usp.draft_payload AS final_stage_payload,iv.version AS instrument_version,"
@@ -4739,7 +4796,7 @@ def export_ultimatum_csv(
         "normal_sd", "normal_ai_self_share", "normal_participant_share",
         "binomial_n", "binomial_p", "binomial_draw", "binomial_accept_threshold",
         "participant_offer_to_opponent", "participant_offer_to_self",
-        "computer_offer_to_participant", "computer_offer_to_self", "payload_json",
+        "computer_offer_to_participant", "computer_offer_to_self", "payload_json", "first_name", "last_name",
     ]
 
     def generate_csv():
@@ -4856,7 +4913,7 @@ def export_questionnaire_csv(
     marker = "%s" if DATABASE_URL else "?"
     scope_filter = "substr(sp.study_code,1,12)='barsan-test-'" if scope == "test" else "sp.study_code=" + marker
     query = (
-        "SELECT sp.study_code,p.participant_code,a.condition_code,qr.question_code,qr.response_value,"
+        "SELECT sp.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,qr.question_code,qr.response_value,"
         "qr.updated_at,qr.run_id,iv.version AS instrument_version "
         "FROM questionnaire_responses qr "
         "JOIN instrument_runs ir ON ir.run_id=qr.run_id "
@@ -4878,7 +4935,7 @@ def export_questionnaire_csv(
         buffer.write("\ufeff")
         fields = [
             "study_code", "participant_code", "condition_code", "question_code", "response_value",
-            "updated_at", "run_id", "instrument_version",
+            "updated_at", "run_id", "instrument_version", "first_name", "last_name",
         ]
         writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -4912,7 +4969,7 @@ def sessions(
     params = (INSTRUMENT_CODE,) if scope == "test" else (INSTRUMENT_CODE, STUDY_CODE)
     with conn() as connection:
         rows = connection.execute(
-            "SELECT sp.study_code,ir.run_id AS session_id,p.participant_code,ir.started_at AS created_at,"
+            "SELECT sp.study_code,ir.run_id AS session_id,p.participant_code,p.first_name,p.last_name,ir.started_at AS created_at,"
             "ir.completed_at,ir.status,ir.trial_count,iv.instrument_code,iv.version AS experiment_version "
             "FROM instrument_runs ir "
             "JOIN study_participations sp ON sp.participation_id=ir.participation_id "
@@ -4955,7 +5012,7 @@ def export_csv(
     fields = sorted(
         payload_fields
         | {"server_received_at", "server_run_id", "server_session_id", "participant_code",
-           "instrument_code", "instrument_version", "study_code"}
+           "instrument_code", "instrument_version", "study_code", "first_name", "last_name"}
     )
 
     def generate_csv():
@@ -4970,7 +5027,7 @@ def export_csv(
 
         while True:
             query = (
-                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,"
+                "SELECT t.client_event_id,t.run_id,t.received_at,t.payload,p.participant_code,p.first_name,p.last_name,"
                 "iv.version,sp.study_code "
                 "FROM lifetrade_trials t "
                 "JOIN instrument_runs ir ON ir.run_id=t.run_id "
@@ -5004,6 +5061,8 @@ def export_csv(
                 item["server_run_id"] = row["run_id"]
                 item["server_session_id"] = row["run_id"]
                 item["participant_code"] = row["participant_code"]
+                item["first_name"] = row["first_name"]
+                item["last_name"] = row["last_name"]
                 item["instrument_code"] = INSTRUMENT_CODE
                 item["instrument_version"] = row["version"]
                 item["study_code"] = row["study_code"]
@@ -5048,7 +5107,7 @@ def _ordered_task_export(module: str, scope: str):
             params = (cursor,)
             with conn() as connection:
                 rows = connection.execute(
-                    "SELECT trial.*,sp.study_code,p.participant_code,a.condition_code,"
+                    "SELECT trial.*,sp.study_code,p.participant_code,p.first_name,p.last_name,a.condition_code,"
                     "run.status AS run_status,run.started_at AS run_started_at,run.completed_at AS run_completed_at,"
                     "run.metadata AS run_metadata,version.version AS instrument_version "
                     "FROM (SELECT * FROM " + table + " WHERE " + key + ">" + marker
@@ -5078,7 +5137,7 @@ def _ordered_task_export(module: str, scope: str):
                     item.update(workflow_module_code=metadata.get("workflow_module_code", "dd_lifetrade"),
                                 workflow_step_id=metadata.get("workflow_step_id"))
                     record = dd_record(item, payload)
-                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at", "workflow_module_code", "workflow_step_id"}})
+                    item.update({name: payload.get(name) for name in DD_FIELDS if name in payload and name not in {*COMMON_FIELDS, "client_event_id", "server_received_at", "workflow_module_code", "workflow_step_id", "first_name", "last_name"}})
                     item.update(stimulus_index=payload.get("index"),
                                 left_stimulus=record["stimulus"]["left"],right_stimulus=record["stimulus"]["right"],
                                 stimulus_parameters_json=encode(record["stimulus"]["parameters"]),
@@ -5228,7 +5287,27 @@ def task_font():
                         media_type="font/woff2", headers={"Cache-Control": "public,max-age=31536000,immutable"})
 
 
+INACTIVE_INVITATION_PAGE = """<!doctype html><html lang="fa" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title></title><style>body{margin:0;min-height:100svh;display:grid;place-content:center;
+text-align:center;background:white;color:#171717;font:700 1.5rem/1.8 sans-serif;padding:16px;box-sizing:border-box}
+p{margin:0 0 24px}button{font:inherit;min-height:56px;padding:12px 24px;cursor:pointer;
+border:0;border-radius:12px;background:#171717;color:white}</style></head><body>
+<p>این لینک غیر فعال است.</p><button type="button" onclick="window.close()">بستن صفحه</button>
+</body></html>"""
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     root_path = request.scope.get("root_path", "").rstrip("/")
-    return load_homepage().replace("__BARSAN_FONT_URL__", root_path + "/assets/vazirmatn-v33.003.woff2")
+    # Resolve invitation state before sending any registration/experiment HTML.
+    supplied = [(name, request.query_params.get(name, "")) for name in ("invite", "group") if name in request.query_params]
+    if supplied:
+        try:
+            if len(supplied) != 1:
+                raise _inactive_invitation_error()
+            with conn() as connection:
+                _require_active_entry_token(connection, supplied[0][1], group=supplied[0][0] == "group")
+        except HTTPException:
+            return HTMLResponse(INACTIVE_INVITATION_PAGE, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(load_homepage().replace("__BARSAN_FONT_URL__", root_path + "/assets/vazirmatn-v33.003.woff2"), headers={"Cache-Control": "no-store"})
