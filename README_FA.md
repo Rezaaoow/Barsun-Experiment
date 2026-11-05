@@ -1,3 +1,7 @@
+## Verified participant registration release — 2026-11-05
+
+Both Production deployments now run the same verified release; Staging has been retired with its data archived. See [release results](docs/PARTICIPANT_REGISTRATION_RESULTS_2026_11_05.md) for changes, independent health/browser checks, data-preservation evidence and remaining limitations. No load/capacity phase has started.
+
 # BarSan Experiment — سامانهٔ آزمایش آنلاین
 
 ## Two-Production registration update — 2026-11-05
