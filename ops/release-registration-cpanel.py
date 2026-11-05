@@ -116,7 +116,16 @@ try:
  run([str(Path(python).parent/'supervisord'),'-c',str(conf)]);health(8768)
  after=digest_data();assert before==after,'Existing data changed during preparation; investigate without replacing live workers'
  atomic(paths['proxy'],proxy.replace(b'http://127.0.0.1:8767/$1',b'http://127.0.0.1:8768/$1'));switched=True
- with urllib.request.urlopen('https://my-experiment.ir/lifetrade/',timeout=15) as response:assert b'participant-first-name' in response.read()
+ # LiteSpeed caches parsed rewrite configuration; one immediate probe can still
+ # reach the preceding worker. Wait for the actual public route before draining.
+ for attempt in range(40):
+  try:
+   request=urllib.request.Request('https://my-experiment.ir/lifetrade/?registration_release_probe='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+   with urllib.request.urlopen(request,timeout=10) as response:ready=b'participant-first-name' in response.read()
+   if ready:break
+  except Exception:pass
+  time.sleep(1)
+ else:raise RuntimeError('public candidate route did not become ready')
  time.sleep(35)
  changed=True
  run(ctl+['stop','barsan-native']);atomic(paths['launcher'],launcher.encode())
