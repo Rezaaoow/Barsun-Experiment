@@ -1,0 +1,33 @@
+name: approve-production
+on:
+  workflow_run:
+    workflows: [backend-tests]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: approve-production
+  cancel-in-progress: false
+jobs:
+  approve:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Advance the tested production ref
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$TESTED_SHA" origin/main
+          if git ls-remote --exit-code origin refs/heads/production-approved >/dev/null; then
+            git fetch origin production-approved
+            if ! git merge-base --is-ancestor origin/production-approved "$TESTED_SHA"; then
+              echo "A newer production approval already exists; leaving it unchanged."
+              exit 0
+            fi
+          fi
+          git push origin "$TESTED_SHA":refs/heads/production-approved

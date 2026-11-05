@@ -1,0 +1,34 @@
+[Unit]
+Description=Barsan Production ASGI application
+After=network.target postgresql@16-main.service
+Requires=postgresql@16-main.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+User=barsan-app
+Group=barsan-app
+WorkingDirectory=/opt/barsan/current
+EnvironmentFile=/etc/barsan/database.env
+EnvironmentFile=/etc/barsan/application.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ExecStartPre=/usr/bin/python3 /usr/local/lib/barsan/start_guard.py
+ExecStart=/opt/barsan/venvs/runtime-20261105-v1/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8765 --workers 2 --root-path /dce --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log --timeout-graceful-shutdown 30
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/barsan
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryHigh=768M
+MemoryMax=1G
+LogNamespace=barsan
+
+[Install]
+WantedBy=multi-user.target

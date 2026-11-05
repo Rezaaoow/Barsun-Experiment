@@ -1,0 +1,13 @@
+[Unit]
+Description=Pull CI-approved app release from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/barsan/release.py poll
+TimeoutStartSec=600
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+LogNamespace=barsan

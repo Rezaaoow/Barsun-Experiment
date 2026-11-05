@@ -1,0 +1,12 @@
+[Unit]
+Description=Hard-capped 4 GiB local Barsan backup volume
+
+[Mount]
+What=/var/lib/barsan-backup/repository.ext4
+Where=/var/backups/barsan/repository
+Type=ext4
+Options=loop,nodev,nosuid,noexec
+TimeoutSec=30
+
+[Install]
+WantedBy=multi-user.target

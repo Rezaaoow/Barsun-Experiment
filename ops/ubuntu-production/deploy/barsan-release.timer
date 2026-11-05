@@ -1,0 +1,8 @@
+[Timer]
+OnBootSec=120
+OnUnitActiveSec=120
+RandomizedDelaySec=10
+Unit=barsan-release.service
+
+[Install]
+WantedBy=timers.target

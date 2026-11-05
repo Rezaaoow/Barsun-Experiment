@@ -1,0 +1,7 @@
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/logrotate --state /var/lib/barsan-operations/logrotate.state /etc/barsan-operations/nginx-logrotate.conf
+TimeoutStartSec=30
+Nice=15
+NoNewPrivileges=yes
+LogNamespace=barsan

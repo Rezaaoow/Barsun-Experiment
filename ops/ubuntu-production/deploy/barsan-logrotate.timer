@@ -1,0 +1,7 @@
+[Timer]
+OnBootSec=120
+OnUnitActiveSec=300
+Unit=barsan-logrotate.service
+
+[Install]
+WantedBy=timers.target
