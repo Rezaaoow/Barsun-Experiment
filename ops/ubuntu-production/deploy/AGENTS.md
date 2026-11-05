@@ -1,0 +1,7 @@
+# Ubuntu Production deployment and local backup
+
+User chose a CLEAN new database; do not import old studies/links/results/credentials. Only new server 37.152.183.1, canonical https://experiment.barsun4818.ir/dce/. No app Staging. Old hosting remains fully operational and untouched. User accepted local encrypted backups pending external storage and specifically requires bounded storage. This supersedes earlier maintenance-only/off-server-before-deploy preparation notes.
+
+Current deployment is a frozen GitHub source, guarded local PostgreSQL, root-owned code, separate unprivileged app identity, Nginx/HTTPS and two Uvicorn workers. Preserve UI/copy/protocol/scoring/persistence. See DEPLOYMENT.md and ../backup/BACKUP.md. The 4 GiB backup image is on the same disk; external recovery/alerting remains pending. Do not claim zero loss or 600-browser readiness from health checks/API simulations.
+
+Automated updates are APP-only, gated by the CI-approved ref and deferral during active real research. Do not self-update root operations code through this agent. Never auto-change runtime requirements, SSH, TLS, database credentials or root configuration from an app commit. Failed health rolls back code only; full DB restore is separate and can discard newer responses. Only uniquely marked current-operation recovery databases may be dropped during drills. Protect secrets, bounded RAM capture, local disk reserve, scope-isolated synthetic data and backup state. Do not run legacy cPanel scripts. No private keys, tokens, backup passwords or raw invitations in Git/logs.

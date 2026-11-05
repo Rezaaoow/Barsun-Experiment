@@ -1,0 +1,25 @@
+[Unit]
+Description=Bounded encrypted local Barsan Production backup
+Requires=var-backups-barsan-repository.mount
+After=var-backups-barsan-repository.mount postgresql@16-main.service
+
+[Service]
+Type=oneshot
+UMask=0077
+RuntimeDirectory=barsan-backup
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /usr/local/lib/barsan/backup.py backup
+ExecStopPost=/usr/bin/python3 /usr/local/lib/barsan/backup_failure.py
+TimeoutStartSec=240
+Nice=15
+IOSchedulingClass=idle
+CPUWeight=20
+MemoryMax=512M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ReadWritePaths=/var/backups/barsan/repository /var/lib/barsan-backup /run/barsan-backup /run/lock
+RestrictAddressFamilies=AF_UNIX
+LogNamespace=barsan

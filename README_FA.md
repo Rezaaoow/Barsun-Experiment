@@ -1,5 +1,9 @@
 # BarSan Experiment — سامانهٔ آزمایش آنلاین
 
+## Clean Ubuntu Production deployment and bounded backups — 2026-11-05
+
+Production is served at https://experiment.barsun4818.ir/dce/ using Nginx, native ASGI and local PostgreSQL. The user selected a clean database; old hosting remains independent and untouched. Five-minute encrypted backups use a hard-capped 4 GiB local volume with an 8 GiB root-space reserve. Actual restore, isolated synthetic DD/rest/Ultimatum journeys, idempotency and cumulative exports were verified. Independent off-server recovery and external alert delivery remain pending. See [backup/recovery](ops/ubuntu-production/backup/BACKUP.md) and [deployment/rollback](ops/ubuntu-production/deploy/DEPLOYMENT.md). Future application updates are gated by successful main CI and a read-only server pull; active real runs defer deployment. Preparation notes below are historical checkpoints.
+
 ## New Ubuntu Production runtime — 2026-11-05
 
 The new server now has verified operations/GitHub/TLS access, Python 3.12, a hash-locked offline-recoverable dependency cache and an empty, socket-only PostgreSQL 16 Production database. A controlled reboot into the installed newer kernel passed fresh access, service, configuration and HTTPS checks. Application/data migration is still pending and `/dce/` remains maintenance 503. See [runtime preparation and recovery limits](ops/ubuntu-production/runtime/RUNTIME.md). The existing old hosting deployment remains untouched and fully independent; no application Staging environment is deployed to the new server.
