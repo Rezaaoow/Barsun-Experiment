@@ -83,7 +83,9 @@ def capture():
   with (STAGE/'database.dump').open('xb') as out:
    metadata=json.loads(run(['setpriv','--reuid=postgres','--regid=postgres','--init-groups','--',PYTHON,str(Path(__file__).with_name('capture_database.py'))],output=out))
   with (STAGE/'globals.sql').open('xb') as out:pg('pg_dumpall','--globals-only','--no-role-passwords',output=out)
-  sources=[Path(p) for p in ['/etc/barsan','/etc/postgresql/16/main','/etc/nginx','/etc/letsencrypt','/etc/ssh','/etc/systemd/system/barsan-production.service','/etc/systemd/system/barsan-backup.service','/etc/systemd/system/barsan-backup.timer','/usr/local/lib/barsan','/opt/barsan/current-release.json','/var/cache/barsan/wheels-runtime-20261105-v1'] if Path(p).exists()]
+  sources=[Path(p) for p in ['/etc/barsan','/etc/barsan-operations','/etc/postgresql/16/main','/etc/nginx','/etc/letsencrypt','/etc/ssh','/etc/systemd/journald@barsan.conf.d','/etc/systemd/system/var-backups-barsan-repository.mount','/usr/local/lib/barsan','/opt/barsan/current-release.json','/var/cache/barsan/wheels-runtime-20261105-v1'] if Path(p).exists()]
+  sources.extend(sorted(Path('/etc/systemd/system').glob('barsan-*.service')))
+  sources.extend(sorted(Path('/etc/systemd/system').glob('barsan-*.timer')))
   current=Path('/opt/barsan/current')
   if current.is_symlink():
    resolved=current.resolve();require(resolved.parent==Path('/opt/barsan/releases'),'unexpected_release_path');sources.append(resolved)
@@ -105,6 +107,8 @@ def capture():
 
 def recovery_test():
  preflight();started=time.monotonic();rows=snapshots();require(rows,'no_backup_for_recovery')
+ database_bytes=int(psql("SELECT pg_database_size('barsan_production')"))
+ require(shutil.disk_usage('/').free>=RESERVE+2*database_bytes,'recovery_root_space_reserve')
  snapshot=rows[-1]['id'];restic('check','--read-data')
  manifest=json.loads(restic('dump',snapshot,str(STAGE/'manifest.json')))
  require(manifest['database']=='barsan_production','wrong_database_manifest')
@@ -132,7 +136,7 @@ def recovery_test():
    require(table.replace('_','').isalnum(),'unsafe_table_name')
    require(int(psql('SELECT count(*) FROM public."'+table+'"',name))==count,'restored_count_mismatch')
   result={'restore_verified':True,'snapshot':snapshot,'tables_verified':len(actual_names),'file_hashes_verified':True,'elapsed_seconds':round(time.monotonic()-started,2),'off_server':False}
-  info=status();info['last_restore_test']=dict(result,verified_at_utc=datetime.now(timezone.utc).isoformat());atomic(STATE/'status.json',info)
+  info=status();info['last_restore_test']=dict(result,verified_at_utc=datetime.now(timezone.utc).isoformat());info['last_restore_result']='success';atomic(STATE/'status.json',info)
   return result
  finally:
   if created:
@@ -154,6 +158,7 @@ def main():
  except Exception as error:
   info=status();reason=str(error) if isinstance(error,BackupError) else type(error).__name__
   info.update(last_result='failure',last_failure=reason,last_failure_utc=datetime.now(timezone.utc).isoformat(),off_server=False);atomic(STATE/'status.json',info)
+  if args.action=='restore-test':info['last_restore_result']='failure';atomic(STATE/'status.json',info)
   print(json.dumps({'backup_operation_failed':True,'reason':reason}),file=sys.stderr);raise SystemExit(1)
 
 if __name__=='__main__':main()

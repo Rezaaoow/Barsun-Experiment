@@ -1,0 +1,8 @@
+[Timer]
+OnCalendar=*-*-* 02:17:00 UTC
+RandomizedDelaySec=30
+Persistent=true
+Unit=barsan-restore-check.service
+
+[Install]
+WantedBy=timers.target
