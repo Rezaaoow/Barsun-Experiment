@@ -4789,12 +4789,8 @@ def export_ultimatum_csv(
         "AND a.study_code=sp.study_code "
         "LEFT JOIN experiment_stage_progress usp ON usp.participation_id=sp.participation_id "
         "AND usp.stage_code='ultimatum' "
-        "WHERE " + scope_filter + " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence"
+        "WHERE " + scope_filter
     )
-    with conn() as connection:
-        rows = connection.execute(query, () if scope == "test" else (STUDY_CODE,)).fetchall()
-
-        scores = _ultimatum_export_scores(connection, [row["run_id"] for row in rows])
 
     fields = [
         "study_code", "participant_code", "condition_code", "run_id", "run_status", "run_started_at",
@@ -4829,91 +4825,106 @@ def export_ultimatum_csv(
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
-        for raw in rows:
-            item = dict(raw)
-            run_metadata = _json_value(item.pop("run_metadata", {}))
-            current_run_id = item.pop("current_stage_run_id", None)
-            stage_payload = _json_value(item.pop("final_stage_payload", {}))
-            condition_code = str(item.get("condition_code") or "").strip().upper()
-            current_completed_run = (
-                current_run_id == item.get("run_id") and item.get("run_status") == "completed"
-            )
-            item["attempt_number"] = _int_or_none(run_metadata.get("attempt_number"))
-            item["workflow_module_code"] = run_metadata.get("workflow_module_code") or "ultimatum"
-            item["ultimatum_variant"] = (
-                run_metadata.get("ultimatum_variant")
-                or ULTIMATUM_WORKFLOW_VARIANTS.get(run_metadata.get("workflow_module_code"))
-                or ""
-            )
-            item["feedback_group"] = item["ultimatum_variant"] or (
-                "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
-            )
-            item["block_order_json"] = json.dumps(
-                run_metadata.get("block_order") or [], ensure_ascii=False, separators=(",", ":")
-            )
-            final_payload = stage_payload if current_completed_run else {}
-            item.update(scores[item["round_id"]])
-            item["final_score"] = item["cumulative_score"]
-            item["final_potential_points_lost"] = final_payload.get("total_potential_points_lost")
-            item["final_stage_payload_json"] = json.dumps(
-                final_payload, ensure_ascii=False, separators=(",", ":")
-            )
-            item["run_metadata_json"] = json.dumps(
-                run_metadata, ensure_ascii=False, separators=(",", ":")
-            )
+        cursor = None
+        while True:
+            page_query = query
+            params = [] if scope == "test" else [STUDY_CODE]
+            if cursor is not None:
+                page_query += " AND (ir.started_at,u.phase,u.block_order,u.trial_sequence,u.round_id) > (" + ",".join([marker] * 5) + ")"
+                params.extend(cursor)
+            page_query += " ORDER BY ir.started_at,u.phase,u.block_order,u.trial_sequence,u.round_id LIMIT 200"
+            with conn() as connection:
+                rows = connection.execute(page_query, tuple(params)).fetchall()
+                scores = _ultimatum_export_scores(connection, [row["run_id"] for row in rows])
+            if not rows:
+                break
+            for raw in rows:
+                item = dict(raw)
+                run_metadata = _json_value(item.pop("run_metadata", {}))
+                current_run_id = item.pop("current_stage_run_id", None)
+                stage_payload = _json_value(item.pop("final_stage_payload", {}))
+                condition_code = str(item.get("condition_code") or "").strip().upper()
+                current_completed_run = (
+                    current_run_id == item.get("run_id") and item.get("run_status") == "completed"
+                )
+                item["attempt_number"] = _int_or_none(run_metadata.get("attempt_number"))
+                item["workflow_module_code"] = run_metadata.get("workflow_module_code") or "ultimatum"
+                item["ultimatum_variant"] = (
+                    run_metadata.get("ultimatum_variant")
+                    or ULTIMATUM_WORKFLOW_VARIANTS.get(run_metadata.get("workflow_module_code"))
+                    or ""
+                )
+                item["feedback_group"] = item["ultimatum_variant"] or (
+                    "Frame" if condition_code in {"A", "FRAME", "FRAMING"} else "Control"
+                )
+                item["block_order_json"] = json.dumps(
+                    run_metadata.get("block_order") or [], ensure_ascii=False, separators=(",", ":")
+                )
+                final_payload = stage_payload if current_completed_run else {}
+                item.update(scores[item["round_id"]])
+                item["final_score"] = item["cumulative_score"]
+                item["final_potential_points_lost"] = final_payload.get("total_potential_points_lost")
+                item["final_stage_payload_json"] = json.dumps(
+                    final_payload, ensure_ascii=False, separators=(",", ":")
+                )
+                item["run_metadata_json"] = json.dumps(
+                    run_metadata, ensure_ascii=False, separators=(",", ":")
+                )
 
-            payload = _json_value(item.pop("payload", {}))
-            item["client_event_timestamps_json"] = json.dumps(
-                payload.get("client_event_timestamps") or {}, ensure_ascii=False, separators=(",", ":")
-            )
-            item["client_event_server_received_at"] = payload.get("client_event_server_received_at")
-            event_timestamps = payload.get("client_event_timestamps") or {}
-            for event_name in (
-                "proposer_screen_shown_at", "slider_first_changed_at", "slider_last_changed_at",
-                "offer_submitted_at", "waiting_started_at", "waiting_ended_at",
-                "responder_offer_shown_at", "participant_choice_at", "result_screen_shown_at",
-                "next_trial_clicked_at", "advance_clicked_at",
-            ):
-                item[event_name] = event_timestamps.get(event_name)
-            item["opponent_offer_generated_at"] = payload.get("opponent_offer_generated_at")
-            item["opponent_response_generated_at"] = payload.get("opponent_response_generated_at")
-            offer_model = _json_value(payload.get("offer_model"))
-            decision_model = _json_value(payload.get("decision_model"))
-            item["opponent_model"] = (
-                decision_model.get("model") or offer_model.get("model") or ""
-            )
-            item["offer_model_json"] = json.dumps(
-                offer_model, ensure_ascii=False, separators=(",", ":")
-            ) if offer_model else ""
-            item["decision_model_json"] = json.dumps(
-                decision_model, ensure_ascii=False, separators=(",", ":")
-            ) if decision_model else ""
-            item["normal_mean"] = offer_model.get("mean")
-            item["normal_sd"] = offer_model.get("sd")
-            item["normal_ai_self_share"] = offer_model.get("sampled_ai_self_share")
-            item["normal_participant_share"] = offer_model.get("sampled_participant_share")
-            item["binomial_n"] = decision_model.get("n")
-            item["binomial_p"] = decision_model.get("p")
-            item["binomial_draw"] = decision_model.get("draw")
-            item["binomial_accept_threshold"] = decision_model.get("accept_threshold")
-            for field in (
-                "participant_offer_to_opponent", "participant_offer_to_self",
-                "computer_offer_to_participant", "computer_offer_to_self", "server_resolved_at",
-            ):
-                item[field] = payload.get(field)
-            item["client_metadata_json"] = json.dumps(
-                payload.get("client_metadata") or {}, ensure_ascii=False, separators=(",", ":")
-            )
-            item["client_metadata_resolve_json"] = json.dumps(
-                payload.get("client_metadata_resolve") or {}, ensure_ascii=False, separators=(",", ":")
-            )
-            item["payload_json"] = json.dumps(
-                payload, ensure_ascii=False, separators=(",", ":")
-            )
-            writer.writerow(item)
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
+                payload = _json_value(item.pop("payload", {}))
+                item["client_event_timestamps_json"] = json.dumps(
+                    payload.get("client_event_timestamps") or {}, ensure_ascii=False, separators=(",", ":")
+                )
+                item["client_event_server_received_at"] = payload.get("client_event_server_received_at")
+                event_timestamps = payload.get("client_event_timestamps") or {}
+                for event_name in (
+                    "proposer_screen_shown_at", "slider_first_changed_at", "slider_last_changed_at",
+                    "offer_submitted_at", "waiting_started_at", "waiting_ended_at",
+                    "responder_offer_shown_at", "participant_choice_at", "result_screen_shown_at",
+                    "next_trial_clicked_at", "advance_clicked_at",
+                ):
+                    item[event_name] = event_timestamps.get(event_name)
+                item["opponent_offer_generated_at"] = payload.get("opponent_offer_generated_at")
+                item["opponent_response_generated_at"] = payload.get("opponent_response_generated_at")
+                offer_model = _json_value(payload.get("offer_model"))
+                decision_model = _json_value(payload.get("decision_model"))
+                item["opponent_model"] = (
+                    decision_model.get("model") or offer_model.get("model") or ""
+                )
+                item["offer_model_json"] = json.dumps(
+                    offer_model, ensure_ascii=False, separators=(",", ":")
+                ) if offer_model else ""
+                item["decision_model_json"] = json.dumps(
+                    decision_model, ensure_ascii=False, separators=(",", ":")
+                ) if decision_model else ""
+                item["normal_mean"] = offer_model.get("mean")
+                item["normal_sd"] = offer_model.get("sd")
+                item["normal_ai_self_share"] = offer_model.get("sampled_ai_self_share")
+                item["normal_participant_share"] = offer_model.get("sampled_participant_share")
+                item["binomial_n"] = decision_model.get("n")
+                item["binomial_p"] = decision_model.get("p")
+                item["binomial_draw"] = decision_model.get("draw")
+                item["binomial_accept_threshold"] = decision_model.get("accept_threshold")
+                for field in (
+                    "participant_offer_to_opponent", "participant_offer_to_self",
+                    "computer_offer_to_participant", "computer_offer_to_self", "server_resolved_at",
+                ):
+                    item[field] = payload.get(field)
+                item["client_metadata_json"] = json.dumps(
+                    payload.get("client_metadata") or {}, ensure_ascii=False, separators=(",", ":")
+                )
+                item["client_metadata_resolve_json"] = json.dumps(
+                    payload.get("client_metadata_resolve") or {}, ensure_ascii=False, separators=(",", ":")
+                )
+                item["payload_json"] = json.dumps(
+                    payload, ensure_ascii=False, separators=(",", ":")
+                )
+                writer.writerow(item)
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
+            last = rows[-1]
+            cursor = (last["run_started_at"], last["phase"], last["block_order"], last["trial_sequence"], last["round_id"])
 
     return export_response(
         generate_csv(),
