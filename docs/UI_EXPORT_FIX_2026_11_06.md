@@ -1,0 +1,9 @@
+# Scoped coworker cue and TEST export repair
+
+NEW Production only. Add «همکاران» to the existing coworker color cue, including a following Persian ZWNJ. Use the existing green token; preserve every text character.
+
+The old ZIP endpoint assembled full CSV files and the complete archive in memory before responding. CSV exports yielded individual rows, while the middleware slept20ms per chunk; ZIP BytesIO iteration also split compressed bytes on binary newlines. Replace this with an incremental non-seekable ZIP writer, lazy scoped CSV factories and64KiB/time-bounded bulk buffering. Emit an entry header before its query, retain one bulk-download lease/participant admission rules, and preserve all six archive entries, columns, UTF-8 and cumulative scoring. No data or invitation mutations, dependencies or Nginx timeout changes.
+
+Checks: syntax, a1000-row UTF-8 ZIP round-trip/CRC and early-header check, two existing small API export checks; then a real authenticated TEST archive download/CRC plus public health after deployment. No full suite or load test. User explicitly requires quick checks: commit [skip ci] and record a one-time frozen operator approval; do not present this as CI verification or weaken future CI automation.
+
+Deferred until the user finishes the visual adjustments/minor fix: combine group claim/consent/identify to reduce round trips while preserving the recovery barrier; prefetch the first practice round during existing instructions/waits; shorten atomic counterbalance lock duration; precompress public assets/HTML appropriately; split/version/cache static game bundles while invitation HTML/API remain fresh. None is implemented by this release.

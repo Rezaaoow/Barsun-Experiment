@@ -4,6 +4,7 @@ import fcntl
 import os
 import secrets
 import logging
+import time
 from anyio.to_thread import run_sync
 from starlette.responses import JSONResponse
 
@@ -45,10 +46,20 @@ class BulkExportMiddleware:
             response=JSONResponse({'detail':'دریافت خروجی در انتظار نوبت است؛ اجرای شرکت‌کنندگان در اولویت قرار دارد.'},status_code=429,
                 headers={'Retry-After':'2','X-Barsan-Export-Busy':'1','Cache-Control':'no-store'})
             return await response(scope,receive,send)
+        pending=bytearray()
+        first_body=True
+        last_flush=time.monotonic()
         async def paced_send(message):
-            await send(message)
-            if message['type']=='http.response.body' and message.get('more_body') and message.get('body'):
-                await asyncio.sleep(.02)
+            nonlocal first_body,last_flush
+            if message['type']!='http.response.body':
+                return await send(message)
+            pending.extend(message.get('body',b''))
+            more=message.get('more_body',False)
+            if first_body or not more or len(pending)>=65536 or time.monotonic()-last_flush>=.25:
+                body=bytes(pending);pending.clear()
+                await send({**message,'body':body})
+                first_body=False;last_flush=time.monotonic()
+                if more and body:await asyncio.sleep(.02)
         try:
             await self.app(scope,receive,paced_send)
         finally:

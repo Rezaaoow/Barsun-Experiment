@@ -2985,7 +2985,7 @@ function utNode(tag, className, value) {
 const UT_COPY_CUES={
   "هوش‌مصنوعی بارسان":"agent","هوش مصنوعی بارسان":"agent",
   "یکی از همکاران شما در همین سالن":"coworker","یکی از همکاران حاضر در سالن":"coworker",
-  "پیشنهاد دهنده":"role","پاسخ دهنده":"role","همکارتان":"coworker",
+  "پیشنهاد دهنده":"role","پاسخ دهنده":"role","همکارتان":"coworker","همکاران":"coworker",
   "دو دور تمرینی":"practice","دور تمرینی":"practice","دور‌های تمرینی":"practice","تاثیر ندارد":"practice",
   "قبول":"accept","رد":"reject"
  };
@@ -2993,7 +2993,7 @@ const UT_COPY_PATTERN=new RegExp(Object.keys(UT_COPY_CUES).sort((a,b)=>b.length-
 function utEmphasizeCopy(element,text) {
  const matches=Array.from(text.matchAll(UT_COPY_PATTERN));
  if(!matches.length)return;
- const boundary=char=>!char||/[\s،؛:().«»!؟]/.test(char);
+ const boundary=char=>!char||/[\s\u200c،؛:().«»!؟]/.test(char);
  let previous=0;
  element.replaceChildren();
  for(const match of matches) {

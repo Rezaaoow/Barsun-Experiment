@@ -1,4 +1,3 @@
-import asyncio
 import csv
 import hashlib
 import io
@@ -11,7 +10,6 @@ import secrets
 import sqlite3
 import threading
 import uuid
-import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from functools import lru_cache
@@ -23,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from request_metrics import RequestMetricsMiddleware, observed_connection, allocation_timing
+from export_streams import export_response, zip_stream
 from bulk_exports import BulkExportMiddleware
 from client_timing import TimingCheckpoint, initialize as initialize_client_timing, save as save_client_timing
 from task_records import COMMON_FIELDS, DD_FIELDS, UT_FIELDS, dd_record, ultimatum_record
@@ -2343,7 +2342,7 @@ def export_admin_active_assignments_csv(
             "url_available": bool(token),
             "link_id": item["assignment_id"],
         })
-    return StreamingResponse(
+    return export_response(
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={
@@ -4916,7 +4915,7 @@ def export_ultimatum_csv(
             buffer.seek(0)
             buffer.truncate(0)
 
-    return StreamingResponse(
+    return export_response(
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
@@ -4971,7 +4970,7 @@ def export_questionnaire_csv(
             buffer.seek(0)
             buffer.truncate(0)
 
-    return StreamingResponse(
+    return export_response(
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
@@ -5096,7 +5095,7 @@ def export_csv(
             buffer.truncate(0)
 
     filename = "barsan_test_lifetrade_trials.csv" if scope == "test" else "lifetrade_trials.csv"
-    return StreamingResponse(
+    return export_response(
         generate_csv(),
         media_type="text/csv; charset=utf-8",
         headers={
@@ -5104,13 +5103,6 @@ def export_csv(
             "Cache-Control": "no-store",
         },
     )
-
-
-async def _read_streaming_response(response: StreamingResponse) -> bytes:
-    chunks = []
-    async for chunk in response.body_iterator:
-        chunks.append(chunk.encode("utf-8") if isinstance(chunk, str) else bytes(chunk))
-    return b"".join(chunks)
 
 
 def _ordered_task_export(module: str, scope: str):
@@ -5178,7 +5170,7 @@ def _ordered_task_export(module: str, scope: str):
             cursor = rows[-1][key]
             if buffer.tell():
                 yield buffer.getvalue()
-    return StreamingResponse(generate(),media_type="text/csv; charset=utf-8",headers={
+    return export_response(generate(),media_type="text/csv; charset=utf-8",headers={
         "Content-Disposition": 'attachment; filename="barsan_' + module + '_records_v2_' + scope + '.csv"',
         "Cache-Control": "no-store",
     })
@@ -5226,7 +5218,7 @@ def export_client_time(x_admin_token: str | None = Header(default=None), scope: 
                 if (str(row["study_code"]).startswith(TEST_STUDY_PREFIX) if scope == "test" else row["study_code"] == STUDY_CODE))
             if buffer.tell():
                 yield buffer.getvalue()
-    return StreamingResponse(generate(), media_type="text/csv; charset=utf-8",
+    return export_response(generate(), media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="barsan_time_checkpoints_v2.csv"', "Cache-Control": "no-store"})
 
 
@@ -5237,44 +5229,39 @@ def export_all_modules_zip(
 ):
     """Download all three module exports and current participant progress in one ZIP."""
     authorize(x_admin_token)
-    # Reuse the exact same scoped export functions as the individual CSV buttons.
-    responses = [
-        ("questionnaire.csv", export_questionnaire_csv(x_admin_token, scope)),
-        ("lifetrade.csv", export_csv(x_admin_token, scope)),
-        ("ultimatum.csv", export_ultimatum_csv(x_admin_token, scope)),
-        ("time_checkpoints_v2.csv", export_client_time(x_admin_token, scope)),
+    def progress_chunks():
+        rows = experiment_progress(x_admin_token, scope)
+        buffer = io.StringIO(newline="")
+        buffer.write("\ufeff")
+        fields = sorted({field for row in rows for field in row.keys()}
+                        or {"study_code", "participant_code", "condition_code", "progress_state"})
+        writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield buffer.getvalue()
+        for row in rows:
+            buffer.seek(0); buffer.truncate(0)
+            writer.writerow(row)
+            yield buffer.getvalue()
+
+    readme = ("BarSan Experiment export\nScope: " + scope + "\n"
+        + ("Test data only (study_code starts with barsan-test-)." if scope == "test"
+           else "Main study only (study_code equals configured STUDY_CODE).")
+        + "\nFiles are CSV UTF-8; keep the archive confidential.\n")
+    # Factories defer each query until its ZIP entry is streamed. Do not collect
+    # CSV bytes or iterate the compressed archive by binary newline boundaries.
+    files = [
+        ("questionnaire.csv", lambda: export_questionnaire_csv(x_admin_token, scope)),
+        ("lifetrade.csv", lambda: export_csv(x_admin_token, scope)),
+        ("ultimatum.csv", lambda: export_ultimatum_csv(x_admin_token, scope)),
+        ("time_checkpoints_v2.csv", lambda: export_client_time(x_admin_token, scope)),
+        ("participant_progress.csv", progress_chunks),
+        ("README.txt", lambda: iter([readme])),
     ]
-    archive_buffer = io.BytesIO()
-    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for filename, response in responses:
-            archive.writestr(filename, asyncio.run(_read_streaming_response(response)))
-        participant_rows = experiment_progress(x_admin_token, scope)
-        progress_buffer = io.StringIO(newline="")
-        progress_buffer.write("\ufeff")
-        progress_fields = sorted({
-            field for row in participant_rows for field in row.keys()
-        } or {"study_code", "participant_code", "condition_code", "progress_state"})
-        progress_writer = csv.DictWriter(progress_buffer, fieldnames=progress_fields, extrasaction="ignore")
-        progress_writer.writeheader()
-        progress_writer.writerows(participant_rows)
-        archive.writestr("participant_progress.csv", progress_buffer.getvalue().encode("utf-8"))
-        archive.writestr(
-            "README.txt",
-            "BarSan Experiment export\n"
-            + "Scope: " + scope + "\n"
-            + ("Test data only (study_code starts with barsan-test-)." if scope == "test"
-               else "Main study only (study_code equals configured STUDY_CODE).")
-            + "\nFiles are CSV UTF-8; keep the archive confidential.\n",
-        )
     filename = "barsan_test_full_export.zip" if scope == "test" else "barsan_main_full_export.zip"
-    return StreamingResponse(
-        io.BytesIO(archive_buffer.getvalue()),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Cache-Control": "no-store",
-        },
-    )
+    return export_response(zip_stream(files), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    })
 
 
 app.mount("/Stimuli", StaticFiles(directory=os.path.join(ROOT, "app", "Stimuli")), name="stimuli")
